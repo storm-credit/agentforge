@@ -216,3 +216,8 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Obsidian local state
+.obsidian/workspace*.json
+.obsidian/cache/
+.obsidian/plugins/*/data.json

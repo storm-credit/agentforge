@@ -41,6 +41,7 @@ Sprint 0 실행 골격은 `apps/`와 `deploy/compose/` 아래에 있습니다.
 | [docs/use-case-definition.md](docs/use-case-definition.md) | 1차 MVP 유스케이스 정의 |
 | [docs/pilot-readiness.md](docs/pilot-readiness.md) | 파일럿 부서/문서/권한 준비 체크리스트 |
 | [docs/orchestration-plan.md](docs/orchestration-plan.md) | 오케스트라 운영 계획 |
+| [docs/agent-operating-model.md](docs/agent-operating-model.md) | 오케스트라-전문 에이전트 운영 모델 |
 | [docs/architecture.md](docs/architecture.md) | 전체 아키텍처 |
 | [docs/security-model.md](docs/security-model.md) | 사내망 보안 모델 |
 | [docs/agent-build-spec.md](docs/agent-build-spec.md) | Agent Build 스펙 |
@@ -52,7 +53,7 @@ Sprint 0 실행 골격은 `apps/`와 `deploy/compose/` 아래에 있습니다.
 
 ## 전문가 역할
 
-- 오케스트라 총괄
+- 오케스트라 총괄: 범위, 순서, 게이트, 통합을 관리
 - PM Agent
 - 수석 아키텍트
 - AI 아키텍트
@@ -62,6 +63,8 @@ Sprint 0 실행 골격은 `apps/`와 `deploy/compose/` 아래에 있습니다.
 - 프론트엔드 전문가
 - DevOps/MLOps
 - QA/Eval
+
+운영 방식은 오케스트라가 총괄하고, 각 전문 에이전트가 자기 영역을 깊게 진행하는 구조입니다. 기본 목표는 단순 역할명 수준이 아니라, 도메인 규칙과 리스크, 산출물 기준을 가진 `deep specialist` 수준입니다.
 
 ## 현재 기준 결정
 

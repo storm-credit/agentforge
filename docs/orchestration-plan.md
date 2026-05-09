@@ -2,6 +2,8 @@
 
 Agent Forge is managed as an orchestrated expert workflow rather than a single chatbot build. The orchestrator coordinates PM, architecture, security, AI runtime, RAG, backend, frontend, DevOps/MLOps, and QA/Eval workstreams.
 
+The operating model is: the orchestrator governs direction and gates; specialist agents perform deep domain work. See [Agent Operating Model](agent-operating-model.md).
+
 ## Current Objective
 
 Create an explainable project package for the first MVP: an internal document-based RAG agent builder for closed-network environments.
@@ -28,6 +30,15 @@ Create an explainable project package for the first MVP: an internal document-ba
 - Frontend: Agent Studio flows
 - DevOps/MLOps: closed-network deployment and observability
 - QA/Eval: success criteria and regression set
+
+## Depth Expectation
+
+Specialist agents should operate at D2 or higher:
+
+- D2 means deep specialist work with domain rules, risks, alternatives, and acceptance criteria.
+- D3 means implementation verification against tests, security policy, and release gates.
+
+The MVP does not assume fully autonomous multi-agent execution yet. The project first proves the controlled workflow through docs, backlog, code, tests, and audit-ready design.
 
 ## Principle
 

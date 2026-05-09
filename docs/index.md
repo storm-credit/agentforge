@@ -9,14 +9,15 @@
 3. [Use Case Definition](use-case-definition.md)
 4. [Pilot Readiness](pilot-readiness.md)
 5. [Orchestration Plan](orchestration-plan.md)
-6. [Architecture](architecture.md)
-7. [Security Model](security-model.md)
-8. [Agent Build Spec](agent-build-spec.md)
-9. [RAG Design](rag-design.md)
-10. [Implementation Plan](implementation-plan.md)
-11. [Implementation Backlog](implementation-backlog.md)
-12. [Sprint 0 Runbook](sprint-0-runbook.md)
-13. [Evaluation Plan](evaluation-plan.md)
+6. [Agent Operating Model](agent-operating-model.md)
+7. [Architecture](architecture.md)
+8. [Security Model](security-model.md)
+9. [Agent Build Spec](agent-build-spec.md)
+10. [RAG Design](rag-design.md)
+11. [Implementation Plan](implementation-plan.md)
+12. [Implementation Backlog](implementation-backlog.md)
+13. [Sprint 0 Runbook](sprint-0-runbook.md)
+14. [Evaluation Plan](evaluation-plan.md)
 
 ## 현재 결정
 
@@ -33,7 +34,7 @@
 
 | 전문가 | 공식 문서 |
 |---|---|
-| 오케스트라 총괄 | [Orchestration Plan](orchestration-plan.md) |
+| 오케스트라 총괄 | [Orchestration Plan](orchestration-plan.md), [Agent Operating Model](agent-operating-model.md) |
 | PM Agent | [Project Proposal](project-proposal.md), [Use Case Definition](use-case-definition.md) |
 | PM Agent / 오케스트라 | [Pilot Readiness](pilot-readiness.md) |
 | 수석 아키텍트 | [Architecture](architecture.md) |

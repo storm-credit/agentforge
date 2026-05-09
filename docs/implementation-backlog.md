@@ -54,6 +54,13 @@ Scope:
 - AF-008 Knowledge Source/Document tables
 - AF-017 audit event writer draft
 
+Current implementation:
+
+- `apps/api` contains the FastAPI service, metadata routes, SQLAlchemy models, Alembic base, and audit event writer.
+- `apps/web` contains the Next.js shell for Overview, Agents, Knowledge, Eval, Audit, and Settings.
+- `deploy/compose/docker-compose.dev.yaml` defines Postgres, MinIO, Qdrant, API, and Web services.
+- `docs/sprint-0-runbook.md` describes the local run path.
+
 ### Sprint 1
 
 Goal: synthetic corpus can flow through upload, chunking, fake retrieval, and run trace.

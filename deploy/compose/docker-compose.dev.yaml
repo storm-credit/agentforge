@@ -1,0 +1,72 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: agentforge
+      POSTGRES_USER: agentforge
+      POSTGRES_PASSWORD: agentforge
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentforge -d agentforge"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: agentforge
+      MINIO_ROOT_PASSWORD: agentforge-local
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  api:
+    build:
+      context: ../../apps/api
+    environment:
+      AGENT_FORGE_DATABASE_URL: postgresql+psycopg://agentforge:agentforge@postgres:5432/agentforge
+      AGENT_FORGE_READINESS_CHECK_DATABASE: "true"
+      AGENT_FORGE_CORS_ORIGINS: '["http://localhost:3000"]'
+    command: >
+      sh -c "alembic upgrade head &&
+      uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../../apps/api/app:/app/app
+      - ../../apps/api/alembic:/app/alembic
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ../../apps/web
+    environment:
+      NEXT_PUBLIC_AGENT_FORGE_API_BASE_URL: http://localhost:8000/api/v1
+    command: npm run dev
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../../apps/web/app:/app/app
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
+  minio-data:
+  qdrant-data:

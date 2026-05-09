@@ -15,7 +15,8 @@
 9. [RAG Design](rag-design.md)
 10. [Implementation Plan](implementation-plan.md)
 11. [Implementation Backlog](implementation-backlog.md)
-12. [Evaluation Plan](evaluation-plan.md)
+12. [Sprint 0 Runbook](sprint-0-runbook.md)
+13. [Evaluation Plan](evaluation-plan.md)
 
 ## 현재 결정
 
@@ -39,5 +40,5 @@
 | 보안 아키텍트 | [Security Model](security-model.md) |
 | AI 아키텍트 | [Agent Build Spec](agent-build-spec.md) |
 | RAG 전문가 | [RAG Design](rag-design.md) |
-| 구현 전문가 | [Implementation Plan](implementation-plan.md), [Implementation Backlog](implementation-backlog.md) |
+| 구현 전문가 | [Implementation Plan](implementation-plan.md), [Implementation Backlog](implementation-backlog.md), [Sprint 0 Runbook](sprint-0-runbook.md) |
 | QA/Eval | [Evaluation Plan](evaluation-plan.md) |

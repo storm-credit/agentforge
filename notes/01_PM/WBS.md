@@ -64,7 +64,7 @@
 
 | 작업 | 담당 | 기간 | 산출물 | 완료 기준 | 상태 |
 |---|---|---|---|---|---|
-| Agent Registry 설계/구현 | Backend | 3~4주차 | API/DB | Agent Card와 버전 저장 가능 | 대기 |
+| Agent Registry 설계/구현 | Backend | 3~4주차 | API/DB | Agent Card와 버전 저장 가능 | 진행중 |
 | Model Gateway 연결 | AI/Backend | 3~5주차 | Model Gateway Adapter | 승인 모델 호출과 오류 처리 가능 | 대기 |
 | Runtime Orchestrator 구현 | AI/Backend | 5~6주차 | 실행 흐름 | 질문, 검색, 답변, 로그 연결 | 대기 |
 | Agent Studio UI 구현 | Frontend | 4~6주차 | 관리자 화면 | 생성/수정/게시/테스트 가능 | 대기 |
@@ -97,4 +97,5 @@
 - [ ] MVP 평가 질문 세트 범위 확정
 - [ ] 8주 데모 참석자와 판단 기준 확정
 - [ ] 12주 파일럿 결과 보고 형식 확정
-- [ ] Sprint 0 착수 범위 승인
+- [x] Sprint 0 착수 범위 승인
+- [ ] Sprint 0 로컬 실행 검증

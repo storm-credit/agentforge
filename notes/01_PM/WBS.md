@@ -1,38 +1,94 @@
 # WBS
 
-## Phase 1. 기획과 범위 확정
+## 문서 기준
 
-| 작업 | 담당 | 산출물 | 상태 |
-|---|---|---|---|
-| 프로젝트 개요 정리 | PM Agent | 프로젝트 개요 | 진행중 |
-| MVP 범위 확정 | 오케스트라 총괄 | MVP 범위 | 진행중 |
-| 시범 부서 선정 | PM Agent | Use case backlog | 대기 |
-| 성공 기준 정의 | QA/Eval | KPI 초안 | 대기 |
+| 항목 | 내용 |
+|---|---|
+| 기준 일정 | 8주 MVP 데모 + 4주 파일럿/운영 전환 판단 |
+| MVP | [[notes/00_Project/MVP 유스케이스 정의]] |
+| 상태 기준 | 대기, 진행중, 초안, 검토중, 완료, 보류 |
+| 관련 문서 | [[notes/00_Project/프로젝트 제안서 v0.1]], [[리스크 이슈 로그]] |
 
-## Phase 2. 설계
+## 일정 요약
 
-| 작업 | 담당 | 산출물 | 상태 |
-|---|---|---|---|
-| 전체 아키텍처 설계 | 수석 아키텍트 | Architecture v0.1 | 초안 |
-| 보안/권한 설계 | 보안 아키텍트 | ACL Matrix | 초안 |
-| RAG 파이프라인 설계 | RAG 전문가 | RAG Design | 초안 |
-| Agent Build 정의 | AI 아키텍트 | Agent Build Spec | 초안 |
+| 주차 | 목표 | 주요 산출물 | 의존성 | 상태 |
+|---|---|---|---|---|
+| 1주차 | 프로젝트 착수와 MVP 범위 확정 | 제안서 v0.1, 유스케이스 정의, 이해관계자 목록 | 총괄 승인 | 진행중 |
+| 2주차 | 요구사항/보안/데이터 기준 확정 | 요구사항 백로그, ACL Matrix 초안, 파일럿 문서 후보 | 파일럿 부서 지정 | 대기 |
+| 3주차 | 설계 확정과 개발 골격 구성 | Architecture v0.1, Agent Build Spec, API/DB 초안 | 보안/인프라 리뷰 | 대기 |
+| 4주차 | 문서 파이프라인과 Agent Registry 1차 구현 | Parser/Indexer 골격, Agent Registry API | 샘플 문서 확보 | 대기 |
+| 5주차 | ACL 검색과 citation 답변 연결 | 권한 기반 retrieval, citation 응답, 테스트 콘솔 | ACL Matrix | 대기 |
+| 6주차 | Agent Studio와 audit log 연결 | 관리자 화면, 실행 로그, 정책 버전 기록 | API 안정화 | 대기 |
+| 7주차 | E2E 통합과 품질/보안 검증 | E2E 시나리오, 평가 질문 세트 결과, 보안 차단 테스트 | 기능 통합 | 대기 |
+| 8주차 | MVP 데모와 Go/No-Go 판단 | MVP 데모, 리스크 업데이트, 파일럿 계획 | QA/Eval 결과 | 대기 |
+| 9주차 | 파일럿 문서/사용자 확대 | 파일럿 운영 가이드, 추가 문서 색인 | MVP 승인 | 대기 |
+| 10주차 | 안정화와 운영 개선 | 성능/품질 개선, 장애 대응 절차 | 파일럿 피드백 | 대기 |
+| 11주차 | 보안/운영 리뷰 | 보안 리뷰 결과, audit log 검토, 운영 체크리스트 | 파일럿 로그 | 대기 |
+| 12주차 | 결과 보고와 v0.2 계획 | 파일럿 결과 보고서, v0.2 백로그, 확장 로드맵 | 경영/총괄 리뷰 | 대기 |
 
-## Phase 3. MVP 구현
+## Workstream 1. PM/기획
 
-| 작업 | 담당 | 산출물 | 상태 |
-|---|---|---|---|
-| Agent Registry | 백엔드 | API/DB | 대기 |
-| Document Pipeline | RAG/Backend | Parser/Indexer | 대기 |
-| Runtime Orchestrator | AI/Backend | 실행 흐름 | 대기 |
-| Agent Studio UI | 프론트엔드 | 관리자 화면 | 대기 |
-| Audit Log | Backend/Security | 로그 저장 | 대기 |
+| 작업 | 담당 | 기간 | 산출물 | 완료 기준 | 상태 |
+|---|---|---|---|---|---|
+| 프로젝트 제안서 작성 | PM Agent | 1주차 | [[notes/00_Project/프로젝트 제안서 v0.1]] | 회의 설명 가능 수준의 문제/목표/범위/일정 정리 | 진행중 |
+| MVP 유스케이스 확정 | PM Agent, 총괄 | 1주차 | [[notes/00_Project/MVP 유스케이스 정의]] | 파일럿 시나리오 1개와 제외 범위 확정 | 진행중 |
+| 이해관계자/의사결정자 정리 | PM Agent | 1~2주차 | Stakeholder Map | 부서, 문서 소유자, 보안, 인프라 담당 확인 | 대기 |
+| 주간 마일스톤 운영 | PM Agent | 1~12주차 | 주간 액션 아이템 | 지연/이슈/결정사항 주간 갱신 | 대기 |
+| 파일럿 결과 보고 | PM Agent | 11~12주차 | Pilot Report | 지표, 리스크, v0.2 제안 포함 | 대기 |
 
-## Phase 4. 검증과 파일럿
+## Workstream 2. 보안/권한
 
-| 작업 | 담당 | 산출물 | 상태 |
-|---|---|---|---|
-| Eval Set 작성 | QA/Eval | 테스트 질문 | 대기 |
-| 보안 테스트 | Security/QA | 보안 점검표 | 대기 |
-| 파일럿 운영 | PM | Pilot Report | 대기 |
+| 작업 | 담당 | 기간 | 산출물 | 완료 기준 | 상태 |
+|---|---|---|---|---|---|
+| 문서 등급/접근 그룹 정의 | 보안 아키텍트, 문서 소유자 | 2주차 | ACL Matrix 초안 | 사용자/부서/문서등급 매핑 가능 | 대기 |
+| 권한 테스트 계정 준비 | Security/QA | 2~3주차 | Test Account Set | 허용/차단 케이스 재현 가능 | 대기 |
+| 검색 전 ACL 필터 기준 합의 | 보안 아키텍트, RAG | 3주차 | Retrieval Policy | 금지 문서가 후보에 들어오지 않음 | 대기 |
+| audit log 저장 항목 검토 | Security, Backend | 3~4주차 | Audit Log Policy | 민감정보 저장 범위와 마스킹 기준 합의 | 대기 |
+| 보안 차단 테스트 | Security/QA | 7~8주차 | Security Test Report | 권한 없는 문서 노출 0건 | 대기 |
 
+## Workstream 3. 데이터/RAG
+
+| 작업 | 담당 | 기간 | 산출물 | 완료 기준 | 상태 |
+|---|---|---|---|---|---|
+| 파일럿 문서 후보 수집 | PM, 문서 소유자 | 1~2주차 | 문서 목록 | 30~100개 내외 후보와 등급 확인 | 대기 |
+| 파서/청킹 전략 정의 | RAG 전문가 | 3주차 | RAG Design | 파일 형식별 처리 기준 정의 | 대기 |
+| 임베딩/벡터 색인 구성 | RAG/Backend | 4~5주차 | Vector Index | 샘플 문서 검색 가능 | 대기 |
+| rerank/citation 정책 적용 | RAG 전문가 | 5~6주차 | Citation Pipeline | 문서명/위치 포함 답변 생성 | 대기 |
+| 평가 질문 세트 작성 | QA/Eval, 문서 소유자 | 5~7주차 | Eval Set | 사실형/절차형/권한차단형 포함 | 대기 |
+
+## Workstream 4. Agent Platform 구현
+
+| 작업 | 담당 | 기간 | 산출물 | 완료 기준 | 상태 |
+|---|---|---|---|---|---|
+| Agent Registry 설계/구현 | Backend | 3~4주차 | API/DB | Agent Card와 버전 저장 가능 | 대기 |
+| Model Gateway 연결 | AI/Backend | 3~5주차 | Model Gateway Adapter | 승인 모델 호출과 오류 처리 가능 | 대기 |
+| Runtime Orchestrator 구현 | AI/Backend | 5~6주차 | 실행 흐름 | 질문, 검색, 답변, 로그 연결 | 대기 |
+| Agent Studio UI 구현 | Frontend | 4~6주차 | 관리자 화면 | 생성/수정/게시/테스트 가능 | 대기 |
+| Audit Log 구현 | Backend/Security | 5~6주차 | 실행 로그 저장소 | 질문/검색/답변/정책 버전 기록 | 대기 |
+
+## Workstream 5. QA/파일럿/운영
+
+| 작업 | 담당 | 기간 | 산출물 | 완료 기준 | 상태 |
+|---|---|---|---|---|---|
+| E2E 시나리오 테스트 | QA/Eval | 7주차 | E2E Test Result | 관리자 생성부터 사용자 답변까지 통과 | 대기 |
+| 품질 평가 | QA/Eval, 문서 소유자 | 7~8주차 | Eval Report | citation 95%, 유용 답변 80% 기준 확인 | 대기 |
+| MVP 데모 | PM, 전체 | 8주차 | Demo Script, Demo Result | Go/No-Go 의사결정 가능 | 대기 |
+| 파일럿 운영 가이드 작성 | PM, Ops | 9주차 | Pilot Guide | 사용자/관리자 운영 절차 제공 | 대기 |
+| 운영 전환 체크 | Ops, Security, PM | 10~12주차 | Operation Checklist | 장애/로그/재색인/권한 변경 절차 확인 | 대기 |
+
+## 4주/8주/12주 산출물 기준
+
+| 시점 | 보여줄 수 있어야 하는 것 | 판단 기준 |
+|---|---|---|
+| 4주 | 문서 등록, 색인, Agent Card 생성 골격 | 데이터와 설정 구조가 실제로 연결됨 |
+| 8주 | 권한 기반 RAG Q&A MVP 데모 | citation, ACL, audit log가 E2E로 동작 |
+| 12주 | 파일럿 결과와 v0.2 로드맵 | 사용성/품질/보안 결과로 운영 전환 여부 판단 |
+
+## PM 체크리스트
+
+- [ ] 파일럿 부서 1곳 확정
+- [ ] 문서 소유자와 샘플 문서 후보 확정
+- [ ] 보안/권한 의사결정자 지정
+- [ ] MVP 평가 질문 세트 범위 확정
+- [ ] 8주 데모 참석자와 판단 기준 확정
+- [ ] 12주 파일럿 결과 보고 형식 확정

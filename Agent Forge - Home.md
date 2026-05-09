@@ -14,11 +14,22 @@ Agent Forge는 Craft AI 같은 에이전트 빌더 개념을 사내망 제약에
 
 ## 빠른 링크
 
+### 오케스트라
+
 - [[notes/00_Orchestrator/오케스트라 총괄 작업지시서|오케스트라 총괄]]
 - [[notes/00_Orchestrator/전문가 디스패치 보드|전문가 디스패치 보드]]
+- [[notes/00_Orchestrator/오케스트라 실행계획|오케스트라 실행계획]]
+
+### 프로젝트 설명
+
 - [[notes/00_Project/Agent Forge 프로젝트 개요|프로젝트 개요]]
 - [[notes/00_Project/MVP 범위|MVP 범위]]
+- [[notes/00_Project/프로젝트 제안서 v0.1|프로젝트 제안서 v0.1]]
+- [[notes/00_Project/MVP 유스케이스 정의|MVP 유스케이스 정의]]
 - [[notes/00_Project/설명 스크립트|설명 스크립트]]
+
+### 전문가 작업장
+
 - [[notes/01_PM/PM Agent 작업지시서|PM Agent]]
 - [[notes/02_Architecture/수석 아키텍트 작업지시서|수석 아키텍트]]
 - [[notes/03_AI_Runtime/AI 아키텍트 작업지시서|AI 아키텍트]]
@@ -30,14 +41,29 @@ Agent Forge는 Craft AI 같은 에이전트 빌더 개념을 사내망 제약에
 - [[notes/09_QA_Eval/QA Eval 작업지시서|QA/Eval]]
 - [[notes/11_Decisions/의사결정 로그|의사결정 로그]]
 
+### 공식 docs
+
+- [공식 문서 목차](docs/index.md)
+- [프로젝트 제안서](docs/project-proposal.md)
+- [MVP 유스케이스 정의](docs/use-case-definition.md)
+- [오케스트라 운영 계획](docs/orchestration-plan.md)
+- [아키텍처](docs/architecture.md)
+- [보안 모델](docs/security-model.md)
+- [Agent Build Spec](docs/agent-build-spec.md)
+- [RAG 설계](docs/rag-design.md)
+- [구현 계획](docs/implementation-plan.md)
+- [평가 계획](docs/evaluation-plan.md)
+
 ## 이번 주 할 일
 
-- [ ] 프로젝트 개요를 1페이지로 확정한다.
-- [ ] MVP 범위를 문서 에이전트 빌더로 고정한다.
+- [x] 프로젝트 개요를 1페이지로 확정한다.
+- [x] MVP 범위를 문서 에이전트 빌더로 고정한다.
+- [x] 문서 등급과 부서 권한 모델 초안을 만든다.
+- [x] 에이전트 카드 표준을 확정한다.
+- [x] 초기 WBS와 리스크 로그를 채운다.
 - [ ] 샘플 문서 50~200개 후보를 정한다.
-- [ ] 문서 등급과 부서 권한 모델 초안을 만든다.
-- [ ] 에이전트 카드 표준을 확정한다.
-- [ ] 초기 WBS와 리스크 로그를 채운다.
+- [ ] 파일럿 부서와 문서 소유자를 지정한다.
+- [ ] 구현 착수용 backlog를 만든다.
 
 ## 운영 규칙
 

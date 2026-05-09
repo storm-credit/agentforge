@@ -42,6 +42,18 @@ Checks:
 - Suite counts match the Sprint 0 D3 target.
 - Expected citations point to known synthetic documents.
 
+## Eval Scorer Smoke
+
+```powershell
+./tools/smoke/eval-scorer-smoke.ps1
+```
+
+Checks:
+
+- The deterministic scorer runs against all synthetic cases.
+- ACL accessibility rules produce expected allow/block outcomes.
+- The scorer unit tests pass.
+
 ## Web Smoke
 
 ```powershell

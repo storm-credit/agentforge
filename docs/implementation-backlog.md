@@ -77,8 +77,11 @@ D3 evidence added:
 - `apps/api/tests/test_metadata_contracts.py`
 - `eval/synthetic-corpus/case.schema.json`
 - `eval/synthetic-corpus/cases-v0.1.json`
+- `eval/harness/run_synthetic_eval.py`
+- `eval/harness/tests/test_scorer.py`
 - `tools/smoke/compose-smoke.ps1`
 - `tools/smoke/eval-corpus-smoke.ps1`
+- `tools/smoke/eval-scorer-smoke.ps1`
 - `apps/web/tests/smoke.spec.ts`
 
 ### Sprint 1

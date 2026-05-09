@@ -66,6 +66,7 @@ The orchestrator should now dispatch the next work in this order:
 |---|---|---|
 | Backend + QA API contract tests | Started | `apps/api/tests/test_metadata_contracts.py` |
 | QA + RAG + Security synthetic corpus | Started | `eval/synthetic-corpus/cases-v0.1.json` |
+| QA + RAG + Security deterministic scorer | Started | `eval/harness/run_synthetic_eval.py` |
 | DevOps compose smoke | Started | `tools/smoke/compose-smoke.ps1` |
 | Frontend route smoke | Started | `apps/web/tests/smoke.spec.ts` |
 | PM owner closure | Pending | pilot department and document owner still open |

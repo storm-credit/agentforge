@@ -65,6 +65,7 @@ Run the safe smoke checks from the repository root:
 ```powershell
 ./tools/smoke/compose-smoke.ps1
 ./tools/smoke/eval-corpus-smoke.ps1
+./tools/smoke/eval-scorer-smoke.ps1
 ```
 
 API contract tests:
@@ -87,6 +88,8 @@ Current D3 evidence seed:
 
 - API metadata contract tests: `apps/api/tests/test_metadata_contracts.py`
 - Synthetic ACL/citation corpus: `eval/synthetic-corpus/cases-v0.1.json`
+- Deterministic eval scorer: `eval/harness/run_synthetic_eval.py`
 - Compose smoke helper: `tools/smoke/compose-smoke.ps1`
 - Corpus smoke helper: `tools/smoke/eval-corpus-smoke.ps1`
+- Scorer smoke helper: `tools/smoke/eval-scorer-smoke.ps1`
 - Agent Studio route smoke: `apps/web/tests/smoke.spec.ts`

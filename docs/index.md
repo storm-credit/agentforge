@@ -10,15 +10,16 @@
 4. [Pilot Readiness](pilot-readiness.md)
 5. [Orchestration Plan](orchestration-plan.md)
 6. [Agent Operating Model](agent-operating-model.md)
-7. [Open Design Adoption Review](open-design-adoption.md)
-8. [Architecture](architecture.md)
-9. [Security Model](security-model.md)
-10. [Agent Build Spec](agent-build-spec.md)
-11. [RAG Design](rag-design.md)
-12. [Implementation Plan](implementation-plan.md)
-13. [Implementation Backlog](implementation-backlog.md)
-14. [Sprint 0 Runbook](sprint-0-runbook.md)
-15. [Evaluation Plan](evaluation-plan.md)
+7. [Deep Specialist Audit](deep-specialist-audit.md)
+8. [Open Design Adoption Review](open-design-adoption.md)
+9. [Architecture](architecture.md)
+10. [Security Model](security-model.md)
+11. [Agent Build Spec](agent-build-spec.md)
+12. [RAG Design](rag-design.md)
+13. [Implementation Plan](implementation-plan.md)
+14. [Implementation Backlog](implementation-backlog.md)
+15. [Sprint 0 Runbook](sprint-0-runbook.md)
+16. [Evaluation Plan](evaluation-plan.md)
 
 ## 현재 결정
 
@@ -35,7 +36,7 @@
 
 | 전문가 | 공식 문서 |
 |---|---|
-| 오케스트라 총괄 | [Orchestration Plan](orchestration-plan.md), [Agent Operating Model](agent-operating-model.md) |
+| 오케스트라 총괄 | [Orchestration Plan](orchestration-plan.md), [Agent Operating Model](agent-operating-model.md), [Deep Specialist Audit](deep-specialist-audit.md) |
 | PM Agent | [Project Proposal](project-proposal.md), [Use Case Definition](use-case-definition.md) |
 | PM Agent / 오케스트라 | [Pilot Readiness](pilot-readiness.md) |
 | 수석 아키텍트 | [Architecture](architecture.md) |

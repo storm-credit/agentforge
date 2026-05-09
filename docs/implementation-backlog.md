@@ -37,6 +37,10 @@ This backlog translates the Agent Forge MVP design into development-ready epics 
 | AF-016 | Add citation validator | Citation-required responses can fail validation |
 | AF-017 | Add audit event writer | Publish, upload, and run events are recorded |
 | AF-018 | Add synthetic corpus v0.1 | 30 ACL/citation test questions exist |
+| AF-019 | Add Sprint 0 API contract tests | Metadata APIs have request/response tests |
+| AF-020 | Add synthetic corpus schema | ACL/citation cases have machine-readable expected results |
+| AF-021 | Add compose boot smoke | Fresh stack boot and health checks are repeatable |
+| AF-022 | Add Agent Studio smoke workflow | Navigation and first operator workflow pass Playwright smoke |
 
 ## 3. Sprint Plan
 
@@ -60,6 +64,13 @@ Current implementation:
 - `apps/web` contains the Next.js shell for Overview, Agents, Knowledge, Eval, Audit, and Settings.
 - `deploy/compose/docker-compose.dev.yaml` defines Postgres, MinIO, Qdrant, API, and Web services.
 - `docs/sprint-0-runbook.md` describes the local run path.
+
+D3 evidence focus:
+
+- AF-019 API contract tests
+- AF-020 synthetic corpus schema
+- AF-021 compose boot smoke
+- AF-022 Agent Studio smoke workflow
 
 ### Sprint 1
 

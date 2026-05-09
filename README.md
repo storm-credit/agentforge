@@ -42,6 +42,7 @@ Sprint 0 실행 골격은 `apps/`와 `deploy/compose/` 아래에 있습니다.
 | [docs/pilot-readiness.md](docs/pilot-readiness.md) | 파일럿 부서/문서/권한 준비 체크리스트 |
 | [docs/orchestration-plan.md](docs/orchestration-plan.md) | 오케스트라 운영 계획 |
 | [docs/agent-operating-model.md](docs/agent-operating-model.md) | 오케스트라-전문 에이전트 운영 모델 |
+| [docs/deep-specialist-audit.md](docs/deep-specialist-audit.md) | 분야별 deep specialist 점검 결과 |
 | [docs/open-design-adoption.md](docs/open-design-adoption.md) | Open Design 활용 검토 |
 | [docs/architecture.md](docs/architecture.md) | 전체 아키텍처 |
 | [docs/security-model.md](docs/security-model.md) | 사내망 보안 모델 |
@@ -71,6 +72,7 @@ Sprint 0 실행 골격은 `apps/`와 `deploy/compose/` 아래에 있습니다.
 
 - Craft AI는 참고 개념이며, Agent Forge는 사내망용 내부 Agent Builder로 정의합니다.
 - Open Design은 Agent Studio 프로토타입과 디자인 시스템 검토에 활용할 수 있지만, MVP 런타임 의존성으로 두지는 않습니다.
+- 전문 에이전트 산출물은 대부분 D2 설계 깊이에 도달했고, 다음 단계는 D3 검증 증거를 붙이는 것입니다.
 - 1차 MVP는 사내 문서 기반 RAG 에이전트 빌더입니다.
 - DB/ERP/그룹웨어 자동화는 후속 Tool Pack 확장으로 분리합니다.
 - MVP의 핵심 검증은 권한 기반 검색, 근거 답변, 실행 로그입니다.

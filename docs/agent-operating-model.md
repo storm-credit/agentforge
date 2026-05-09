@@ -46,6 +46,8 @@ The product runtime layer will become real through Agent Registry, Knowledge ing
 
 Agent Forge should target D2 by default for design work and D3 for implementation/release work. D4 is a later operating goal once telemetry, eval history, and decision memory are wired into the platform.
 
+Current audit: [Deep Specialist Audit](deep-specialist-audit.md) records which workstreams have reached D2 design depth and which still need D3 verification evidence.
+
 ## 4. Specialist Agent Contracts
 
 | Agent | Owns | Must Produce |
@@ -88,4 +90,3 @@ For Sprint 0 and Sprint 1, "deep agents" are represented by:
 - tests and runbooks that prove each layer is not only described but executable
 
 Later, Agent Forge can turn the same model into product features: agent templates, domain checklists, approval gates, evaluation reports, and audit-backed runtime traces.
-

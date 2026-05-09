@@ -50,6 +50,7 @@ Agent Forge는 Craft AI 같은 에이전트 빌더 개념을 사내망 제약에
 - [파일럿 준비](docs/pilot-readiness.md)
 - [오케스트라 운영 계획](docs/orchestration-plan.md)
 - [오케스트라-에이전트 운영 모델](docs/agent-operating-model.md)
+- [Open Design 활용 검토](docs/open-design-adoption.md)
 - [아키텍처](docs/architecture.md)
 - [보안 모델](docs/security-model.md)
 - [Agent Build Spec](docs/agent-build-spec.md)
@@ -71,6 +72,7 @@ Agent Forge는 Craft AI 같은 에이전트 빌더 개념을 사내망 제약에
 - [x] Sprint 0 착수 범위를 확정한다.
 - [x] Sprint 0 API/Web/DB/Compose 골격을 생성한다.
 - [x] 오케스트라-전문 에이전트 운영 모델을 명문화한다.
+- [x] Open Design 활용 가능성과 경계선을 정리한다.
 - [ ] Sprint 0 로컬 실행을 실제 환경에서 검증한다.
 
 ## 운영 규칙

@@ -10,14 +10,15 @@
 4. [Pilot Readiness](pilot-readiness.md)
 5. [Orchestration Plan](orchestration-plan.md)
 6. [Agent Operating Model](agent-operating-model.md)
-7. [Architecture](architecture.md)
-8. [Security Model](security-model.md)
-9. [Agent Build Spec](agent-build-spec.md)
-10. [RAG Design](rag-design.md)
-11. [Implementation Plan](implementation-plan.md)
-12. [Implementation Backlog](implementation-backlog.md)
-13. [Sprint 0 Runbook](sprint-0-runbook.md)
-14. [Evaluation Plan](evaluation-plan.md)
+7. [Open Design Adoption Review](open-design-adoption.md)
+8. [Architecture](architecture.md)
+9. [Security Model](security-model.md)
+10. [Agent Build Spec](agent-build-spec.md)
+11. [RAG Design](rag-design.md)
+12. [Implementation Plan](implementation-plan.md)
+13. [Implementation Backlog](implementation-backlog.md)
+14. [Sprint 0 Runbook](sprint-0-runbook.md)
+15. [Evaluation Plan](evaluation-plan.md)
 
 ## 현재 결정
 
@@ -41,5 +42,6 @@
 | 보안 아키텍트 | [Security Model](security-model.md) |
 | AI 아키텍트 | [Agent Build Spec](agent-build-spec.md) |
 | RAG 전문가 | [RAG Design](rag-design.md) |
+| 프론트엔드 전문가 / 오케스트라 | [Open Design Adoption Review](open-design-adoption.md) |
 | 구현 전문가 | [Implementation Plan](implementation-plan.md), [Implementation Backlog](implementation-backlog.md), [Sprint 0 Runbook](sprint-0-runbook.md) |
 | QA/Eval | [Evaluation Plan](evaluation-plan.md) |

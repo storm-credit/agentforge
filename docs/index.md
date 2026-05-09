@@ -7,13 +7,15 @@
 1. [Project Overview](project-overview.md)
 2. [Project Proposal](project-proposal.md)
 3. [Use Case Definition](use-case-definition.md)
-4. [Orchestration Plan](orchestration-plan.md)
-5. [Architecture](architecture.md)
-6. [Security Model](security-model.md)
-7. [Agent Build Spec](agent-build-spec.md)
-8. [RAG Design](rag-design.md)
-9. [Implementation Plan](implementation-plan.md)
-10. [Evaluation Plan](evaluation-plan.md)
+4. [Pilot Readiness](pilot-readiness.md)
+5. [Orchestration Plan](orchestration-plan.md)
+6. [Architecture](architecture.md)
+7. [Security Model](security-model.md)
+8. [Agent Build Spec](agent-build-spec.md)
+9. [RAG Design](rag-design.md)
+10. [Implementation Plan](implementation-plan.md)
+11. [Implementation Backlog](implementation-backlog.md)
+12. [Evaluation Plan](evaluation-plan.md)
 
 ## 현재 결정
 
@@ -32,9 +34,10 @@
 |---|---|
 | 오케스트라 총괄 | [Orchestration Plan](orchestration-plan.md) |
 | PM Agent | [Project Proposal](project-proposal.md), [Use Case Definition](use-case-definition.md) |
+| PM Agent / 오케스트라 | [Pilot Readiness](pilot-readiness.md) |
 | 수석 아키텍트 | [Architecture](architecture.md) |
 | 보안 아키텍트 | [Security Model](security-model.md) |
 | AI 아키텍트 | [Agent Build Spec](agent-build-spec.md) |
 | RAG 전문가 | [RAG Design](rag-design.md) |
-| 구현 전문가 | [Implementation Plan](implementation-plan.md) |
+| 구현 전문가 | [Implementation Plan](implementation-plan.md), [Implementation Backlog](implementation-backlog.md) |
 | QA/Eval | [Evaluation Plan](evaluation-plan.md) |

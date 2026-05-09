@@ -46,12 +46,14 @@ Agent Forge는 Craft AI 같은 에이전트 빌더 개념을 사내망 제약에
 - [공식 문서 목차](docs/index.md)
 - [프로젝트 제안서](docs/project-proposal.md)
 - [MVP 유스케이스 정의](docs/use-case-definition.md)
+- [파일럿 준비](docs/pilot-readiness.md)
 - [오케스트라 운영 계획](docs/orchestration-plan.md)
 - [아키텍처](docs/architecture.md)
 - [보안 모델](docs/security-model.md)
 - [Agent Build Spec](docs/agent-build-spec.md)
 - [RAG 설계](docs/rag-design.md)
 - [구현 계획](docs/implementation-plan.md)
+- [구현 착수 Backlog](docs/implementation-backlog.md)
 - [평가 계획](docs/evaluation-plan.md)
 
 ## 이번 주 할 일
@@ -61,9 +63,10 @@ Agent Forge는 Craft AI 같은 에이전트 빌더 개념을 사내망 제약에
 - [x] 문서 등급과 부서 권한 모델 초안을 만든다.
 - [x] 에이전트 카드 표준을 확정한다.
 - [x] 초기 WBS와 리스크 로그를 채운다.
-- [ ] 샘플 문서 50~200개 후보를 정한다.
+- [x] 샘플 문서 50~200개 후보 기준을 정한다.
 - [ ] 파일럿 부서와 문서 소유자를 지정한다.
-- [ ] 구현 착수용 backlog를 만든다.
+- [x] 구현 착수용 backlog를 만든다.
+- [ ] Sprint 0 착수 범위를 확정한다.
 
 ## 운영 규칙
 

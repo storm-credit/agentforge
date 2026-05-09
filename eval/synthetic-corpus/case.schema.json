@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentforge.local/schemas/synthetic-corpus/v0.1",
+  "title": "Agent Forge Synthetic Corpus",
+  "type": "object",
+  "required": ["schema_version", "corpus_id", "documents", "cases"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": "agentforge.synthetic_corpus/v0.1"
+    },
+    "corpus_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "documents": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "document_id",
+          "title",
+          "owner_department",
+          "confidentiality_level",
+          "allowed_departments",
+          "locators"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "document_id": { "type": "string" },
+          "title": { "type": "string" },
+          "owner_department": { "type": "string" },
+          "confidentiality_level": {
+            "enum": ["public", "internal", "restricted", "confidential"]
+          },
+          "allowed_departments": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "allowed_groups": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "locators": {
+            "type": "array",
+            "minItems": 1,
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "cases": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "case_id",
+          "suite",
+          "question",
+          "principal",
+          "expected_behavior",
+          "expected_answer_points",
+          "expected_citations",
+          "forbidden_citations",
+          "must_not_include",
+          "tags"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "case_id": { "type": "string" },
+          "suite": {
+            "enum": ["rag-core", "citation", "acl", "refusal", "safety"]
+          },
+          "question": { "type": "string" },
+          "principal": {
+            "type": "object",
+            "required": ["user_id", "department_id", "roles", "groups"],
+            "additionalProperties": false,
+            "properties": {
+              "user_id": { "type": "string" },
+              "department_id": { "type": "string" },
+              "roles": {
+                "type": "array",
+                "items": { "type": "string" }
+              },
+              "groups": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
+          },
+          "expected_behavior": {
+            "enum": ["answer", "refuse", "policy_denied", "no_context"]
+          },
+          "expected_answer_points": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "expected_citations": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["document_id", "locator"],
+              "additionalProperties": false,
+              "properties": {
+                "document_id": { "type": "string" },
+                "locator": { "type": "string" }
+              }
+            }
+          },
+          "forbidden_citations": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "must_not_include": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}
+

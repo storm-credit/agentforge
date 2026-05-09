@@ -57,3 +57,36 @@ curl -X POST http://localhost:8000/api/v1/knowledge/sources `
 - Agent, agent version, knowledge source, document, and audit tables migrate.
 - Agent and knowledge source metadata can be saved through API calls.
 - Follow-up Sprint 1 stories are ready for CRUD, upload, parser, fake retrieval, and trace work.
+
+## 5. D3 Evidence Checks
+
+Run the safe smoke checks from the repository root:
+
+```powershell
+./tools/smoke/compose-smoke.ps1
+./tools/smoke/eval-corpus-smoke.ps1
+```
+
+API contract tests:
+
+```powershell
+cd apps/api
+python -m pytest
+```
+
+Web route smoke after starting the Next.js dev server:
+
+```powershell
+cd apps/web
+npm install
+npm run dev
+npm run test:e2e
+```
+
+Current D3 evidence seed:
+
+- API metadata contract tests: `apps/api/tests/test_metadata_contracts.py`
+- Synthetic ACL/citation corpus: `eval/synthetic-corpus/cases-v0.1.json`
+- Compose smoke helper: `tools/smoke/compose-smoke.ps1`
+- Corpus smoke helper: `tools/smoke/eval-corpus-smoke.ps1`
+- Agent Studio route smoke: `apps/web/tests/smoke.spec.ts`

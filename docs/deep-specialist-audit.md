@@ -60,7 +60,17 @@ The orchestrator should now dispatch the next work in this order:
 4. DevOps: run full compose boot and add smoke instructions or scripts.
 5. PM: close pilot owner and document owner placeholders.
 
-## 6. Acceptance Rule
+## 6. Dispatch Progress
+
+| Dispatch | Status | Evidence |
+|---|---|---|
+| Backend + QA API contract tests | Started | `apps/api/tests/test_metadata_contracts.py` |
+| QA + RAG + Security synthetic corpus | Started | `eval/synthetic-corpus/cases-v0.1.json` |
+| DevOps compose smoke | Started | `tools/smoke/compose-smoke.ps1` |
+| Frontend route smoke | Started | `apps/web/tests/smoke.spec.ts` |
+| PM owner closure | Pending | pilot department and document owner still open |
+
+## 7. Acceptance Rule
 
 A specialist workstream can be called "deep" only when it has both:
 
@@ -68,4 +78,3 @@ A specialist workstream can be called "deep" only when it has both:
 - D3 evidence: executable test, review gate, runbook smoke, or measurable report.
 
 By that rule, Agent Forge is currently D2-deep across most domains and D3-started in backend/dev foundation only.
-

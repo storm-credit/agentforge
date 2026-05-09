@@ -74,6 +74,7 @@ Agent Forge는 Craft AI 같은 에이전트 빌더 개념을 사내망 제약에
 - [x] Sprint 0 API/Web/DB/Compose 골격을 생성한다.
 - [x] 오케스트라-전문 에이전트 운영 모델을 명문화한다.
 - [x] 전문 에이전트별 D2/D3 깊이 점검을 수행한다.
+- [x] 전문가별 D3 증거 seed를 추가한다.
 - [x] Open Design 활용 가능성과 경계선을 정리한다.
 - [ ] Sprint 0 로컬 실행을 실제 환경에서 검증한다.
 

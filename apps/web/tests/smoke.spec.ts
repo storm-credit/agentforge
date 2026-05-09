@@ -13,7 +13,7 @@ test.describe("Agent Studio shell", () => {
   for (const route of routes) {
     test(`renders ${route.path}`, async ({ page }) => {
       await page.goto(route.path);
-      await expect(page.getByRole("heading", { name: route.heading })).toBeVisible();
+      await expect(page.getByRole("heading", { name: route.heading, exact: true })).toBeVisible();
       await expect(page.getByRole("link", { name: "Agent Forge" })).toBeVisible();
     });
   }
@@ -21,14 +21,15 @@ test.describe("Agent Studio shell", () => {
   test("operator can navigate from overview to core workspaces", async ({ page }) => {
     await page.goto("/");
 
-    await page.getByRole("link", { name: "Agents" }).click();
-    await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
+    const primaryNav = page.getByLabel("Primary");
 
-    await page.getByRole("link", { name: "Knowledge" }).click();
-    await expect(page.getByRole("heading", { name: "Knowledge" })).toBeVisible();
+    await primaryNav.getByRole("link", { name: "Agents", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Agents", exact: true })).toBeVisible();
 
-    await page.getByRole("link", { name: "Audit" }).click();
-    await expect(page.getByRole("heading", { name: "Audit" })).toBeVisible();
+    await primaryNav.getByRole("link", { name: "Knowledge", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Knowledge", exact: true })).toBeVisible();
+
+    await primaryNav.getByRole("link", { name: "Audit", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Audit", exact: true })).toBeVisible();
   });
 });
-

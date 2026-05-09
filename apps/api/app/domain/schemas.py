@@ -11,6 +11,13 @@ class AgentCreate(BaseModel):
     status: str = "draft"
 
 
+class AgentUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=160)
+    purpose: str | None = Field(default=None, min_length=1)
+    owner_department: str | None = Field(default=None, min_length=1, max_length=120)
+    status: str | None = None
+
+
 class AgentRead(BaseModel):
     id: str
     name: str
@@ -28,6 +35,10 @@ class AgentVersionCreate(BaseModel):
     version: int = Field(ge=1)
     status: str = "draft"
     config: dict[str, Any] = Field(default_factory=dict)
+
+
+class AgentVersionValidate(BaseModel):
+    reason: str = "Sprint 0 metadata validation"
 
 
 class AgentVersionRead(BaseModel):
@@ -91,4 +102,3 @@ class DocumentRead(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-

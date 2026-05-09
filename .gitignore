@@ -221,6 +221,10 @@ __marimo__/
 node_modules/
 .next/
 out/
+playwright-report/
+test-results/
+apps/web/playwright-report/
+apps/web/test-results/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

@@ -79,10 +79,17 @@ D3 evidence added:
 - `eval/synthetic-corpus/cases-v0.1.json`
 - `eval/harness/run_synthetic_eval.py`
 - `eval/harness/tests/test_scorer.py`
+- `eval/harness/tests/test_fake_retrieval.py`
 - `tools/smoke/compose-smoke.ps1`
 - `tools/smoke/eval-corpus-smoke.ps1`
 - `tools/smoke/eval-scorer-smoke.ps1`
 - `apps/web/tests/smoke.spec.ts`
+
+Verification status:
+
+- Full compose boot passed on 2026-05-10 using an auto-selected web port.
+- API HTTP smoke passed for agent create/detail/update/version validate/publish.
+- Playwright route smoke passed 7/7 against the compose web service.
 
 ### Sprint 1
 

@@ -28,6 +28,13 @@ Checks:
 - Builds and starts the local stack.
 - Waits for API health endpoints.
 - Confirms `/healthz` and `/readyz` respond.
+- Confirms the Web root responds.
+
+If port `3000` is already in use, let the script choose a free web port:
+
+```powershell
+./tools/smoke/compose-smoke.ps1 -Boot -WebPort 0
+```
 
 ## Synthetic Corpus Smoke
 

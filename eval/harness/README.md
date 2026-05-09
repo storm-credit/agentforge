@@ -21,8 +21,8 @@ python -m unittest discover eval/harness/tests
 - answer cases cite documents the principal may access
 - answer cases do not allow known forbidden citations through ACL
 - policy-denied cases target inaccessible known forbidden documents
+- fake retrieval keeps forbidden documents out of allowed context and citations
 - suite-level pass/fail counts are reported in JSON
 
 This is a seed. Sprint 1 should connect the same case set to real retrieval hits, runtime
 answers, citations, trace rows, and audit events.
-

@@ -64,11 +64,12 @@ The orchestrator should now dispatch the next work in this order:
 
 | Dispatch | Status | Evidence |
 |---|---|---|
-| Backend + QA API contract tests | Started | `apps/api/tests/test_metadata_contracts.py` |
+| Backend + QA API contract tests | Expanded | `apps/api/tests/test_metadata_contracts.py` covers detail, patch, validate, publish |
 | QA + RAG + Security synthetic corpus | Started | `eval/synthetic-corpus/cases-v0.1.json` |
 | QA + RAG + Security deterministic scorer | Started | `eval/harness/run_synthetic_eval.py` |
-| DevOps compose smoke | Started | `tools/smoke/compose-smoke.ps1` |
-| Frontend route smoke | Started | `apps/web/tests/smoke.spec.ts` |
+| RAG + Security fake retrieval ACL tests | Started | `eval/harness/tests/test_fake_retrieval.py` |
+| DevOps compose smoke | Verified | `tools/smoke/compose-smoke.ps1 -Boot -WebPort 0` passed |
+| Frontend route smoke | Verified | `apps/web/tests/smoke.spec.ts` passed 7/7 |
 | PM owner closure | Pending | pilot department and document owner still open |
 
 ## 7. Acceptance Rule

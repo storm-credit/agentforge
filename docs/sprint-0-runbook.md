@@ -64,9 +64,12 @@ Run the safe smoke checks from the repository root:
 
 ```powershell
 ./tools/smoke/compose-smoke.ps1
+./tools/smoke/compose-smoke.ps1 -Boot -WebPort 0
 ./tools/smoke/eval-corpus-smoke.ps1
 ./tools/smoke/eval-scorer-smoke.ps1
 ```
+
+Use `-WebPort 0` when `3000` is already occupied. The script prints the selected port.
 
 API contract tests:
 
@@ -84,12 +87,29 @@ npm run dev
 npm run test:e2e
 ```
 
+When the web app is running from Docker Compose on an auto-selected port:
+
+```powershell
+$env:PLAYWRIGHT_BASE_URL="http://127.0.0.1:<printed-web-port>"
+npm run test:e2e
+```
+
 Current D3 evidence seed:
 
 - API metadata contract tests: `apps/api/tests/test_metadata_contracts.py`
 - Synthetic ACL/citation corpus: `eval/synthetic-corpus/cases-v0.1.json`
 - Deterministic eval scorer: `eval/harness/run_synthetic_eval.py`
+- Fake retrieval ACL tests: `eval/harness/tests/test_fake_retrieval.py`
 - Compose smoke helper: `tools/smoke/compose-smoke.ps1`
 - Corpus smoke helper: `tools/smoke/eval-corpus-smoke.ps1`
 - Scorer smoke helper: `tools/smoke/eval-scorer-smoke.ps1`
 - Agent Studio route smoke: `apps/web/tests/smoke.spec.ts`
+
+## 6. Latest Verification
+
+2026-05-10:
+
+- Full compose boot passed with auto-selected web port.
+- API HTTP smoke passed for create, detail, patch, version create, validate, and publish.
+- Playwright Agent Studio route smoke passed: 7/7.
+- Fake retrieval ACL tests passed: 7 unittest cases total across scorer/retrieval.

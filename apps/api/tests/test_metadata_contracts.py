@@ -72,6 +72,22 @@ def test_agent_and_version_contract(client):
     assert agent["name"] == "Policy Assistant"
     assert agent["status"] == "draft"
 
+    detail_response = client.get(f"/api/v1/agents/{agent['id']}")
+
+    assert detail_response.status_code == 200
+    assert detail_response.json()["id"] == agent["id"]
+
+    update_response = client.patch(
+        f"/api/v1/agents/{agent['id']}",
+        headers={"X-Agent-Forge-User": "agent-owner"},
+        json={"purpose": "Answer internal policy questions with traceable citations."},
+    )
+
+    assert update_response.status_code == 200
+    assert update_response.json()["purpose"] == (
+        "Answer internal policy questions with traceable citations."
+    )
+
     version_response = client.post(
         "/api/v1/agents/versions",
         headers={"X-Agent-Forge-User": "agent-owner"},
@@ -91,10 +107,35 @@ def test_agent_and_version_contract(client):
     assert version["version"] == 1
     assert version["created_by"] == "agent-owner"
 
+    versions_response = client.get(f"/api/v1/agents/{agent['id']}/versions")
+
+    assert versions_response.status_code == 200
+    assert [item["id"] for item in versions_response.json()] == [version["id"]]
+
+    validate_response = client.post(
+        f"/api/v1/agents/versions/{version['id']}/validate",
+        headers={"X-Agent-Forge-User": "agent-owner"},
+        json={"reason": "Contract test validation"},
+    )
+
+    assert validate_response.status_code == 200
+    assert validate_response.json()["status"] == "validated"
+
+    publish_response = client.post(
+        f"/api/v1/agents/versions/{version['id']}/publish",
+        headers={"X-Agent-Forge-User": "platform-admin"},
+        json={"reason": "Contract test publish"},
+    )
+
+    assert publish_response.status_code == 200
+    assert publish_response.json()["status"] == "published"
+
     list_response = client.get("/api/v1/agents")
 
     assert list_response.status_code == 200
-    assert [item["id"] for item in list_response.json()] == [agent["id"]]
+    listed_agents = list_response.json()
+    assert [item["id"] for item in listed_agents] == [agent["id"]]
+    assert listed_agents[0]["status"] == "published"
 
 
 def test_knowledge_source_and_document_contract(client):

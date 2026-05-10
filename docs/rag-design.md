@@ -119,6 +119,8 @@ AND confidentiality_rank <= user.clearance_rank
 AND 문서 유효 기간 안에 있음
 ```
 
+MVP confidentiality rank is `public=0`, `internal=1`, `restricted=2`, and `confidential=3`. Confidential documents are excluded from the default MVP search index.
+
 ACL filter는 vector search 이전에 적용한다. 권한 밖 chunk는 rerank, LLM context, 일반 로그에 들어가면 안 된다.
 
 ## Rerank

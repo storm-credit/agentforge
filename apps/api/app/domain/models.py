@@ -92,6 +92,62 @@ class Document(Base):
     )
 
     knowledge_source: Mapped[KnowledgeSource] = relationship(back_populates="documents")
+    index_jobs: Mapped[list["IndexJob"]] = relationship(
+        back_populates="document", cascade="all, delete-orphan"
+    )
+    chunks: Mapped[list["DocumentChunk"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentChunk.chunk_index",
+    )
+
+
+class IndexJob(Base):
+    __tablename__ = "index_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id"), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="queued", nullable=False)
+    stage: Mapped[str] = mapped_column(String(40), default="parse", nullable=False)
+    config: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(120), nullable=False)
+    chunk_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    artifact_uri: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    document: Mapped[Document] = relationship(back_populates="index_jobs")
+
+
+class DocumentChunk(Base):
+    __tablename__ = "document_chunks"
+
+    id: Mapped[str] = mapped_column(String(220), primary_key=True)
+    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id"), nullable=False)
+    chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    content_hash: Mapped[str] = mapped_column(String(80), nullable=False)
+    chunk_hash: Mapped[str] = mapped_column(String(80), nullable=False)
+    token_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    line_start: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    line_end: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    section_path: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    citation_locator: Mapped[str] = mapped_column(String(300), nullable=False)
+    parser_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    chunker_version: Mapped[str] = mapped_column(String(80), nullable=False)
+    embedding_model: Mapped[str] = mapped_column(String(120), nullable=False)
+    vector_ref: Mapped[str] = mapped_column(String(240), nullable=False)
+    acl_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="indexed", nullable=False)
+    indexed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    document: Mapped[Document] = relationship(back_populates="chunks")
 
 
 class AuditEvent(Base):
@@ -106,4 +162,3 @@ class AuditEvent(Base):
     reason: Mapped[str] = mapped_column(Text, default="", nullable=False)
     payload: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-

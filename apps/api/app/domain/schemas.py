@@ -104,6 +104,64 @@ class DocumentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class IndexJobCreate(BaseModel):
+    parser_profile: str = "default-txt-md"
+    chunking: dict[str, Any] = Field(
+        default_factory=lambda: {
+            "strategy": "line-heading",
+            "chunk_size": 900,
+            "chunk_overlap": 0,
+        }
+    )
+    embedding_model: str = "none-smoke"
+    force_reindex: bool = False
+    source_text: str | None = Field(
+        default=None,
+        description="Synthetic TXT/MD smoke content. Real uploads will read from object storage.",
+    )
+
+
+class IndexJobRead(BaseModel):
+    id: str
+    document_id: str
+    status: str
+    stage: str
+    config: dict[str, Any]
+    created_by: str
+    chunk_count: int
+    error_code: str | None
+    error_message: str | None
+    artifact_uri: str | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DocumentChunkRead(BaseModel):
+    id: str
+    document_id: str
+    chunk_index: int
+    content_hash: str
+    chunk_hash: str
+    token_count: int
+    line_start: int | None
+    line_end: int | None
+    section_path: list[str]
+    citation_locator: str
+    parser_version: str
+    chunker_version: str
+    embedding_model: str
+    vector_ref: str
+    acl_snapshot: dict[str, Any]
+    status: str
+    indexed_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class RetrievalPreviewRequest(BaseModel):
     query: str = Field(min_length=1, max_length=500)
     knowledge_source_ids: list[str] = Field(default_factory=list)
@@ -113,11 +171,13 @@ class RetrievalPreviewRequest(BaseModel):
 class RetrievalPreviewHit(BaseModel):
     document_id: str
     knowledge_source_id: str
+    chunk_id: str | None = None
     title: str
     confidentiality_level: str
     access_groups: list[str]
     score: float
     citation: str
+    citation_locator: str | None = None
 
 
 class RetrievalPreviewResponse(BaseModel):

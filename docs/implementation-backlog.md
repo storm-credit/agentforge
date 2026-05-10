@@ -114,6 +114,9 @@ Sprint 1 progress:
 - AF-013 ACL filter model started in `apps/api/app/domain/acl.py`.
 - AF-014 retrieval preview API started at `POST /api/v1/knowledge/retrieval/preview`.
 - Contract coverage was added for allowed vs blocked users and deny-by-default documents.
+- AF-010 index job skeleton started with `index_jobs` and `document_chunks` tables.
+- AF-011 TXT/MD parser smoke started with deterministic chunk IDs, line locators, and heading paths.
+- `tools/smoke/indexing-smoke.ps1` verifies job creation, chunk metadata, chunk retrieval preview, and fail-closed no-ACL indexing.
 
 ### Sprint 2
 

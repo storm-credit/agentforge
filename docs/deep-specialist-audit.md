@@ -23,7 +23,7 @@ Most specialist workstreams are now at D2 for design. That means they include do
 | PM Agent | D2 partial | WBS, pilot checklist, backlog, risks | Real pilot owner, stakeholder map, decision calendar | Needs targeted PM follow-up |
 | Chief Architect | D2 | Control/Runtime/Data Plane, closed-net boundaries, extension rules | Architecture fitness tests and deployment validation | Pass for design |
 | Security Architect | D2 plus D3 seed | ACL matrix, deny-by-default, audit, prompt injection, cache invalidation rules | Policy tests, threat model drill, audit event validation | ACL retrieval preview started |
-| RAG/Data Specialist | D2 strong plus D3 seed | deterministic ingestion, parsing, chunking, metadata, ACL-first retrieval, citation gates | Parser smoke, fake retrieval, ACL/citation golden set | ACL retrieval preview started |
+| RAG/Data Specialist | D2 strong plus D3 seed | deterministic ingestion, parsing, chunking, metadata, ACL-first retrieval, citation gates | Parser smoke, fake retrieval, ACL/citation golden set | Parser smoke and chunk metadata started |
 | AI Runtime Architect | D2 strong | Agent Build contract, runtime flow, guards, critic, quality gates | Schema validation, runtime state tests, mock model gateway | Pass for design, D3 pending |
 | Backend Specialist | D2 plus D3 seed | API draft, DB draft, FastAPI skeleton, Alembic migration, audit writer | Contract tests, auth policy, CRUD completeness, run/index job models | Continue immediately |
 | Frontend Specialist | D2 | Agent Studio route IA, Builder flow, Test Chat, Run Trace, Eval Dashboard, Open Design review | Implement real Agent Studio views and Playwright smoke | Continue after API contracts firm up |
@@ -69,6 +69,7 @@ The orchestrator should now dispatch the next work in this order:
 | QA + RAG + Security deterministic scorer | Started | `eval/harness/run_synthetic_eval.py` |
 | RAG + Security fake retrieval ACL tests | Started | `eval/harness/tests/test_fake_retrieval.py` |
 | RAG + Security ACL retrieval preview API | Started | `POST /api/v1/knowledge/retrieval/preview` filters unauthorized documents |
+| Backend + RAG + QA index job skeleton | Started | `index_jobs`, `document_chunks`, and TXT/MD parser smoke |
 | DevOps compose smoke | Verified | `tools/smoke/compose-smoke.ps1 -Boot -WebPort 0` passed |
 | Frontend route smoke | Verified | `apps/web/tests/smoke.spec.ts` passed 7/7 |
 | PM owner closure | Pending | pilot department and document owner still open |

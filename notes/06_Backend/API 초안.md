@@ -197,7 +197,8 @@ Request:
     "chunk_overlap": 150
   },
   "embedding_model": "local-bge-m3",
-  "force_reindex": false
+  "force_reindex": false,
+  "source_text": null
 }
 ```
 
@@ -210,6 +211,8 @@ Request:
 5. embedding 생성
 6. Qdrant 또는 pgvector upsert
 7. `index_jobs` 상태 갱신 및 audit event 기록
+
+Sprint 1 smoke 구현에서는 `source_text`가 제공된 TXT/MD synthetic 문서만 동기 parser smoke로 처리한다. 운영 upload 경로는 이후 MinIO 원본을 읽는 worker로 확장한다. 응답과 audit payload에는 chunk 원문을 넣지 않고 id/hash/count/citation locator만 노출한다.
 
 ### `POST /knowledge/retrieval/preview`
 

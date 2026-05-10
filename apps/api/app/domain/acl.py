@@ -10,6 +10,7 @@ CONFIDENTIALITY_RANK = {
 }
 
 SEARCHABLE_DOCUMENT_STATUSES = {"registered", "indexed", "ready"}
+EXCLUDED_INDEX_CONFIDENTIALITY_LEVELS = {"confidential"}
 
 
 def confidentiality_rank(level: str) -> int:
@@ -31,6 +32,9 @@ def principal_can_access_document(principal: Principal, document: Document) -> b
     if document.status not in SEARCHABLE_DOCUMENT_STATUSES:
         return False
 
+    if document.confidentiality_level in EXCLUDED_INDEX_CONFIDENTIALITY_LEVELS:
+        return False
+
     if confidentiality_rank(principal.clearance_level) < confidentiality_rank(
         document.confidentiality_level
     ):
@@ -40,3 +44,13 @@ def principal_can_access_document(principal: Principal, document: Document) -> b
         return False
 
     return bool(principal_acl_subjects(principal).intersection(document.access_groups))
+
+
+def document_can_be_indexed(document: Document) -> bool:
+    if document.status not in SEARCHABLE_DOCUMENT_STATUSES:
+        return False
+
+    if document.confidentiality_level in EXCLUDED_INDEX_CONFIDENTIALITY_LEVELS:
+        return False
+
+    return bool(document.access_groups)

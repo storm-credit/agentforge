@@ -61,6 +61,22 @@ Checks:
 - ACL accessibility rules produce expected allow/block outcomes.
 - The scorer unit tests pass.
 
+## Indexing Parser Smoke
+
+Run this after the API is available, for example after full compose boot:
+
+```powershell
+./tools/smoke/indexing-smoke.ps1
+```
+
+Checks:
+
+- A synthetic Markdown document creates an index job.
+- TXT/MD parser smoke produces deterministic chunk metadata.
+- Chunk metadata responses do not expose raw content.
+- Retrieval preview returns chunk citations for authorized users.
+- A document without ACL metadata fails closed.
+
 ## Web Smoke
 
 ```powershell

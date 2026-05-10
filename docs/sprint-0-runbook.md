@@ -98,10 +98,12 @@ Current D3 evidence seed:
 
 - API metadata contract tests: `apps/api/tests/test_metadata_contracts.py`
 - ACL retrieval preview contract tests: `apps/api/tests/test_metadata_contracts.py`
+- TXT/MD parser contract tests: `apps/api/tests/test_parser_contracts.py`
 - Synthetic ACL/citation corpus: `eval/synthetic-corpus/cases-v0.1.json`
 - Deterministic eval scorer: `eval/harness/run_synthetic_eval.py`
 - Fake retrieval ACL tests: `eval/harness/tests/test_fake_retrieval.py`
 - Compose smoke helper: `tools/smoke/compose-smoke.ps1`
+- Indexing parser smoke helper: `tools/smoke/indexing-smoke.ps1`
 - Corpus smoke helper: `tools/smoke/eval-corpus-smoke.ps1`
 - Scorer smoke helper: `tools/smoke/eval-scorer-smoke.ps1`
 - Agent Studio route smoke: `apps/web/tests/smoke.spec.ts`
@@ -115,3 +117,4 @@ Current D3 evidence seed:
 - Playwright Agent Studio route smoke passed: 7/7.
 - Fake retrieval ACL tests passed: 7 unittest cases total across scorer/retrieval.
 - Retrieval preview HTTP smoke passed: Finance saw only all-employee document, HR saw restricted HR document plus all-employee document, and no-ACL document was denied.
+- Indexing parser smoke passed: compose boot applied Sprint 1 migration, synthetic Markdown produced two chunks, retrieval preview returned a chunk citation, and no-ACL indexing failed closed.

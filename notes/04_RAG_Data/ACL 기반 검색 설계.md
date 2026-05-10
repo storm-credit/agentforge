@@ -45,7 +45,7 @@ acl:
 기밀 등급은 순서를 가진 enum으로 관리한다.
 
 ```text
-public < internal < confidential < restricted
+public < internal < restricted < confidential
 ```
 
 사용자의 `clearance_level`보다 높은 chunk는 검색에서 제외한다.
@@ -89,7 +89,7 @@ AND (acl.effective_to is null OR acl.effective_to >= now)
 AND acl.legal_hold = false
 ```
 
-검색 엔진별 payload filter 표현은 다를 수 있지만, 위 의미를 보존해야 한다. vector DB가 enum 비교를 지원하지 않으면 `confidentiality_rank` 숫자 필드를 추가한다.
+MVP 검색 색인은 `public`, `internal`, `restricted`를 대상으로 하며, `confidential` 문서는 기본 색인 대상에서 제외한다. 검색 엔진별 payload filter 표현은 다를 수 있지만, 위 의미를 보존해야 한다. vector DB가 enum 비교를 지원하지 않으면 `confidentiality_rank` 숫자 필드를 추가한다.
 
 ```yaml
 confidentiality_level: "internal"

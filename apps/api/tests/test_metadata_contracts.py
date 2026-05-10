@@ -274,6 +274,135 @@ def test_retrieval_preview_applies_document_acl(client):
     assert "Unclassified Draft Policy" not in hr_titles
 
 
+def test_index_job_creates_txt_md_chunks_and_preview_uses_chunk_citations(client):
+    source_response = client.post(
+        "/api/v1/knowledge/sources",
+        json={
+            "name": "Sprint 1 Parser Corpus",
+            "description": "Synthetic parser corpus.",
+            "owner_department": "Operations",
+        },
+    )
+    source = source_response.json()
+    document_response = client.post(
+        "/api/v1/knowledge/documents",
+        json={
+            "knowledge_source_id": source["id"],
+            "title": "Remote Work Policy",
+            "object_uri": "object://synthetic/ops/remote-work.md",
+            "checksum": "sha256-remote-work-parser",
+            "mime_type": "text/markdown",
+            "confidentiality_level": "internal",
+            "access_groups": ["all-employees"],
+            "effective_date": "2026-05-10",
+        },
+    )
+    document = document_response.json()
+
+    job_response = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers={"X-Agent-Forge-User": "indexer"},
+        json={
+            "source_text": (
+                "# Remote Work\n\n"
+                "Company-wide remote work rules.\n\n"
+                "## Eligibility\n\n"
+                "Employees may request remote work after manager approval."
+            ),
+            "chunking": {"strategy": "line-heading", "chunk_size": 900, "chunk_overlap": 0},
+        },
+    )
+
+    assert job_response.status_code == 201
+    job = job_response.json()
+    assert job["status"] == "succeeded"
+    assert job["stage"] == "upsert"
+    assert job["chunk_count"] == 2
+    assert job["created_by"] == "indexer"
+
+    detail_response = client.get(f"/api/v1/knowledge/index-jobs/{job['id']}")
+
+    assert detail_response.status_code == 200
+    assert detail_response.json()["id"] == job["id"]
+
+    chunks_response = client.get(f"/api/v1/knowledge/documents/{document['id']}/chunks")
+
+    assert chunks_response.status_code == 200
+    chunks = chunks_response.json()
+    assert len(chunks) == 2
+    assert "content" not in chunks[0]
+    assert chunks[1]["section_path"] == ["Remote Work", "Eligibility"]
+    assert chunks[1]["citation_locator"] == (
+        "Remote Work Policy / Remote Work > Eligibility / lines 7-7"
+    )
+    assert chunks[1]["acl_snapshot"]["access_groups"] == ["all-employees"]
+
+    preview_response = client.post(
+        "/api/v1/knowledge/retrieval/preview",
+        json={
+            "query": "manager approval",
+            "knowledge_source_ids": [source["id"]],
+            "top_k": 1,
+        },
+    )
+
+    assert preview_response.status_code == 200
+    hit = preview_response.json()["hits"][0]
+    assert hit["chunk_id"] == chunks[1]["id"]
+    assert hit["citation_locator"] == chunks[1]["citation_locator"]
+
+
+def test_index_job_fails_closed_for_missing_acl(client):
+    source_response = client.post(
+        "/api/v1/knowledge/sources",
+        json={
+            "name": "Missing ACL Corpus",
+            "description": "Documents without ACL must not become searchable.",
+            "owner_department": "Security",
+        },
+    )
+    source = source_response.json()
+    document_response = client.post(
+        "/api/v1/knowledge/documents",
+        json={
+            "knowledge_source_id": source["id"],
+            "title": "Unclassified Draft Policy",
+            "object_uri": "object://synthetic/security/no-acl.md",
+            "checksum": "sha256-no-acl-parser",
+            "mime_type": "text/markdown",
+            "confidentiality_level": "internal",
+            "access_groups": [],
+        },
+    )
+    document = document_response.json()
+
+    job_response = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        json={"source_text": "# Draft\n\nThis must not become searchable."},
+    )
+
+    assert job_response.status_code == 201
+    job = job_response.json()
+    assert job["status"] == "failed"
+    assert job["error_code"] == "DOCUMENT_NOT_INDEXABLE"
+    assert job["chunk_count"] == 0
+
+    chunks_response = client.get(f"/api/v1/knowledge/documents/{document['id']}/chunks")
+
+    assert chunks_response.status_code == 200
+    assert chunks_response.json() == []
+
+
+def test_index_job_rejects_unknown_document(client):
+    response = client.post(
+        "/api/v1/knowledge/documents/missing-document/index-jobs",
+        json={"source_text": "Missing document."},
+    )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Document not found"
+
+
 def test_document_registration_rejects_unknown_source(client):
     response = client.post(
         "/api/v1/knowledge/documents",

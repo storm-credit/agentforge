@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.core.principal import Principal, get_principal
+from app.domain.citations import CitationValidationResult, validate_run_citations
 from app.domain.models import Agent, AgentVersion, Document, RetrievalHit, Run, RunStep
 from app.domain.schemas import (
     RetrievalHitRead,
@@ -97,19 +98,21 @@ def create_run(
 
     citations = []
     for rank, hit in enumerate(vector_result.hits, start=1):
+        citation_locator = hit.citation_locator or hit.citation
+        usable_as_citation = bool(hit.chunk_id and citation_locator)
         db.add(
             RetrievalHit(
                 run_id=run.id,
                 chunk_id=hit.chunk_id,
                 document_id=hit.document_id,
                 title=hit.title,
-                citation_locator=hit.citation_locator or hit.citation,
+                citation_locator=citation_locator,
                 rank_original=rank,
                 rank_reranked=rank,
                 score_vector=hit.score,
                 score_rerank=None,
                 used_in_context=True,
-                used_as_citation=True,
+                used_as_citation=usable_as_citation,
                 acl_filter_snapshot={
                     "subjects": list(acl_filter.subjects),
                     "clearance_level": acl_filter.clearance_level,
@@ -118,25 +121,34 @@ def create_run(
                 },
             )
         )
-        citations.append(
-            {
-                "document_id": hit.document_id,
-                "chunk_id": hit.chunk_id,
-                "title": hit.title,
-                "citation_locator": hit.citation_locator or hit.citation,
-                "score": hit.score,
-            }
-        )
+        if usable_as_citation:
+            citations.append(
+                {
+                    "document_id": hit.document_id,
+                    "chunk_id": hit.chunk_id,
+                    "title": hit.title,
+                    "citation_locator": citation_locator,
+                    "score": hit.score,
+                }
+            )
 
     run.answer = _build_synthetic_answer(len(citations))
     run.citations = citations
     run.retrieval_denied_count = vector_result.denied_count
+    citation_required = bool(agent_version.config.get("citation_required", True))
+    citation_validation = validate_run_citations(
+        citations,
+        citation_required=citation_required,
+    )
     run.guardrail = {
         "acl_filter_applied": True,
-        "citation_required": bool(agent_version.config.get("citation_required", True)),
+        "citation_required": citation_required,
         "citation_count": len(citations),
+        "citation_validation_pass": citation_validation.passed,
+        "citation_validation_error_code": citation_validation.error_code,
+        "citation_validation_missing_fields": list(citation_validation.missing_fields),
         "pii_masked": False,
-        "security_finalcheck_pass": True,
+        "security_finalcheck_pass": citation_validation.passed,
     }
 
     _add_step(
@@ -155,15 +167,32 @@ def create_run(
         db,
         run=run,
         order=4,
+        step_type="citation_validator",
+        input_summary={
+            "citation_required": citation_validation.required,
+            "citation_count": citation_validation.citation_count,
+        },
+        output_summary=_citation_validation_summary(citation_validation),
+        status="succeeded" if citation_validation.passed else "failed",
+        error_code=citation_validation.error_code,
+        error_message=citation_validation.error_message,
+    )
+    _add_step(
+        db,
+        run=run,
+        order=5,
         step_type="guard_output",
         input_summary={"answer_length": len(run.answer)},
         output_summary={
-            "security_finalcheck_pass": True,
+            "security_finalcheck_pass": citation_validation.passed,
             "citation_count": len(citations),
         },
+        status="succeeded" if citation_validation.passed else "failed",
+        error_code=citation_validation.error_code,
+        error_message=citation_validation.error_message,
     )
 
-    run.status = "succeeded"
+    run.status = "succeeded" if citation_validation.passed else "failed"
     run.finished_at = datetime.now(UTC)
     run.latency_ms = max(1, int((perf_counter() - timer_start) * 1000))
     write_audit_event(
@@ -177,9 +206,12 @@ def create_run(
             "agent_version_id": run.agent_version_id,
             "status": run.status,
             "query_length": len(payload.input.message),
-            "retrieval_hit_count": len(citations),
+            "retrieval_hit_count": len(vector_result.hits),
+            "citation_count": len(citations),
             "retrieval_denied_count": vector_result.denied_count,
-            "step_count": 4,
+            "citation_validation_pass": citation_validation.passed,
+            "citation_validation_error_code": citation_validation.error_code,
+            "step_count": 5,
         },
     )
     db.commit()
@@ -301,6 +333,9 @@ def _add_step(
     input_summary: dict,
     output_summary: dict,
     started_at: datetime | None = None,
+    status: str = "succeeded",
+    error_code: str | None = None,
+    error_message: str | None = None,
 ) -> None:
     step_started_at = started_at or datetime.now(UTC)
     step_finished_at = datetime.now(UTC)
@@ -310,14 +345,26 @@ def _add_step(
             run_id=run.id,
             step_order=order,
             step_type=step_type,
-            status="succeeded",
+            status=status,
             input_summary=input_summary,
             output_summary=output_summary,
             started_at=step_started_at,
             finished_at=step_finished_at,
             latency_ms=latency_ms,
+            error_code=error_code,
+            error_message=error_message,
         )
     )
+
+
+def _citation_validation_summary(result: CitationValidationResult) -> dict:
+    return {
+        "passed": result.passed,
+        "required": result.required,
+        "citation_count": result.citation_count,
+        "error_code": result.error_code,
+        "missing_fields": list(result.missing_fields),
+    }
 
 
 def _build_synthetic_answer(citation_count: int) -> str:

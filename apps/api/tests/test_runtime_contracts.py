@@ -125,10 +125,13 @@ def test_runtime_run_records_steps_hits_and_acl_trace(client):
         "guard_input",
         "retriever",
         "generator",
+        "citation_validator",
         "guard_output",
     ]
     assert steps[1]["output_summary"]["hit_count"] == 1
     assert steps[1]["output_summary"]["denied_count"] == 1
+    assert steps[3]["status"] == "succeeded"
+    assert steps[3]["output_summary"]["passed"] is True
 
     hits_response = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits")
 
@@ -165,6 +168,66 @@ def test_runtime_run_requires_published_version(client):
 
     assert run_response.status_code == 400
     assert run_response.json()["detail"] == "Agent version is not published"
+
+
+def test_runtime_run_fails_citation_validation_without_authorized_context(client):
+    source = _create_source(client)
+    restricted_document = _register_document(
+        client,
+        source_id=source["id"],
+        title="HR Leave Exception Policy",
+        object_uri="object://synthetic/hr/leave-exception-required.md",
+        checksum="sha256-leave-exception-required-runtime",
+        confidentiality_level="restricted",
+        access_groups=["department:HR"],
+    )
+    _index_document(
+        client,
+        document_id=restricted_document["id"],
+        source_text="# Leave Exceptions\n\nHR may approve restricted leave exceptions.",
+    )
+    agent = _create_agent(client)
+    version = _create_and_publish_version(client, agent_id=agent["id"], source_id=source["id"])
+
+    run_response = client.post(
+        "/api/v1/runs",
+        headers={
+            "X-Agent-Forge-User": "finance-user",
+            "X-Agent-Forge-Department": "Finance",
+            "X-Agent-Forge-Clearance": "internal",
+        },
+        json={
+            "agent_id": agent["id"],
+            "agent_version_id": version["id"],
+            "input": {"message": "restricted leave exceptions"},
+        },
+    )
+
+    assert run_response.status_code == 201
+    run = run_response.json()
+    assert run["status"] == "failed"
+    assert run["citations"] == []
+    assert run["retrieval_denied_count"] == 1
+    assert run["guardrail"]["citation_required"] is True
+    assert run["guardrail"]["citation_validation_pass"] is False
+    assert run["guardrail"]["citation_validation_error_code"] == "NO_CITATION"
+    assert run["guardrail"]["security_finalcheck_pass"] is False
+    assert run["answer"] == "No authorized context was available for this runtime run."
+
+    steps_response = client.get(f"/api/v1/runs/{run['id']}/steps")
+
+    assert steps_response.status_code == 200
+    steps = steps_response.json()
+    citation_step = steps[3]
+    assert citation_step["step_type"] == "citation_validator"
+    assert citation_step["status"] == "failed"
+    assert citation_step["error_code"] == "NO_CITATION"
+    assert citation_step["output_summary"]["passed"] is False
+
+    hits_response = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits")
+
+    assert hits_response.status_code == 200
+    assert hits_response.json() == []
 
 
 def _create_source(client) -> dict:

@@ -84,6 +84,7 @@ D3 evidence added:
 - `tools/smoke/eval-corpus-smoke.ps1`
 - `tools/smoke/eval-scorer-smoke.ps1`
 - `apps/web/tests/smoke.spec.ts`
+- `apps/api/tests/test_citation_validator_contracts.py`
 
 Verification status:
 
@@ -120,6 +121,7 @@ Sprint 1 progress:
 - AF-012 vector adapter interface started with a deterministic fake adapter and ACL-required search contract.
 - AF-015 runtime run API skeleton started with `runs`, `run_steps`, `retrieval_hits`, and `POST /api/v1/runs`.
 - Runtime contract coverage verifies published-version gating, ACL-filtered retrieval hits, step trace ordering, and citation trace storage.
+- AF-016 citation validator started with required-citation pass/fail contracts and runtime no-citation failure trace coverage.
 
 ### Sprint 2
 

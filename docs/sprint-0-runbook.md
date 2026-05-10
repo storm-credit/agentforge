@@ -99,6 +99,7 @@ Current D3 evidence seed:
 - API metadata contract tests: `apps/api/tests/test_metadata_contracts.py`
 - ACL retrieval preview contract tests: `apps/api/tests/test_metadata_contracts.py`
 - Runtime run trace contract tests: `apps/api/tests/test_runtime_contracts.py`
+- Citation validator contract tests: `apps/api/tests/test_citation_validator_contracts.py`
 - TXT/MD parser contract tests: `apps/api/tests/test_parser_contracts.py`
 - Vector adapter contract tests: `apps/api/tests/test_vector_adapter_contracts.py`
 - Synthetic ACL/citation corpus: `eval/synthetic-corpus/cases-v0.1.json`
@@ -121,4 +122,4 @@ Current D3 evidence seed:
 - Retrieval preview HTTP smoke passed: Finance saw only all-employee document, HR saw restricted HR document plus all-employee document, and no-ACL document was denied.
 - Indexing parser smoke passed: compose boot applied Sprint 1 migration, synthetic Markdown produced two chunks, retrieval preview returned a chunk citation, and no-ACL indexing failed closed.
 - Fake vector adapter contract passed: upsert is deterministic, search requires an ACL filter, forbidden chunks are filtered before ranking, and deleted documents are excluded.
-- Runtime run trace contract passed: published agent runs store ordered steps, ACL-filtered retrieval hits, citation traces, and denied-count metadata.
+- Runtime run trace and citation validator contracts passed: published agent runs store ordered steps, ACL-filtered retrieval hits, citation traces, denied-count metadata, and no-citation failures for citation-required agents.

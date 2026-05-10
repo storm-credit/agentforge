@@ -1,5 +1,11 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from app.core.principal import Principal
-from app.domain.models import Document
+
+if TYPE_CHECKING:
+    from app.domain.models import Document
 
 
 CONFIDENTIALITY_RANK = {

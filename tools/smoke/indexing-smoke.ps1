@@ -81,6 +81,9 @@ $chunks = Invoke-RestMethod `
 Assert-Smoke ($chunks.Count -eq 2) "Expected two chunk metadata rows"
 Assert-Smoke (-not ($chunks[0].PSObject.Properties.Name -contains "content")) "Chunk API exposed raw content"
 Assert-Smoke ($chunks[1].section_path[1] -eq "Eligibility") "Expected markdown heading path"
+Assert-Smoke ($chunks[1].vector_ref -like "fake-vector:none-smoke:*") "Expected fake vector adapter ref"
+Assert-Smoke ($job.stage -eq "upsert") "Expected index job to reach upsert stage"
+Assert-Smoke ($null -ne $job.artifact_uri) "Expected index job artifact URI"
 
 $previewBody = @{
     query = "manager approval"

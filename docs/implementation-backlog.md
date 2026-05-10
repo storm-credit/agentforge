@@ -117,6 +117,7 @@ Sprint 1 progress:
 - AF-010 index job skeleton started with `index_jobs` and `document_chunks` tables.
 - AF-011 TXT/MD parser smoke started with deterministic chunk IDs, line locators, and heading paths.
 - `tools/smoke/indexing-smoke.ps1` verifies job creation, chunk metadata, chunk retrieval preview, and fail-closed no-ACL indexing.
+- AF-012 vector adapter interface started with a deterministic fake adapter and ACL-required search contract.
 
 ### Sprint 2
 

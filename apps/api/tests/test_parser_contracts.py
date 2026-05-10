@@ -25,7 +25,7 @@ def test_markdown_parser_preserves_heading_path_and_line_locator():
     assert chunks[1].citation_locator == "Remote Work Policy / Remote Work > Eligibility / lines 7-8"
     assert chunks[1].content_hash.startswith("sha256-")
     assert chunks[1].chunk_hash.startswith("sha256-")
-    assert chunks[1].vector_ref == f"none-smoke:{chunks[1].chunk_id}"
+    assert not hasattr(chunks[1], "vector_ref")
 
 
 def test_plain_text_parser_is_deterministic():

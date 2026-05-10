@@ -99,6 +99,7 @@ Current D3 evidence seed:
 - API metadata contract tests: `apps/api/tests/test_metadata_contracts.py`
 - ACL retrieval preview contract tests: `apps/api/tests/test_metadata_contracts.py`
 - TXT/MD parser contract tests: `apps/api/tests/test_parser_contracts.py`
+- Vector adapter contract tests: `apps/api/tests/test_vector_adapter_contracts.py`
 - Synthetic ACL/citation corpus: `eval/synthetic-corpus/cases-v0.1.json`
 - Deterministic eval scorer: `eval/harness/run_synthetic_eval.py`
 - Fake retrieval ACL tests: `eval/harness/tests/test_fake_retrieval.py`
@@ -118,3 +119,4 @@ Current D3 evidence seed:
 - Fake retrieval ACL tests passed: 7 unittest cases total across scorer/retrieval.
 - Retrieval preview HTTP smoke passed: Finance saw only all-employee document, HR saw restricted HR document plus all-employee document, and no-ACL document was denied.
 - Indexing parser smoke passed: compose boot applied Sprint 1 migration, synthetic Markdown produced two chunks, retrieval preview returned a chunk citation, and no-ACL indexing failed closed.
+- Fake vector adapter contract passed: upsert is deterministic, search requires an ACL filter, forbidden chunks are filtered before ranking, and deleted documents are excluded.

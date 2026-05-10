@@ -207,6 +207,7 @@ pgvector implementation:
 
 - 같은 test corpus에서 Qdrant와 pgvector adapter contract test가 같은 권한 결과를 반환한다.
 - ACL filter는 post-filter가 아니라 vector query 조건에 포함된다.
+- Sprint 1 fake adapter contract proves deterministic upsert, ACL-required search, document delete exclusion, and no forbidden chunk leakage before real vector stores are connected.
 
 ### 4.6 Runtime Orchestrator
 

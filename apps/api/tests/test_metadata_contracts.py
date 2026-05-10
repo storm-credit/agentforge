@@ -335,6 +335,7 @@ def test_index_job_creates_txt_md_chunks_and_preview_uses_chunk_citations(client
     assert chunks[1]["citation_locator"] == (
         "Remote Work Policy / Remote Work > Eligibility / lines 7-7"
     )
+    assert chunks[1]["vector_ref"].startswith("fake-vector:none-smoke:")
     assert chunks[1]["acl_snapshot"]["access_groups"] == ["all-employees"]
 
     preview_response = client.post(

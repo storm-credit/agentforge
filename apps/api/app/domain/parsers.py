@@ -22,7 +22,6 @@ class ParsedChunk:
     citation_locator: str
     parser_version: str
     chunker_version: str
-    vector_ref: str
 
 
 def parse_txt_md_document(
@@ -127,7 +126,6 @@ def _build_chunk(
         citation_locator=locator,
         parser_version=PARSER_VERSION,
         chunker_version=CHUNKER_VERSION,
-        vector_ref=f"none-smoke:{chunk_id}",
     )
 
 

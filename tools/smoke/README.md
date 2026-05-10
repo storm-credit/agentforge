@@ -73,6 +73,7 @@ Checks:
 
 - A synthetic Markdown document creates an index job.
 - TXT/MD parser smoke produces deterministic chunk metadata.
+- Fake vector adapter writes deterministic vector refs.
 - Chunk metadata responses do not expose raw content.
 - Retrieval preview returns chunk citations for authorized users.
 - A document without ACL metadata fails closed.

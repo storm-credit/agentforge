@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.core.principal import Principal, get_principal
-from app.domain.acl import document_can_be_indexed, principal_can_access_document
+from app.domain.acl import document_can_be_indexed
 from app.domain.models import Document, DocumentChunk, IndexJob, KnowledgeSource
 from app.domain.parsers import parse_txt_md_document
+from app.domain.vector import FakeVectorStore, VectorQuery, VectorUpsertInput, build_acl_filter
 from app.domain.schemas import (
     DocumentCreate,
     DocumentChunkRead,
@@ -169,19 +170,35 @@ def preview_retrieval(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> RetrievalPreviewResponse:
-    statement = select(Document).options(selectinload(Document.chunks)).order_by(Document.created_at.desc())
-    if payload.knowledge_source_ids:
-        statement = statement.where(Document.knowledge_source_id.in_(payload.knowledge_source_ids))
-
+    statement = (
+        select(Document)
+        .options(selectinload(Document.chunks))
+        .order_by(Document.created_at.desc())
+    )
     documents = list(db.scalars(statement))
-    allowed_documents = [
-        document for document in documents if principal_can_access_document(principal, document)
+    vector_result = FakeVectorStore().search(
+        query=VectorQuery(
+            query_text=payload.query,
+            knowledge_source_ids=tuple(payload.knowledge_source_ids),
+            top_k=payload.top_k,
+        ),
+        documents=documents,
+        acl_filter=build_acl_filter(principal),
+    )
+    hits = [
+        RetrievalPreviewHit(
+            document_id=hit.document_id,
+            knowledge_source_id=hit.knowledge_source_id,
+            chunk_id=hit.chunk_id,
+            title=hit.title,
+            confidentiality_level=hit.confidentiality_level,
+            access_groups=list(hit.access_groups),
+            score=hit.score,
+            citation=hit.citation,
+            citation_locator=hit.citation_locator,
+        )
+        for hit in vector_result.hits
     ]
-    denied_count = len(documents) - len(allowed_documents)
-
-    hits = _retrieval_hits(payload.query, allowed_documents)
-    hits.sort(key=lambda hit: (-hit.score, hit.title))
-    hits = hits[: payload.top_k]
 
     write_audit_event(
         db,
@@ -193,7 +210,8 @@ def preview_retrieval(
             "query_length": len(payload.query),
             "knowledge_source_count": len(payload.knowledge_source_ids),
             "result_count": len(hits),
-            "denied_count": denied_count,
+            "denied_count": vector_result.denied_count,
+            "vector_adapter": "fake",
         },
     )
     db.commit()
@@ -201,7 +219,7 @@ def preview_retrieval(
     return RetrievalPreviewResponse(
         query=payload.query,
         hits=hits,
-        denied_count=denied_count,
+        denied_count=vector_result.denied_count,
     )
 
 
@@ -270,6 +288,19 @@ def _run_synthetic_index_job(
         "access_groups": document.access_groups,
         "knowledge_source_id": document.knowledge_source_id,
     }
+    upsert_results = FakeVectorStore().upsert_chunks(
+        tuple(
+            VectorUpsertInput(
+                chunk_id=parsed_chunk.chunk_id,
+                document_id=document.id,
+                content_hash=parsed_chunk.content_hash,
+                embedding_model=payload.embedding_model,
+            )
+            for parsed_chunk in parsed_chunks
+        )
+    )
+    vector_refs = {result.chunk_id: result.vector_ref for result in upsert_results}
+
     job.stage = "chunk"
     for parsed_chunk in parsed_chunks:
         db.add(
@@ -288,7 +319,7 @@ def _run_synthetic_index_job(
                 parser_version=parsed_chunk.parser_version,
                 chunker_version=parsed_chunk.chunker_version,
                 embedding_model=payload.embedding_model,
-                vector_ref=parsed_chunk.vector_ref,
+                vector_ref=vector_refs[parsed_chunk.chunk_id],
                 acl_snapshot=acl_snapshot,
                 status="indexed",
             )
@@ -318,52 +349,3 @@ def _index_job_config(payload: IndexJobCreate) -> dict:
         "force_reindex": payload.force_reindex,
         "source": "synthetic_text" if payload.source_text is not None else "object_store",
     }
-
-
-def _retrieval_hits(query: str, allowed_documents: list[Document]) -> list[RetrievalPreviewHit]:
-    hits: list[RetrievalPreviewHit] = []
-    for document in allowed_documents:
-        indexed_chunks = [chunk for chunk in document.chunks if chunk.status == "indexed"]
-        if indexed_chunks:
-            hits.extend(
-                RetrievalPreviewHit(
-                    document_id=document.id,
-                    knowledge_source_id=document.knowledge_source_id,
-                    chunk_id=chunk.id,
-                    title=document.title,
-                    confidentiality_level=document.confidentiality_level,
-                    access_groups=document.access_groups,
-                    score=_lexical_score(query, document.title, chunk.content),
-                    citation=chunk.citation_locator,
-                    citation_locator=chunk.citation_locator,
-                )
-                for chunk in indexed_chunks
-            )
-            continue
-
-        hits.append(
-            RetrievalPreviewHit(
-                document_id=document.id,
-                knowledge_source_id=document.knowledge_source_id,
-                title=document.title,
-                confidentiality_level=document.confidentiality_level,
-                access_groups=document.access_groups,
-                score=_lexical_score(query, document.title),
-                citation=f"{document.title} ({document.effective_date or 'undated'})",
-            )
-        )
-    return hits
-
-
-def _lexical_score(query: str, *values: str) -> float:
-    query_terms = {term.casefold() for term in query.split() if term.strip()}
-    haystack_terms = {
-        term.casefold()
-        for value in values
-        for term in value.split()
-        if term.strip()
-    }
-    if not query_terms:
-        return 0.0
-    overlap = len(query_terms.intersection(haystack_terms))
-    return round(overlap / len(query_terms), 4)

@@ -118,6 +118,8 @@ Sprint 1 progress:
 - AF-011 TXT/MD parser smoke started with deterministic chunk IDs, line locators, and heading paths.
 - `tools/smoke/indexing-smoke.ps1` verifies job creation, chunk metadata, chunk retrieval preview, and fail-closed no-ACL indexing.
 - AF-012 vector adapter interface started with a deterministic fake adapter and ACL-required search contract.
+- AF-015 runtime run API skeleton started with `runs`, `run_steps`, `retrieval_hits`, and `POST /api/v1/runs`.
+- Runtime contract coverage verifies published-version gating, ACL-filtered retrieval hits, step trace ordering, and citation trace storage.
 
 ### Sprint 2
 

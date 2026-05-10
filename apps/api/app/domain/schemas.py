@@ -184,3 +184,83 @@ class RetrievalPreviewResponse(BaseModel):
     query: str
     hits: list[RetrievalPreviewHit]
     denied_count: int
+
+
+class RunInput(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+    attachments: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class RunCreate(BaseModel):
+    agent_id: str
+    agent_version_id: str | None = None
+    input: RunInput
+    mode: str = "sync"
+    debug: bool = False
+    knowledge_source_ids: list[str] = Field(default_factory=list)
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class RunCitationRead(BaseModel):
+    document_id: str
+    chunk_id: str | None
+    title: str
+    citation_locator: str | None
+    score: float
+
+
+class RunRead(BaseModel):
+    id: str
+    agent_id: str
+    agent_version_id: str
+    user_id: str
+    user_department: str
+    status: str
+    input: dict[str, Any]
+    answer: str
+    citations: list[RunCitationRead]
+    guardrail: dict[str, Any]
+    latency_ms: int
+    retrieval_denied_count: int
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RunStepRead(BaseModel):
+    id: str
+    run_id: str
+    step_order: int
+    step_type: str
+    status: str
+    input_summary: dict[str, Any]
+    output_summary: dict[str, Any]
+    started_at: datetime
+    finished_at: datetime | None
+    latency_ms: int
+    error_code: str | None
+    error_message: str | None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RetrievalHitRead(BaseModel):
+    id: str
+    run_id: str
+    chunk_id: str | None
+    document_id: str
+    title: str
+    citation_locator: str | None
+    rank_original: int
+    rank_reranked: int | None
+    score_vector: float
+    score_rerank: float | None
+    used_in_context: bool
+    used_as_citation: bool
+    acl_filter_snapshot: dict[str, Any]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

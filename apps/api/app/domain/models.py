@@ -2,7 +2,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -32,6 +32,7 @@ class Agent(Base):
     versions: Mapped[list["AgentVersion"]] = relationship(
         back_populates="agent", cascade="all, delete-orphan"
     )
+    runs: Mapped[list["Run"]] = relationship(back_populates="agent", cascade="all, delete-orphan")
 
 
 class AgentVersion(Base):
@@ -48,6 +49,9 @@ class AgentVersion(Base):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     agent: Mapped[Agent] = relationship(back_populates="versions")
+    runs: Mapped[list["Run"]] = relationship(
+        back_populates="agent_version", cascade="all, delete-orphan"
+    )
 
 
 class KnowledgeSource(Base):
@@ -148,6 +152,82 @@ class DocumentChunk(Base):
     indexed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
     document: Mapped[Document] = relationship(back_populates="chunks")
+    retrieval_hits: Mapped[list["RetrievalHit"]] = relationship(back_populates="chunk")
+
+
+class Run(Base):
+    __tablename__ = "runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    agent_id: Mapped[str] = mapped_column(ForeignKey("agents.id"), nullable=False)
+    agent_version_id: Mapped[str] = mapped_column(ForeignKey("agent_versions.id"), nullable=False)
+    user_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    user_department: Mapped[str] = mapped_column(String(120), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="queued", nullable=False)
+    input: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    answer: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    citations: Mapped[list[dict[str, Any]]] = mapped_column(JSON, default=list, nullable=False)
+    guardrail: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    retrieval_denied_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    agent: Mapped[Agent] = relationship(back_populates="runs")
+    agent_version: Mapped[AgentVersion] = relationship(back_populates="runs")
+    steps: Mapped[list["RunStep"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan", order_by="RunStep.step_order"
+    )
+    retrieval_hits: Mapped[list["RetrievalHit"]] = relationship(
+        back_populates="run", cascade="all, delete-orphan", order_by="RetrievalHit.rank_original"
+    )
+
+
+class RunStep(Base):
+    __tablename__ = "run_steps"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id"), nullable=False)
+    step_order: Mapped[int] = mapped_column(Integer, nullable=False)
+    step_type: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(40), default="started", nullable=False)
+    input_summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    output_summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    latency_ms: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    run: Mapped[Run] = relationship(back_populates="steps")
+
+
+class RetrievalHit(Base):
+    __tablename__ = "retrieval_hits"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    run_id: Mapped[str] = mapped_column(ForeignKey("runs.id"), nullable=False)
+    chunk_id: Mapped[str | None] = mapped_column(
+        ForeignKey("document_chunks.id"), nullable=True
+    )
+    document_id: Mapped[str] = mapped_column(ForeignKey("documents.id"), nullable=False)
+    title: Mapped[str] = mapped_column(String(240), nullable=False)
+    citation_locator: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    rank_original: Mapped[int] = mapped_column(Integer, nullable=False)
+    rank_reranked: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    score_vector: Mapped[float] = mapped_column(Float, nullable=False)
+    score_rerank: Mapped[float | None] = mapped_column(Float, nullable=True)
+    used_in_context: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    used_as_citation: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    acl_filter_snapshot: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    run: Mapped[Run] = relationship(back_populates="retrieval_hits")
+    chunk: Mapped[DocumentChunk | None] = relationship(back_populates="retrieval_hits")
 
 
 class AuditEvent(Base):

@@ -71,6 +71,7 @@ The orchestrator should now dispatch the next work in this order:
 | RAG + Security ACL retrieval preview API | Started | `POST /api/v1/knowledge/retrieval/preview` filters unauthorized documents |
 | Backend + RAG + QA index job skeleton | Started | `index_jobs`, `document_chunks`, and TXT/MD parser smoke |
 | Backend + RAG + Security fake vector adapter | Started | `apps/api/app/domain/vector.py` requires ACL-filtered search |
+| AI Runtime + Backend runtime trace API | Started | `POST /api/v1/runs` stores `runs`, `run_steps`, `retrieval_hits`, and audit metadata |
 | DevOps compose smoke | Verified | `tools/smoke/compose-smoke.ps1 -Boot -WebPort 0` passed |
 | Frontend route smoke | Verified | `apps/web/tests/smoke.spec.ts` passed 7/7 |
 | PM owner closure | Pending | pilot department and document owner still open |

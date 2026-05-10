@@ -90,6 +90,7 @@ Verification status:
 - Full compose boot passed on 2026-05-10 using an auto-selected web port.
 - API HTTP smoke passed for agent create/detail/update/version validate/publish.
 - Playwright route smoke passed 7/7 against the compose web service.
+- Retrieval preview HTTP smoke passed for Finance vs HR ACL filtering.
 
 ### Sprint 1
 
@@ -107,6 +108,12 @@ Scope:
 - AF-014 retrieval preview API
 - AF-015 runtime run API skeleton
 - AF-018 synthetic corpus v0.1
+
+Sprint 1 progress:
+
+- AF-013 ACL filter model started in `apps/api/app/domain/acl.py`.
+- AF-014 retrieval preview API started at `POST /api/v1/knowledge/retrieval/preview`.
+- Contract coverage was added for allowed vs blocked users and deny-by-default documents.
 
 ### Sprint 2
 

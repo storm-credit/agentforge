@@ -102,3 +102,25 @@ class DocumentRead(BaseModel):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class RetrievalPreviewRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=500)
+    knowledge_source_ids: list[str] = Field(default_factory=list)
+    top_k: int = Field(default=5, ge=1, le=20)
+
+
+class RetrievalPreviewHit(BaseModel):
+    document_id: str
+    knowledge_source_id: str
+    title: str
+    confidentiality_level: str
+    access_groups: list[str]
+    score: float
+    citation: str
+
+
+class RetrievalPreviewResponse(BaseModel):
+    query: str
+    hits: list[RetrievalPreviewHit]
+    denied_count: int

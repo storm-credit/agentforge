@@ -78,7 +78,8 @@ Agent Forge는 Craft AI 같은 에이전트 빌더 개념을 사내망 제약에
 - [x] Synthetic corpus deterministic scorer를 추가한다.
 - [x] Full compose boot와 Playwright route smoke를 실제 실행한다.
 - [x] Open Design 활용 가능성과 경계선을 정리한다.
-- [ ] Sprint 0 로컬 실행을 실제 환경에서 검증한다.
+- [x] Sprint 0 로컬 실행을 실제 환경에서 검증한다.
+- [x] Sprint 1 ACL retrieval preview API를 시작한다.
 
 ## 운영 규칙
 

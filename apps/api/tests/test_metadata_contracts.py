@@ -185,6 +185,95 @@ def test_knowledge_source_and_document_contract(client):
     assert [item["id"] for item in list_response.json()] == [document["id"]]
 
 
+def test_retrieval_preview_applies_document_acl(client):
+    source_response = client.post(
+        "/api/v1/knowledge/sources",
+        json={
+            "name": "Sprint 1 ACL Corpus",
+            "description": "Synthetic ACL corpus.",
+            "owner_department": "Security",
+        },
+    )
+    source = source_response.json()
+
+    public_response = client.post(
+        "/api/v1/knowledge/documents",
+        json={
+            "knowledge_source_id": source["id"],
+            "title": "Company Holiday Policy",
+            "object_uri": "object://synthetic/company/holiday.md",
+            "checksum": "sha256-holiday",
+            "mime_type": "text/markdown",
+            "confidentiality_level": "internal",
+            "access_groups": ["all-employees"],
+        },
+    )
+    restricted_response = client.post(
+        "/api/v1/knowledge/documents",
+        json={
+            "knowledge_source_id": source["id"],
+            "title": "HR Leave Exception Policy",
+            "object_uri": "object://synthetic/hr/leave-exception.md",
+            "checksum": "sha256-leave-exception",
+            "mime_type": "text/markdown",
+            "confidentiality_level": "restricted",
+            "access_groups": ["department:HR"],
+        },
+    )
+    no_acl_response = client.post(
+        "/api/v1/knowledge/documents",
+        json={
+            "knowledge_source_id": source["id"],
+            "title": "Unclassified Draft Policy",
+            "object_uri": "object://synthetic/drafts/unclassified.md",
+            "checksum": "sha256-unclassified",
+            "mime_type": "text/markdown",
+            "confidentiality_level": "internal",
+            "access_groups": [],
+        },
+    )
+
+    assert public_response.status_code == 201
+    assert restricted_response.status_code == 201
+    assert no_acl_response.status_code == 201
+
+    finance_response = client.post(
+        "/api/v1/knowledge/retrieval/preview",
+        headers={
+            "X-Agent-Forge-Department": "Finance",
+            "X-Agent-Forge-Clearance": "internal",
+        },
+        json={
+            "query": "leave policy",
+            "knowledge_source_ids": [source["id"]],
+            "top_k": 10,
+        },
+    )
+
+    assert finance_response.status_code == 200
+    finance_hits = finance_response.json()["hits"]
+    assert [hit["title"] for hit in finance_hits] == ["Company Holiday Policy"]
+    assert finance_response.json()["denied_count"] == 2
+
+    hr_response = client.post(
+        "/api/v1/knowledge/retrieval/preview",
+        headers={
+            "X-Agent-Forge-Department": "HR",
+            "X-Agent-Forge-Clearance": "restricted",
+        },
+        json={
+            "query": "leave policy",
+            "knowledge_source_ids": [source["id"]],
+            "top_k": 10,
+        },
+    )
+
+    assert hr_response.status_code == 200
+    hr_titles = [hit["title"] for hit in hr_response.json()["hits"]]
+    assert hr_titles == ["HR Leave Exception Policy", "Company Holiday Policy"]
+    assert "Unclassified Draft Policy" not in hr_titles
+
+
 def test_document_registration_rejects_unknown_source(client):
     response = client.post(
         "/api/v1/knowledge/documents",

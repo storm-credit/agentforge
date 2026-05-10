@@ -97,6 +97,7 @@ npm run test:e2e
 Current D3 evidence seed:
 
 - API metadata contract tests: `apps/api/tests/test_metadata_contracts.py`
+- ACL retrieval preview contract tests: `apps/api/tests/test_metadata_contracts.py`
 - Synthetic ACL/citation corpus: `eval/synthetic-corpus/cases-v0.1.json`
 - Deterministic eval scorer: `eval/harness/run_synthetic_eval.py`
 - Fake retrieval ACL tests: `eval/harness/tests/test_fake_retrieval.py`
@@ -113,3 +114,4 @@ Current D3 evidence seed:
 - API HTTP smoke passed for create, detail, patch, version create, validate, and publish.
 - Playwright Agent Studio route smoke passed: 7/7.
 - Fake retrieval ACL tests passed: 7 unittest cases total across scorer/retrieval.
+- Retrieval preview HTTP smoke passed: Finance saw only all-employee document, HR saw restricted HR document plus all-employee document, and no-ACL document was denied.

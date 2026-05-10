@@ -19,7 +19,8 @@
 13. [Implementation Plan](implementation-plan.md)
 14. [Implementation Backlog](implementation-backlog.md)
 15. [Sprint 0 Runbook](sprint-0-runbook.md)
-16. [Evaluation Plan](evaluation-plan.md)
+16. [Sprint 1 Real Ingestion Runbook](sprint-1-real-ingestion-runbook.md)
+17. [Evaluation Plan](evaluation-plan.md)
 
 ## 현재 결정
 
@@ -44,5 +45,5 @@
 | AI 아키텍트 | [Agent Build Spec](agent-build-spec.md) |
 | RAG 전문가 | [RAG Design](rag-design.md) |
 | 프론트엔드 전문가 / 오케스트라 | [Open Design Adoption Review](open-design-adoption.md) |
-| 구현 전문가 | [Implementation Plan](implementation-plan.md), [Implementation Backlog](implementation-backlog.md), [Sprint 0 Runbook](sprint-0-runbook.md) |
+| 구현 전문가 | [Implementation Plan](implementation-plan.md), [Implementation Backlog](implementation-backlog.md), [Sprint 0 Runbook](sprint-0-runbook.md), [Sprint 1 Real Ingestion Runbook](sprint-1-real-ingestion-runbook.md) |
 | QA/Eval | [Evaluation Plan](evaluation-plan.md) |

@@ -78,6 +78,22 @@ Checks:
 - Retrieval preview returns chunk citations for authorized users.
 - A document without ACL metadata fails closed.
 
+## Real Upload Ingestion Smoke
+
+Run this after the API is available:
+
+```powershell
+./tools/smoke/real-ingestion-smoke.ps1
+```
+
+Checks:
+
+- A real Markdown file uploads through `POST /api/v1/knowledge/documents/upload`.
+- Object storage returns an `object_uri` and SHA-256 checksum.
+- Indexing succeeds without synthetic `source_text`.
+- Retrieval preview returns the uploaded chunk citation.
+- A published agent run stores runtime steps and retrieval hits.
+
 ## Web Smoke
 
 ```powershell

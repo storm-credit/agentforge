@@ -32,6 +32,7 @@ Sprint 0 실행 골격은 `apps/`와 `deploy/compose/` 아래에 있습니다.
 - Local stack: `deploy/compose/docker-compose.dev.yaml`
 - Sprint 0 runbook: [docs/sprint-0-runbook.md](docs/sprint-0-runbook.md)
 - Sprint 1 real ingestion runbook: [docs/sprint-1-real-ingestion-runbook.md](docs/sprint-1-real-ingestion-runbook.md)
+- Eval/Trace UI workflow: [docs/eval-trace-ui-runbook.md](docs/eval-trace-ui-runbook.md)
 - API-backed eval smoke: `./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0`
 
 ## 공식 산출물
@@ -54,6 +55,7 @@ Sprint 0 실행 골격은 `apps/`와 `deploy/compose/` 아래에 있습니다.
 | [docs/implementation-backlog.md](docs/implementation-backlog.md) | 개발 착수용 Epic/Story backlog |
 | [docs/sprint-0-runbook.md](docs/sprint-0-runbook.md) | Sprint 0 로컬 실행 절차 |
 | [docs/sprint-1-real-ingestion-runbook.md](docs/sprint-1-real-ingestion-runbook.md) | Sprint 1 실제 업로드 ingestion 검증 절차 |
+| [docs/eval-trace-ui-runbook.md](docs/eval-trace-ui-runbook.md) | API-backed eval 이후 Eval/Trace UI 검토 절차 |
 | [docs/evaluation-plan.md](docs/evaluation-plan.md) | 평가 계획 |
 
 ## 전문가 역할

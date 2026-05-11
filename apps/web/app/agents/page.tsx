@@ -1,7 +1,7 @@
 const stages = [
   "Draft agent metadata",
   "Create versioned runtime config",
-  "Run policy and evaluation gates",
+  "Prepare policy and eval gate metadata",
   "Publish approved versions",
 ];
 

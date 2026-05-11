@@ -44,6 +44,14 @@ To boot the compose stack and then run the eval smoke:
 
 The wrapper stops the compose stack after the run unless `-KeepStack` is passed.
 
+For browser-based Eval/Trace review after the runner, keep the stack running:
+
+```powershell
+./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0 -KeepStack
+```
+
+Then follow [Eval and Trace UI Runbook](eval-trace-ui-runbook.md). In the current Sprint 1 UI, `/eval` and `/audit` are the operator landing pages; the runner JSON plus `/api/v1/runs/<run-id>`, `/steps`, and `/retrieval-hits` are the authoritative drill-down evidence until the dedicated Eval API worker and full Trace Viewer are wired in.
+
 The script checks:
 
 - `POST /api/v1/knowledge/documents/upload` stores a raw Markdown file.
@@ -74,6 +82,16 @@ Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/runs/<run-id>/retrieval-hit
 ```
 
 Expected audit events along the path include `knowledge_source.created`, `document.uploaded`, `document.indexed`, `retrieval.previewed`, `agent.created`, `agent_version.created`, `agent_version.published`, and `run.created`.
+
+## Eval/Trace UI Workflow
+
+After `api-eval-runner-smoke.ps1` passes with `-KeepStack`, open the Web URL printed by compose and review:
+
+- `Eval`: quality-gate landing page for retrieval quality, groundedness, policy refusal, and regression suite status.
+- `Audit`: governance landing page for trace/audit review.
+- API trace endpoints: use a `run_id` from the runner JSON to inspect run detail, ordered steps, and retrieval hits.
+
+The current API-backed eval report is the release evidence source of truth. Treat the UI as the operator workflow surface and the `/runs` endpoints as the detailed trace drill-down until `/api/v1/eval/runs` persists eval reports.
 
 ## API Notes
 

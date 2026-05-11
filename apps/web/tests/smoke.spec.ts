@@ -61,4 +61,35 @@ test.describe("Agent Studio shell", () => {
       page.locator(".retrievalResults").getByText("Refund exception policy", { exact: true }).first(),
     ).toBeVisible();
   });
+
+  test("eval workflow supports suite filtering and trace citation review", async ({ page }) => {
+    await page.route("**/api/**", async (route) => {
+      await route.fulfill({ status: 404, body: "Not found" });
+    });
+
+    await page.goto("/eval");
+
+    await expect(page.getByRole("heading", { name: "Evaluation", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Synthetic corpus suites" })).toBeVisible();
+    await expect(page.getByText(/No \/api\/v1\/eval API yet/)).toBeVisible();
+
+    await page.getByRole("button", { name: "Sync API" }).click();
+    await expect(page.getByText(/Eval API not ready/)).toBeVisible();
+
+    await page.getByRole("button", { name: /Citation integrity/ }).click();
+    await page.getByRole("button", { name: /cit_003/ }).click();
+
+    await expect(page.getByRole("heading", { name: "Trace and citations" })).toBeVisible();
+    await expect(page.getByText(/Matched expected answer path/)).toBeVisible();
+    await expect(page.getByText("Expense Reimbursement Policy")).toBeVisible();
+    await expect(page.getByText("citation_validator")).toBeVisible();
+  });
+
+  test("audit page does not imply a queryable audit API yet", async ({ page }) => {
+    await page.goto("/audit");
+
+    await expect(page.getByRole("heading", { name: "Audit", exact: true })).toBeVisible();
+    await expect(page.getByText("Audit read API pending")).toBeVisible();
+    await expect(page.getByText("Captured")).toHaveCount(0);
+  });
 });

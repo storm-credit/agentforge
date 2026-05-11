@@ -10,7 +10,7 @@ const workstreams = [
   { name: "API foundation", status: "Started" },
   { name: "Web workbench", status: "Started" },
   { name: "Postgres migrations", status: "Started" },
-  { name: "Evaluation harness", status: "Planned" },
+  { name: "Evaluation harness", status: "CLI smoke" },
 ];
 
 export default function Home() {
@@ -51,7 +51,7 @@ export default function Home() {
           {workstreams.map((item) => (
             <li key={item.name}>
               <span>{item.name}</span>
-              <span className={item.status === "Planned" ? "badge warn" : "badge"}>
+              <span className={item.status === "Started" ? "badge" : "badge neutral"}>
                 {item.status}
               </span>
             </li>

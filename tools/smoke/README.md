@@ -75,6 +75,12 @@ To boot the local stack first:
 ./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0
 ```
 
+To review the Eval and Audit UI after the runner, keep the stack up:
+
+```powershell
+./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0 -KeepStack
+```
+
 Checks:
 
 - Synthetic corpus and deterministic scorer still pass.
@@ -85,6 +91,13 @@ Checks:
 - The full synthetic corpus is seeded through the API and all 30 cases are scored against runtime outputs.
 
 Use `-SkipSyntheticHarness` when the corpus/scorer checks already ran in the same verification job. Use `-SkipApiEval` only when you want the smaller upload-to-runtime smoke without the 30-case API runner. When `-BootStack` is used, the wrapper stops the compose stack after the run unless `-KeepStack` is passed.
+
+UI review after the smoke:
+
+- Open the Web URL printed by compose and navigate to `Eval` for the quality-gate landing page.
+- Navigate to `Audit` for the current governance and trace-review landing page.
+- Use a `run_id` from the runner JSON with `/api/v1/runs/<run-id>`, `/steps`, and `/retrieval-hits` for detailed trace evidence.
+- See `docs/eval-trace-ui-runbook.md` for the full workflow.
 
 ## Indexing Parser Smoke
 
@@ -131,4 +144,5 @@ npm run test:e2e
 Checks:
 
 - Agent Studio shell routes render.
-- Operators can navigate Overview, Agents, Knowledge, and Audit.
+- Operators can navigate Overview, Agents, Knowledge, Eval, Audit, and Settings.
+- The Knowledge workflow supports local upload, index queue, and retrieval preview fallback.

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
+import re
 from typing import TYPE_CHECKING, Protocol
 
 from app.core.principal import Principal
@@ -24,7 +25,7 @@ class VectorQuery:
     knowledge_source_ids: tuple[str, ...] = ()
     top_k: int = 5
     collection_alias: str = "chunks_active"
-    min_score: float = 0.0
+    min_score: float = 0.25
 
 
 @dataclass(frozen=True)
@@ -118,14 +119,7 @@ class FakeVectorStore:
         ]
         denied_count = len(candidate_documents) - len(allowed_documents)
 
-        hits: list[VectorHit] = []
-        for document in allowed_documents:
-            chunks = [chunk for chunk in document.chunks if chunk.status == "indexed"]
-            if chunks:
-                hits.extend(_chunk_hits(query.query_text, document, chunks))
-                continue
-
-            hits.append(_document_fallback_hit(query.query_text, document))
+        hits = _document_hits(query.query_text, allowed_documents)
 
         hits.sort(key=lambda hit: (-hit.score, hit.title, hit.chunk_id or ""))
         filtered_hits = tuple(hit for hit in hits if hit.score >= query.min_score)
@@ -163,6 +157,18 @@ def _chunk_hits(query: str, document: Document, chunks: Sequence) -> list[Vector
     ]
 
 
+def _document_hits(query: str, documents: Sequence[Document]) -> list[VectorHit]:
+    hits: list[VectorHit] = []
+    for document in documents:
+        chunks = [chunk for chunk in document.chunks if chunk.status == "indexed"]
+        if chunks:
+            hits.extend(_chunk_hits(query, document, chunks))
+            continue
+
+        hits.append(_document_fallback_hit(query, document))
+    return hits
+
+
 def _document_fallback_hit(query: str, document: Document) -> VectorHit:
     return VectorHit(
         document_id=document.id,
@@ -176,14 +182,55 @@ def _document_fallback_hit(query: str, document: Document) -> VectorHit:
 
 
 def _lexical_score(query: str, *values: str) -> float:
-    query_terms = {term.casefold() for term in query.split() if term.strip()}
+    query_terms = _token_set(query)
     haystack_terms = {
-        term.casefold()
+        token
         for value in values
-        for term in value.split()
-        if term.strip()
+        for token in _token_set(value)
     }
     if not query_terms:
         return 0.0
     overlap = len(query_terms.intersection(haystack_terms))
     return round(overlap / len(query_terms), 4)
+
+
+def _token_set(value: str) -> set[str]:
+    stop_words = {
+        "a",
+        "after",
+        "all",
+        "an",
+        "and",
+        "are",
+        "as",
+        "be",
+        "before",
+        "can",
+        "cannot",
+        "does",
+        "for",
+        "from",
+        "how",
+        "i",
+        "if",
+        "in",
+        "is",
+        "it",
+        "me",
+        "my",
+        "of",
+        "or",
+        "should",
+        "the",
+        "to",
+        "what",
+        "when",
+        "which",
+        "with",
+        "you",
+    }
+    return {
+        token
+        for token in re.findall(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)?", value.casefold())
+        if token not in stop_words
+    }

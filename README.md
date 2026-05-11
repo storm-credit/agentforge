@@ -32,6 +32,7 @@ Sprint 0 실행 골격은 `apps/`와 `deploy/compose/` 아래에 있습니다.
 - Local stack: `deploy/compose/docker-compose.dev.yaml`
 - Sprint 0 runbook: [docs/sprint-0-runbook.md](docs/sprint-0-runbook.md)
 - Sprint 1 real ingestion runbook: [docs/sprint-1-real-ingestion-runbook.md](docs/sprint-1-real-ingestion-runbook.md)
+- API-backed eval smoke: `./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0`
 
 ## 공식 산출물
 

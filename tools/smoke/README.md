@@ -61,6 +61,31 @@ Checks:
 - ACL accessibility rules produce expected allow/block outcomes.
 - The scorer unit tests pass.
 
+## API-backed Eval Runner Smoke
+
+Run this after the API is available:
+
+```powershell
+./tools/smoke/api-eval-runner-smoke.ps1 -ApiBaseUrl "http://127.0.0.1:8000/api/v1"
+```
+
+To boot the local stack first:
+
+```powershell
+./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0
+```
+
+Checks:
+
+- Synthetic corpus and deterministic scorer still pass.
+- A real Markdown upload is stored through the API object-storage path.
+- Indexing reads the stored object instead of synthetic `source_text`.
+- Retrieval preview returns an ACL-authorized uploaded chunk.
+- A published agent run stores citations, guardrail state, five runtime steps, and retrieval hits.
+- The full synthetic corpus is seeded through the API and all 30 cases are scored against runtime outputs.
+
+Use `-SkipSyntheticHarness` when the corpus/scorer checks already ran in the same verification job. Use `-SkipApiEval` only when you want the smaller upload-to-runtime smoke without the 30-case API runner. When `-BootStack` is used, the wrapper stops the compose stack after the run unless `-KeepStack` is passed.
+
 ## Indexing Parser Smoke
 
 Run this after the API is available, for example after full compose boot:

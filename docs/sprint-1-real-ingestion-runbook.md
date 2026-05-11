@@ -6,6 +6,8 @@ This runbook verifies the first real document ingestion path for Agent Forge.
 
 Prove that an operator can upload a TXT/Markdown file, store the raw object, index it without synthetic `source_text`, retrieve an ACL-filtered citation, and create a runtime trace from the same uploaded document.
 
+This is also the current API-backed eval evidence path. The dedicated `/api/v1/eval/runs` worker is still a planned product endpoint; until it lands, the script below seeds the synthetic corpus through the public APIs and exercises runtime trace storage end to end.
+
 ## Local Stack
 
 From the repository root:
@@ -28,6 +30,20 @@ After the API is available:
 ./tools/smoke/real-ingestion-smoke.ps1 -ApiBaseUrl "http://127.0.0.1:8000/api/v1"
 ```
 
+For a single eval-oriented command that also checks the synthetic corpus, deterministic scorer, real upload smoke, and full 30-case API runner:
+
+```powershell
+./tools/smoke/api-eval-runner-smoke.ps1 -ApiBaseUrl "http://127.0.0.1:8000/api/v1"
+```
+
+To boot the compose stack and then run the eval smoke:
+
+```powershell
+./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0
+```
+
+The wrapper stops the compose stack after the run unless `-KeepStack` is passed.
+
 The script checks:
 
 - `POST /api/v1/knowledge/documents/upload` stores a raw Markdown file.
@@ -37,6 +53,27 @@ The script checks:
 - `POST /api/v1/knowledge/retrieval/preview` returns the uploaded chunk.
 - A published agent version can run through `POST /api/v1/runs`.
 - Runtime steps and retrieval hits are stored for trace review.
+- `python eval/harness/run_api_synthetic_eval.py` uploads the 10 synthetic corpus documents, indexes them from object storage, runs all 30 cases, and compares `answer`, `policy_denied`, `no_context`, and `refuse` outcomes.
+
+## Runtime Trace Evidence
+
+The API-backed smoke creates one published agent and one runtime run against the uploaded document. The run must finish with:
+
+- `status=succeeded`
+- one citation from the uploaded document
+- `guardrail.acl_filter_applied=true`
+- `guardrail.citation_validation_pass=true`
+- five ordered runtime steps: `guard_input`, `retriever`, `generator`, `citation_validator`, `guard_output`
+- one stored retrieval hit with the uploaded chunk ID
+
+Trace review endpoints:
+
+```powershell
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/runs/<run-id>/steps"
+Invoke-RestMethod -Uri "http://127.0.0.1:8000/api/v1/runs/<run-id>/retrieval-hits"
+```
+
+Expected audit events along the path include `knowledge_source.created`, `document.uploaded`, `document.indexed`, `retrieval.previewed`, `agent.created`, `agent_version.created`, `agent_version.published`, and `run.created`.
 
 ## API Notes
 

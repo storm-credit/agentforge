@@ -154,3 +154,43 @@ def test_fake_vector_search_respects_knowledge_source_scope_and_delete():
     )
 
     assert deleted.hits == ()
+
+
+def test_fake_vector_search_excludes_zero_score_authorized_chunks():
+    document = _document(
+        document_id="doc-1",
+        title="Remote Work Policy",
+        content="employees may request remote work after manager approval",
+    )
+
+    result = FakeVectorStore().search(
+        query=VectorQuery(query_text="travel reimbursement receipt"),
+        documents=[document],
+        acl_filter=build_acl_filter(_principal()),
+    )
+
+    assert result.hits == ()
+
+
+def test_fake_vector_search_excludes_weak_single_term_overlap():
+    allowed = _document(
+        document_id="fin-public",
+        title="Expense Reimbursement Policy",
+        content="expense exception approval rules",
+    )
+    denied = _document(
+        document_id="fin-close",
+        title="Quarter Close Restricted Checklist",
+        content="quarter close exception ledger restricted workflow",
+        confidentiality_level="restricted",
+        access_groups=["department:Finance"],
+    )
+
+    result = FakeVectorStore().search(
+        query=VectorQuery(query_text="finance quarter close exception ledger", top_k=10),
+        documents=[allowed, denied],
+        acl_filter=build_acl_filter(_principal(department="HR")),
+    )
+
+    assert result.hits == ()
+    assert result.denied_count == 1

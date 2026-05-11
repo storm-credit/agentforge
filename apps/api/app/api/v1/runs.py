@@ -62,6 +62,78 @@ def create_run(
     db.add(run)
     db.flush()
 
+    guard_decision = _input_guard_decision(payload.input.message)
+    if guard_decision is not None:
+        outcome = guard_decision["outcome"]
+        _add_step(
+            db,
+            run=run,
+            order=1,
+            step_type="guard_input",
+            input_summary={"message_length": len(payload.input.message)},
+            output_summary={
+                "allowed": False,
+                "risk_level": "blocked",
+                "outcome": outcome,
+                "reason": guard_decision["reason"],
+            },
+            started_at=started_at,
+            status="failed",
+            error_code=guard_decision["code"],
+            error_message=guard_decision["message"],
+        )
+        _add_step(
+            db,
+            run=run,
+            order=2,
+            step_type="guard_output",
+            input_summary={"answer_length": len(guard_decision["answer"])},
+            output_summary={
+                "security_finalcheck_pass": False,
+                "citation_count": 0,
+                "outcome": outcome,
+            },
+            status="failed",
+            error_code=guard_decision["code"],
+            error_message=guard_decision["message"],
+        )
+        run.status = "failed"
+        run.answer = guard_decision["answer"]
+        run.citations = []
+        run.retrieval_denied_count = 0
+        run.guardrail = {
+            "acl_filter_applied": False,
+            "citation_required": bool(agent_version.config.get("citation_required", True)),
+            "citation_count": 0,
+            "citation_validation_pass": False,
+            "citation_validation_error_code": guard_decision["code"],
+            "citation_validation_missing_fields": [],
+            "pii_masked": False,
+            "security_finalcheck_pass": False,
+            "outcome": outcome,
+            "input_guard_pass": False,
+            "input_guard_reason": guard_decision["reason"],
+        }
+        run.finished_at = datetime.now(UTC)
+        run.latency_ms = max(1, int((perf_counter() - timer_start) * 1000))
+        write_audit_event(
+            db,
+            principal=principal,
+            event_type=f"run.{outcome}",
+            target_type="run",
+            target_id=run.id,
+            payload={
+                "agent_id": run.agent_id,
+                "agent_version_id": run.agent_version_id,
+                "query_length": len(payload.input.message),
+                "reason": guard_decision["reason"],
+                "step_count": 2,
+            },
+        )
+        db.commit()
+        db.refresh(run)
+        return run
+
     _add_step(
         db,
         run=run,
@@ -135,6 +207,7 @@ def create_run(
     run.answer = _build_synthetic_answer(len(citations))
     run.citations = citations
     run.retrieval_denied_count = vector_result.denied_count
+    outcome = _runtime_outcome(citation_count=len(citations), denied_count=vector_result.denied_count)
     citation_required = bool(agent_version.config.get("citation_required", True))
     citation_validation = validate_run_citations(
         citations,
@@ -149,6 +222,8 @@ def create_run(
         "citation_validation_missing_fields": list(citation_validation.missing_fields),
         "pii_masked": False,
         "security_finalcheck_pass": citation_validation.passed,
+        "outcome": outcome,
+        "input_guard_pass": True,
     }
 
     _add_step(
@@ -372,3 +447,55 @@ def _build_synthetic_answer(citation_count: int) -> str:
         return "No authorized context was available for this runtime run."
 
     return f"Synthetic runtime response based on {citation_count} authorized citation(s)."
+
+
+def _runtime_outcome(*, citation_count: int, denied_count: int) -> str:
+    if citation_count > 0:
+        return "answer"
+    if denied_count > 0:
+        return "policy_denied"
+    return "no_context"
+
+
+def _input_guard_decision(message: str) -> dict[str, str] | None:
+    normalized = " ".join(message.casefold().split())
+    guard_checks = (
+        (
+            "no_context",
+            "NO_CONTEXT_HALLUCINATION_REQUEST",
+            "no_context",
+            "No grounded context is available, and the runtime will not make up an answer.",
+            ("make up", "cannot find"),
+        ),
+        (
+            "refuse",
+            "WRITE_ACTION_NOT_SUPPORTED",
+            "write_action",
+            "Write actions are not supported by this document RAG runtime.",
+            ("update", "record"),
+        ),
+        (
+            "refuse",
+            "PERSONAL_DATA_REQUEST",
+            "personal_data",
+            "Personal data cannot be disclosed by this runtime.",
+            ("personal phone number",),
+        ),
+        (
+            "refuse",
+            "PROMPT_INJECTION_REFUSED",
+            "prompt_injection",
+            "Instruction override requests do not change Agent Forge policy.",
+            ("bypass", "acl"),
+        ),
+    )
+    for outcome, code, reason, answer, required_terms in guard_checks:
+        if all(term in normalized for term in required_terms):
+            return {
+                "outcome": outcome,
+                "code": code,
+                "reason": reason,
+                "message": answer,
+                "answer": answer,
+            }
+    return None

@@ -14,7 +14,7 @@ from app.core.principal import Principal, get_principal
 from app.domain.acl import document_can_be_indexed
 from app.domain.models import Document, DocumentChunk, IndexJob, KnowledgeSource, new_id
 from app.domain.parsers import SUPPORTED_TEXT_MIME_TYPES, parse_txt_md_document
-from app.domain.vector import FakeVectorStore, VectorQuery, VectorUpsertInput, build_acl_filter
+from app.domain.vector import VectorQuery, VectorUpsertInput, build_acl_filter
 from app.domain.schemas import (
     DocumentCreate,
     DocumentChunkRead,
@@ -35,6 +35,7 @@ from app.infra.storage import (
     StorageProvider,
     get_object_storage_provider,
 )
+from app.infra.vector_store import get_vector_store
 
 router = APIRouter()
 
@@ -280,7 +281,7 @@ def preview_retrieval(
         .order_by(Document.created_at.desc())
     )
     documents = list(db.scalars(statement))
-    vector_result = FakeVectorStore().search(
+    vector_result = get_vector_store().search(
         query=VectorQuery(
             query_text=payload.query,
             knowledge_source_ids=tuple(payload.knowledge_source_ids),
@@ -315,7 +316,7 @@ def preview_retrieval(
             "knowledge_source_count": len(payload.knowledge_source_ids),
             "result_count": len(hits),
             "denied_count": vector_result.denied_count,
-            "vector_adapter": "fake",
+            "vector_adapter": vector_result.adapter_name,
         },
     )
     db.commit()
@@ -449,13 +450,20 @@ def _run_index_job(
         "access_groups": document.access_groups,
         "knowledge_source_id": document.knowledge_source_id,
     }
-    upsert_results = FakeVectorStore().upsert_chunks(
+    vector_store = get_vector_store()
+    upsert_results = vector_store.upsert_chunks(
         tuple(
             VectorUpsertInput(
                 chunk_id=parsed_chunk.chunk_id,
                 document_id=document.id,
                 content_hash=parsed_chunk.content_hash,
                 embedding_model=payload.embedding_model,
+                content=parsed_chunk.content,
+                title=document.title,
+                knowledge_source_id=document.knowledge_source_id,
+                confidentiality_level=document.confidentiality_level,
+                access_groups=tuple(document.access_groups),
+                citation_locator=parsed_chunk.citation_locator,
             )
             for parsed_chunk in parsed_chunks
         )
@@ -498,7 +506,11 @@ def _run_index_job(
         event_type="document.indexed",
         target_type="document",
         target_id=document.id,
-        payload={"index_job_id": job.id, "chunk_count": job.chunk_count},
+        payload={
+            "index_job_id": job.id,
+            "chunk_count": job.chunk_count,
+            "vector_adapter": getattr(vector_store, "adapter_name", "unknown"),
+        },
     )
 
 

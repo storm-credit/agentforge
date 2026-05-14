@@ -71,7 +71,7 @@ The orchestrator should now dispatch the next work in this order:
 | RAG + Security fake retrieval ACL tests | Started | `eval/harness/tests/test_fake_retrieval.py` |
 | RAG + Security ACL retrieval preview API | Started | `POST /api/v1/knowledge/retrieval/preview` filters unauthorized documents |
 | Backend + RAG + QA index job skeleton | Started | `index_jobs`, `document_chunks`, and TXT/MD parser smoke |
-| Backend + RAG + Security fake vector adapter | Started | `apps/api/app/domain/vector.py` requires ACL-filtered search |
+| Backend + RAG + Security vector adapters | Expanded | `apps/api/app/domain/vector.py` requires ACL-filtered search and now includes selectable Qdrant wiring with query-side ACL filters |
 | AI Runtime + Backend runtime trace API | Hardened | `POST /api/v1/runs` stores model route metadata, skips generation without citations, and maps generator traces to `answer_generator` |
 | Audit Explorer API | Started | `/api/v1/audit/events` lists and filters persisted audit events |
 | Eval Trace Viewer entry point | Hardened | `/eval` can sync selected case runtime evidence and open `/trace?run_id=<run-id>`; both surfaces expand step payloads and compare retrieval hits from `/runs/{run_id}`, `/steps`, and `/retrieval-hits` |

@@ -22,8 +22,9 @@ from app.domain.schemas import (
     RunRead,
     RunStepRead,
 )
-from app.domain.vector import FakeVectorStore, VectorQuery, VectorSearchResult, build_acl_filter
+from app.domain.vector import VectorQuery, VectorSearchResult, build_acl_filter
 from app.infra.audit import write_audit_event
+from app.infra.vector_store import get_vector_store
 
 router = APIRouter()
 
@@ -193,7 +194,7 @@ def create_run(
         output_summary={
             "hit_count": len(vector_result.hits),
             "denied_count": vector_result.denied_count,
-            "vector_adapter": "fake",
+            "vector_adapter": vector_result.adapter_name,
             "route_stage": "retriever",
             "model_tier": model_route["retriever"]["tier"],
         },
@@ -220,7 +221,7 @@ def create_run(
                     "subjects": list(acl_filter.subjects),
                     "clearance_level": acl_filter.clearance_level,
                     "knowledge_source_ids": knowledge_source_ids,
-                    "vector_adapter": "fake",
+                    "vector_adapter": vector_result.adapter_name,
                 },
             )
         )
@@ -341,6 +342,7 @@ def create_run(
             "step_count": next_step_order - 1,
             "budget_class": budget_class,
             "model_routing_policy_ref": MODEL_ROUTING_POLICY_REF,
+            "vector_adapter": vector_result.adapter_name,
         },
     )
     db.commit()
@@ -440,7 +442,7 @@ def _search_authorized_context(
             .order_by(Document.created_at.desc())
         )
     )
-    return FakeVectorStore().search(
+    return get_vector_store().search(
         query=VectorQuery(
             query_text=query_text,
             knowledge_source_ids=tuple(knowledge_source_ids),

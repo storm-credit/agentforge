@@ -22,6 +22,14 @@ The dev compose stack configures the API to use MinIO through the S3-compatible 
 - endpoint: `http://minio:9000`
 - bucket: `agent-forge-documents`
 
+The default local vector path remains the deterministic fake adapter for repeatable smoke runs. To exercise the Sprint 2 Qdrant adapter, set:
+
+```powershell
+$env:AGENT_FORGE_VECTOR_STORE_BACKEND="qdrant"
+```
+
+With that setting, indexing writes chunk payloads to Qdrant, retrieval pushes ACL filters into the vector query, and run trace/audit metadata records `vector_adapter=qdrant`.
+
 ## Smoke Check
 
 After the API is available:
@@ -63,6 +71,7 @@ The script checks:
 - Runtime steps and retrieval hits are stored for trace review.
 - `python eval/harness/run_api_synthetic_eval.py` uploads the 10 synthetic corpus documents, indexes them from object storage, runs all 30 cases, compares `answer`, `policy_denied`, `no_context`, and `refuse` outcomes, and stores the report in `/api/v1/eval/runs`.
 - Runtime run records and persisted eval reports include `model_routing_policy_ref`, `budget_class`, and a stage-complete `model_route_summary` using `answer_generator`, `critic`, `formatter`, and `cost_latency_controller` policy keys.
+- Runtime trace and audit payloads include the selected vector adapter, currently `fake` by default or `qdrant` when explicitly enabled.
 
 ## Runtime Trace Evidence
 

@@ -120,6 +120,7 @@ Sprint 1 progress:
 - AF-011 TXT/MD parser smoke started with deterministic chunk IDs, line locators, and heading paths.
 - `tools/smoke/indexing-smoke.ps1` verifies job creation, chunk metadata, chunk retrieval preview, and fail-closed no-ACL indexing.
 - AF-012 vector adapter interface started with a deterministic fake adapter and ACL-required search contract.
+- Qdrant adapter wiring started behind `AGENT_FORGE_VECTOR_STORE_BACKEND=qdrant`, with ACL filters pushed into the vector query and adapter metadata captured in trace/audit payloads.
 - AF-015 runtime run API skeleton started with `runs`, `run_steps`, `retrieval_hits`, and `POST /api/v1/runs`.
 - Runtime contract coverage verifies published-version gating, ACL-filtered retrieval hits, step trace ordering, and citation trace storage.
 - AF-016 citation validator started with required-citation pass/fail contracts and runtime no-citation failure trace coverage.
@@ -135,8 +136,8 @@ Goal: minimal real RAG works with ACL filtering and citations.
 Scope:
 
 - One embedding adapter
-- One vector store adapter, Qdrant or pgvector
-- ACL-aware vector search
+- One vector store adapter, Qdrant or pgvector - Qdrant wiring started
+- ACL-aware vector search - Qdrant adapter pushes access group, clearance, status, and knowledge source filters into the query
 - Answer-generation mock or local model gateway
 - Citation validator
 - Test Chat UI draft

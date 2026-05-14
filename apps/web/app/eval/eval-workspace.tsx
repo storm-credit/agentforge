@@ -555,7 +555,7 @@ export function EvalWorkspace() {
   const [selectedSuiteId, setSelectedSuiteId] = useState(seedSuites[0].id);
   const [selectedCaseId, setSelectedCaseId] = useState(seedCases[0].id);
   const [notice, setNotice] = useState(
-    "Latest pushed API-backed CLI runner snapshot is loaded.",
+    "Latest pushed API-backed CLI runner snapshot is loaded until a persisted eval report is synced.",
   );
   const [pendingAction, setPendingAction] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -604,7 +604,7 @@ export function EvalWorkspace() {
       setNotice(`Synced latest eval run from ${result.endpoint ?? "eval API"}.`);
     } else {
       setNotice(
-        `Eval API not ready (${result.error ?? "request failed"}). Showing latest pushed API-backed CLI runner snapshot.`,
+        `Persisted eval report unavailable (${result.error ?? "request failed"}). Showing latest pushed API-backed CLI runner snapshot.`,
       );
     }
 
@@ -668,10 +668,10 @@ export function EvalWorkspace() {
       </section>
 
       <section className="panel evalNotice">
-        <span className="badge warn">API pending</span>
+        <span className="badge neutral">Trace drill-down</span>
         <p>
-          <strong>No /api/v1/eval API yet.</strong> Sync probes future eval endpoints;
-          current evidence comes from the API-backed CLI runner and runtime /runs traces.
+          <strong>Eval reports are persisted through /api/v1/eval.</strong> Runtime
+          evidence stays connected through each case run ID and the /runs trace endpoints.
         </p>
       </section>
 

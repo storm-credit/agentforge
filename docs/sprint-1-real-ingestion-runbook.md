@@ -6,7 +6,7 @@ This runbook verifies the first real document ingestion path for Agent Forge.
 
 Prove that an operator can upload a TXT/Markdown file, store the raw object, index it without synthetic `source_text`, retrieve an ACL-filtered citation, and create a runtime trace from the same uploaded document.
 
-This is also the current API-backed eval evidence path. The dedicated `/api/v1/eval/runs` worker is still a planned product endpoint; until it lands, the script below seeds the synthetic corpus through the public APIs and exercises runtime trace storage end to end.
+This is also the current API-backed eval evidence path. The script below seeds the synthetic corpus through the public APIs, exercises runtime trace storage end to end, and persists the resulting eval report through `/api/v1/eval/runs`.
 
 ## Local Stack
 
@@ -50,7 +50,7 @@ For browser-based Eval/Trace review after the runner, keep the stack running:
 ./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0 -KeepStack
 ```
 
-Then follow [Eval and Trace UI Runbook](eval-trace-ui-runbook.md). In the current Sprint 1 UI, `/eval` and `/audit` are the operator landing pages; the runner JSON plus `/api/v1/runs/<run-id>`, `/steps`, and `/retrieval-hits` are the authoritative drill-down evidence until the dedicated Eval API worker and full Trace Viewer are wired in.
+Then follow [Eval and Trace UI Runbook](eval-trace-ui-runbook.md). In the current Sprint 1 UI, `/eval` can sync the persisted eval report, `/audit` is the governance landing page, and `/api/v1/runs/<run-id>`, `/steps`, and `/retrieval-hits` remain the authoritative runtime trace drill-down evidence until the full Trace Viewer is wired in.
 
 The script checks:
 
@@ -61,7 +61,7 @@ The script checks:
 - `POST /api/v1/knowledge/retrieval/preview` returns the uploaded chunk.
 - A published agent version can run through `POST /api/v1/runs`.
 - Runtime steps and retrieval hits are stored for trace review.
-- `python eval/harness/run_api_synthetic_eval.py` uploads the 10 synthetic corpus documents, indexes them from object storage, runs all 30 cases, and compares `answer`, `policy_denied`, `no_context`, and `refuse` outcomes.
+- `python eval/harness/run_api_synthetic_eval.py` uploads the 10 synthetic corpus documents, indexes them from object storage, runs all 30 cases, compares `answer`, `policy_denied`, `no_context`, and `refuse` outcomes, and stores the report in `/api/v1/eval/runs`.
 
 ## Runtime Trace Evidence
 
@@ -91,7 +91,7 @@ After `api-eval-runner-smoke.ps1` passes with `-KeepStack`, open the Web URL pri
 - `Audit`: governance landing page for trace/audit review.
 - API trace endpoints: use a `run_id` from the runner JSON to inspect run detail, ordered steps, and retrieval hits.
 
-The current API-backed eval report is the release evidence source of truth. Treat the UI as the operator workflow surface and the `/runs` endpoints as the detailed trace drill-down until `/api/v1/eval/runs` persists eval reports.
+The current API-backed eval report is the release evidence source of truth. Treat `/api/v1/eval/overview` and `/api/v1/eval/runs/latest` as the report entry points, and use the `/runs` endpoints as the detailed trace drill-down until the full Trace Viewer is implemented.
 
 ## API Notes
 

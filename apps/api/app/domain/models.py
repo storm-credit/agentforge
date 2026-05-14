@@ -2,7 +2,17 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, JSON, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    JSON,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.database import Base
@@ -211,9 +221,7 @@ class RetrievalHit(Base):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
     run_id: Mapped[str] = mapped_column(ForeignKey("runs.id"), nullable=False)
-    chunk_id: Mapped[str | None] = mapped_column(
-        ForeignKey("document_chunks.id"), nullable=True
-    )
+    chunk_id: Mapped[str | None] = mapped_column(ForeignKey("document_chunks.id"), nullable=True)
     document_id: Mapped[str] = mapped_column(ForeignKey("documents.id"), nullable=False)
     title: Mapped[str] = mapped_column(String(240), nullable=False)
     citation_locator: Mapped[str | None] = mapped_column(String(300), nullable=True)
@@ -228,6 +236,56 @@ class RetrievalHit(Base):
 
     run: Mapped[Run] = relationship(back_populates="retrieval_hits")
     chunk: Mapped[DocumentChunk | None] = relationship(back_populates="retrieval_hits")
+
+
+class EvalRun(Base):
+    __tablename__ = "eval_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    corpus_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    mode: Mapped[str] = mapped_column(String(40), default="api", nullable=False)
+    status: Mapped[str] = mapped_column(String(40), nullable=False)
+    passed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    total_cases: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    passed_cases: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    failed_cases: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    suite_counts: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    setup_findings: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    setup: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(120), nullable=False)
+    approved_baseline_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    approved_baseline_by: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utc_now, onupdate=utc_now
+    )
+
+    results: Mapped[list["EvalCaseResult"]] = relationship(
+        back_populates="eval_run", cascade="all, delete-orphan", order_by="EvalCaseResult.case_id"
+    )
+
+
+class EvalCaseResult(Base):
+    __tablename__ = "eval_case_results"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    eval_run_id: Mapped[str] = mapped_column(ForeignKey("eval_runs.id"), nullable=False)
+    case_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    suite: Mapped[str] = mapped_column(String(80), nullable=False)
+    expected_behavior: Mapped[str] = mapped_column(String(80), nullable=False)
+    passed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    findings: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    status: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    citation_document_ids: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    retrieval_document_ids: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    retrieval_denied_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    eval_run: Mapped[EvalRun] = relationship(back_populates="results")
 
 
 class AuditEvent(Base):

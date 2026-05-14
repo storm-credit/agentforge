@@ -239,7 +239,38 @@ def main(argv: list[str] | None = None) -> int:
         },
         results=results,
     )
-    print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
+    persisted_eval_run = None
+    persistence_error = None
+    try:
+        persisted_eval_run = client.post_json(
+            "/eval/runs",
+            report.to_dict(),
+            headers=admin_headers,
+        )
+    except ApiError as exc:
+        persistence_error = f"Eval report persistence failed: {exc}"
+        report = build_api_report(
+            corpus=corpus,
+            selected_cases=selected_cases,
+            setup_findings=[*setup_findings, persistence_error],
+            setup={
+                "api_base_url": args.api_base_url,
+                "run_token": run_token,
+                "knowledge_source_id": source["id"],
+                "agent_id": agent["id"],
+                "agent_version_id": version["id"],
+                "top_k": args.top_k,
+                **document_setup,
+            },
+            results=results,
+        )
+
+    report_payload = report.to_dict()
+    if isinstance(persisted_eval_run, Mapping) and isinstance(persisted_eval_run.get("id"), str):
+        report_payload["setup"]["eval_run_id"] = persisted_eval_run["id"]
+        report_payload["setup"]["eval_api_endpoint"] = "/eval/runs"
+
+    print(json.dumps(report_payload, indent=2, sort_keys=True))
     return 0 if report.passed else 1
 
 

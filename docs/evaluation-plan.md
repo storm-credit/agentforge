@@ -213,7 +213,7 @@ Current Sprint 1 command:
 ./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0 -KeepStack
 ```
 
-`-KeepStack` is required when the reviewer needs to open Agent Studio after the runner. The runner JSON is the current eval artifact; `/eval` and `/audit` provide the UI review surface, and `/api/v1/runs/<run-id>`, `/steps`, and `/retrieval-hits` provide trace drill-down. See `docs/eval-trace-ui-runbook.md`.
+`-KeepStack` is required when the reviewer needs to open Agent Studio after the runner. The runner JSON is persisted through `/api/v1/eval/runs`; `/eval` and `/audit` provide the UI review surface, and `/api/v1/runs/<run-id>`, `/steps`, and `/retrieval-hits` provide trace drill-down. See `docs/eval-trace-ui-runbook.md`.
 
 ### 폐쇄망 Staging
 
@@ -344,6 +344,6 @@ MVP 목표:
 2. eval case 30개 작성
 3. eval case JSON schema 확정
 4. deterministic scorer 구현
-5. `/api/v1/eval/runs` worker 연결
+5. `/api/v1/eval/runs` report persistence and runner 연결
 6. regression report 템플릿 생성
 7. Playwright 핵심 flow 5개 작성

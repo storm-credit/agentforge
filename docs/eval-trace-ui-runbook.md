@@ -4,15 +4,15 @@ This runbook describes the current operator workflow after the API-backed synthe
 
 ## Current Scope
 
-The API-backed runner is the source of truth for Sprint 1 eval evidence. It uploads the synthetic corpus through public APIs, indexes documents from object storage, publishes an eval agent, runs the 30-case corpus through `POST /api/v1/runs`, and emits a JSON report.
+The API-backed runner is the source of truth for Sprint 1 eval evidence. It uploads the synthetic corpus through public APIs, indexes documents from object storage, publishes an eval agent, runs the 30-case corpus through `POST /api/v1/runs`, emits a JSON report, and stores that report through `POST /api/v1/eval/runs`.
 
 The Agent Studio UI currently provides the operator entry points for eval and trace review:
 
-- `/eval` is the evaluation gate landing page.
+- `/eval` is the evaluation gate landing page and can sync the latest persisted eval report.
 - `/audit` is the governance and trace review landing page.
 - `/knowledge` can be used to re-check upload, indexing, and retrieval preview behavior.
 
-Until `/api/v1/eval/runs` and the full Trace Viewer are wired into the UI, use the runner JSON and `/runs` API endpoints as the detailed trace evidence behind those screens.
+Use `/api/v1/eval/overview` or `/api/v1/eval/runs/latest` for the persisted report, and use the `/runs` API endpoints as the detailed trace evidence behind those screens until the full Trace Viewer is wired into the UI.
 
 ## Run The Eval And Keep The UI Available
 
@@ -34,6 +34,7 @@ The runner output includes:
 
 - `passed`, `total_cases`, `passed_cases`, and `failed_cases`
 - `suite_counts`
+- `setup.eval_run_id` after the report is persisted
 - `setup.run_token`
 - `setup.knowledge_source_id`
 - `setup.agent_id`
@@ -51,7 +52,7 @@ The runner output includes:
    - Policy refusal maps to `policy_denied`, `no_context`, and `refuse` cases.
    - Regression suite maps to total/pass/fail counts and suite counts.
 
-For Sprint 1, any blocker investigation should cite the runner JSON fields directly because the Eval page does not yet persist eval-run artifacts.
+For Sprint 1, any blocker investigation should cite the persisted eval report fields and the runtime trace endpoints behind the affected `run_id`.
 
 ## Trace Review
 
@@ -85,10 +86,11 @@ The workflow passes when:
 
 - `api-eval-runner-smoke.ps1` exits successfully.
 - The API-backed eval report has `passed=true`.
+- `/api/v1/eval/overview` returns the persisted latest report.
 - `/eval` and `/audit` render in Agent Studio.
 - At least one passing answer case has inspectable run detail, ordered steps, and retrieval hits.
 - Failed or denied cases have trace evidence explaining refusal, no-context, or policy-denied behavior without forbidden citations.
 
-## Follow-Up When Eval API Lands
+## Follow-Up
 
-When `/api/v1/eval/runs` is implemented, update this runbook so the Eval UI points at persisted eval runs and report artifacts rather than transient runner JSON. The trace-review steps should still keep `/runs/{run_id}`, `/steps`, and `/retrieval-hits` as the drill-down path.
+Next follow-up is the full Trace Viewer: the trace-review steps should keep `/runs/{run_id}`, `/steps`, and `/retrieval-hits` as the drill-down path, but the UI should make those links first-class from each eval case.

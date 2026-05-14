@@ -12,7 +12,7 @@ The Agent Studio UI currently provides the operator entry points for eval and tr
 - `/audit` is the governance and trace review landing page.
 - `/knowledge` can be used to re-check upload, indexing, and retrieval preview behavior.
 
-Use `/api/v1/eval/overview` or `/api/v1/eval/runs/latest` for the persisted report. The Eval screen can now sync an individual case trace from `/runs/{run_id}`, `/steps`, and `/retrieval-hits`, while the API endpoints remain the authoritative drill-down evidence.
+Use `/api/v1/eval/overview` or `/api/v1/eval/runs/latest` for the persisted report. The Eval screen can now sync an individual case trace from `/runs/{run_id}`, `/steps`, and `/retrieval-hits`, including step payload summaries and retrieval-hit comparison, while the API endpoints remain the authoritative drill-down evidence.
 
 ## Run The Eval And Keep The UI Available
 
@@ -96,4 +96,4 @@ The workflow passes when:
 
 ## Follow-Up
 
-Next follow-up is a deeper Trace Viewer: keep `/runs/{run_id}`, `/steps`, and `/retrieval-hits` as the drill-down path, then add linked step payload expansion and retrieval-hit comparison from each eval case.
+Next follow-up is a dedicated Trace Viewer route with a shareable `run_id` URL and richer step timing/citation comparison controls.

@@ -126,7 +126,7 @@ Sprint 1 progress:
 - API-backed eval report persistence started with `/api/v1/eval/runs`, `/overview`, latest/result reads, and baseline approval audit events.
 - AF-023 model routing policy is now API-enforced for Agent version config and eval report persistence; runtime traces include stage-complete route metadata aligned to the shared policy contract.
 - Audit read/search API started at `/api/v1/audit/events` with event type, actor, target, and text filters.
-- Agent Studio now has a first Trace Viewer entry point: Eval cases can sync the selected `run_id` through `/runs/{run_id}`, `/steps`, and `/retrieval-hits`.
+- Agent Studio now has a Trace Viewer entry point: Eval cases can sync the selected `run_id` through `/runs/{run_id}`, `/steps`, and `/retrieval-hits`, then inspect step payloads and retrieval-hit comparison.
 
 ### Sprint 2
 
@@ -140,7 +140,7 @@ Scope:
 - Answer-generation mock or local model gateway
 - Citation validator
 - Test Chat UI draft
-- Run Trace Viewer payload expansion and retrieval-hit comparison
+- Dedicated Trace Viewer route with shareable `run_id` URL
 - Audit Explorer result detail and saved filter presets
 - ACL/citation golden set execution
 

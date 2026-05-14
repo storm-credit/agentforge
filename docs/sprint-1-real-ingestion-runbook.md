@@ -50,7 +50,7 @@ For browser-based Eval/Trace review after the runner, keep the stack running:
 ./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0 -KeepStack
 ```
 
-Then follow [Eval and Trace UI Runbook](eval-trace-ui-runbook.md). In the current Sprint 1 UI, `/eval` can sync the persisted eval report and pull a selected case's runtime trace, `/audit` can sync audit events, and `/api/v1/runs/<run-id>`, `/steps`, and `/retrieval-hits` remain the authoritative runtime trace drill-down evidence.
+Then follow [Eval and Trace UI Runbook](eval-trace-ui-runbook.md). In the current Sprint 1 UI, `/eval` can sync the persisted eval report, pull a selected case's runtime trace, expand step payload summaries, and compare retrieval hits; `/audit` can sync audit events; and `/api/v1/runs/<run-id>`, `/steps`, and `/retrieval-hits` remain the authoritative runtime trace drill-down evidence.
 
 The script checks:
 

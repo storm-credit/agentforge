@@ -85,11 +85,151 @@ test.describe("Agent Studio shell", () => {
 
     await expect(page.getByRole("heading", { name: "Trace and citations" })).toBeVisible();
     await expect(page.getByText(/Matched expected answer path/)).toBeVisible();
-    await expect(page.getByText("Expense Reimbursement Policy")).toBeVisible();
+    await expect(page.locator(".citationSection").getByText("Expense Reimbursement Policy").first()).toBeVisible();
     await expect(page.getByText("citation_validator")).toBeVisible();
 
     await page.getByRole("button", { name: "Sync trace" }).click();
     await expect(page.getByText(/Runtime trace unavailable/)).toBeVisible();
+  });
+
+  test("eval trace sync renders step payloads and retrieval comparison", async ({ page }) => {
+    await page.route("**/api/v1/eval/overview", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          run: {
+            id: "eval-live-1",
+            corpus_id: "synthetic-corpus-v0.1",
+            mode: "api",
+            status: "passed",
+            total_cases: 1,
+            passed_cases: 1,
+            failed_cases: 0,
+            summary: {
+              citation_coverage: 1,
+              trace_completeness: 1,
+              acl_violation_count: 0,
+            },
+          },
+          suite_counts: { citation: 1 },
+          results: [
+            {
+              case_id: "cit_003",
+              suite: "citation",
+              expected_behavior: "answer",
+              passed: true,
+              run_id: "runtime-1",
+              status: "succeeded",
+              citation_document_ids: ["FIN-001"],
+              retrieval_document_ids: ["FIN-001"],
+              retrieval_denied_count: 1,
+              findings: [],
+            },
+          ],
+        },
+      });
+    });
+
+    await page.route("**/api/v1/runs/runtime-1", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          id: "runtime-1",
+          status: "succeeded",
+          latency_ms: 412,
+          retrieval_denied_count: 1,
+          citations: [
+            {
+              document_id: "FIN-001",
+              title: "Expense Reimbursement Policy",
+              citation_locator: "section:receipt-deadline",
+            },
+          ],
+          guardrail: {
+            outcome: "answer",
+            model_route_summary: {
+              answer_generator: { tier: "standard-rag" },
+            },
+          },
+        },
+      });
+    });
+
+    await page.route("**/api/v1/runs/runtime-1/steps", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: [
+          {
+            step_type: "retriever",
+            status: "succeeded",
+            latency_ms: 34,
+            input_summary: { top_k: 5 },
+            output_summary: {
+              route_stage: "retriever",
+              model_tier: "deterministic",
+              hit_count: 2,
+              denied_count: 1,
+            },
+          },
+          {
+            step_type: "generator",
+            status: "succeeded",
+            latency_ms: 118,
+            input_summary: { context_count: 1 },
+            output_summary: {
+              route_stage: "answer_generator",
+              model_tier: "standard-rag",
+              citation_count: 1,
+            },
+          },
+        ],
+      });
+    });
+
+    await page.route("**/api/v1/runs/runtime-1/retrieval-hits", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: [
+          {
+            id: "hit-1",
+            document_id: "FIN-001",
+            chunk_id: "fin-001-1",
+            title: "Expense Reimbursement Policy",
+            citation_locator: "section:receipt-deadline",
+            rank_original: 1,
+            score_vector: 0.94,
+            used_in_context: true,
+            used_as_citation: true,
+            acl_filter_snapshot: { subjects: ["department:Finance"] },
+          },
+          {
+            id: "hit-2",
+            document_id: "FIN-002",
+            chunk_id: "fin-002-1",
+            title: "Quarter Close Restricted Checklist",
+            citation_locator: "section:exception-ledger",
+            rank_original: 2,
+            score_vector: 0.71,
+            used_in_context: true,
+            used_as_citation: false,
+            acl_filter_snapshot: { subjects: ["department:Finance"] },
+          },
+        ],
+      });
+    });
+
+    await page.goto("/eval");
+    await page.getByRole("button", { name: "Sync API" }).click();
+    await expect(page.getByText(/Synced latest eval run/)).toBeVisible();
+
+    await page.getByRole("button", { name: "Sync trace" }).click();
+    await expect(page.getByText(/Synced runtime trace for cit_003/)).toBeVisible();
+    await expect(page.getByText(/route stage answer_generator/)).toBeVisible();
+    await expect(page.getByText("Used as citation")).toBeVisible();
+    await expect(page.getByText("Context only")).toBeVisible();
+
+    await page.locator(".traceStep").filter({ hasText: "generator" }).getByText("Payload").click();
+    await expect(page.getByText("context_count")).toBeVisible();
   });
 
   test("audit page exposes queryable audit explorer shell", async ({ page }) => {

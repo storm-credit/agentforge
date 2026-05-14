@@ -74,7 +74,7 @@ The orchestrator should now dispatch the next work in this order:
 | Backend + RAG + Security fake vector adapter | Started | `apps/api/app/domain/vector.py` requires ACL-filtered search |
 | AI Runtime + Backend runtime trace API | Hardened | `POST /api/v1/runs` stores model route metadata, skips generation without citations, and maps generator traces to `answer_generator` |
 | Audit Explorer API | Started | `/api/v1/audit/events` lists and filters persisted audit events |
-| Eval Trace Viewer entry point | Started | `/eval` can sync selected case runtime evidence from `/runs/{run_id}`, `/steps`, and `/retrieval-hits` |
+| Eval Trace Viewer entry point | Hardened | `/eval` can sync selected case runtime evidence, expand step payloads, and compare retrieval hits from `/runs/{run_id}`, `/steps`, and `/retrieval-hits` |
 | DevOps compose smoke | Verified | `tools/smoke/compose-smoke.ps1 -Boot -WebPort 0` passed |
 | Frontend route/workflow smoke | Expanded | `apps/web/tests/smoke.spec.ts` covers 13 route, workflow, semantics, and mobile checks |
 | Eval report persistence | Started | `/api/v1/eval/runs`, `/overview`, latest/result reads, baseline approval audit |

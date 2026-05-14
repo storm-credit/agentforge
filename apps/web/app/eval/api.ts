@@ -24,6 +24,23 @@ export type EvalTraceStep = {
   status: "succeeded" | "failed" | "skipped" | "running";
   detail: string;
   durationMs: number;
+  inputSummary?: Record<string, unknown>;
+  outputSummary?: Record<string, unknown>;
+  errorCode?: string;
+  errorMessage?: string;
+};
+
+export type EvalRetrievalHit = {
+  id: string;
+  documentId: string;
+  chunkId: string;
+  title: string;
+  locator: string;
+  rank: number;
+  score: number;
+  usedInContext: boolean;
+  usedAsCitation: boolean;
+  aclSubjects: string[];
 };
 
 export type EvalCaseResult = {
@@ -43,6 +60,7 @@ export type EvalCaseResult = {
   forbiddenCount: number;
   citations: EvalCitation[];
   trace: EvalTraceStep[];
+  retrievalHits: EvalRetrievalHit[];
 };
 
 export type EvalRunSummary = {
@@ -79,6 +97,7 @@ export type EvalApiResult<T> = {
 export type RuntimeTraceEvidence = {
   trace: EvalTraceStep[];
   citations: EvalCitation[];
+  retrievalHits: EvalRetrievalHit[];
   finding: string;
   status: string;
   latencyMs: number;
@@ -297,7 +316,8 @@ export async function fetchRuntimeTrace(runId: string): Promise<EvalApiResult<Ru
   const steps = arrayPayload(stepsResult.data);
   const hits = arrayPayload(hitsResult.data);
   const trace = mapRuntimeSteps(steps);
-  const citations = mapRuntimeCitations(run, hits);
+  const retrievalHits = mapRuntimeRetrievalHits(hits);
+  const citations = mapRuntimeCitations(run, retrievalHits);
   const guardrail = asRecord(run.guardrail);
   const endpoint = stepsResult.endpoint ?? runResult.endpoint;
 
@@ -307,6 +327,7 @@ export async function fetchRuntimeTrace(runId: string): Promise<EvalApiResult<Ru
     data: {
       trace,
       citations,
+      retrievalHits,
       status: stringField(run, "status") ?? "unknown",
       latencyMs: numericField(run, "latency_ms") ?? 0,
       deniedCount: numericField(run, "retrieval_denied_count") ?? 0,
@@ -445,6 +466,7 @@ function mapCaseResult(payload: unknown, index: number): EvalCaseResult | null {
     forbiddenCount,
     citations,
     trace,
+    retrievalHits: [],
   };
 }
 
@@ -721,34 +743,43 @@ function fallbackTrace(outcome: EvalOutcome, citationCount: number): EvalTraceSt
 }
 
 function mapRuntimeSteps(payload: unknown[]): EvalTraceStep[] {
-  return payload
-    .map((item) => {
-      const step = asRecord(item);
-      if (!step) {
-        return null;
-      }
+  const steps: EvalTraceStep[] = [];
 
-      const outputSummary = asRecord(step.output_summary);
-      const routeStage = stringField(outputSummary ?? {}, "route_stage");
-      const modelTier = stringField(outputSummary ?? {}, "model_tier");
-      const errorMessage = stringField(step, "error_message");
-      const detailParts = [
-        routeStage ? `route stage ${routeStage}` : undefined,
-        modelTier ? `model tier ${modelTier}` : undefined,
-        errorMessage,
-      ].filter(Boolean);
+  payload.forEach((item) => {
+    const step = asRecord(item);
+    if (!step) {
+      return;
+    }
 
-      return {
-        name: stringField(step, "step_type") ?? "runtime_step",
-        status: normalizeStepStatus(stringField(step, "status")),
-        detail: detailParts.length ? detailParts.join(" / ") : "Runtime step persisted by API.",
-        durationMs: numericField(step, "latency_ms") ?? 0,
-      };
-    })
-    .filter((item): item is EvalTraceStep => item !== null);
+    const outputSummary = asRecord(step.output_summary);
+    const routeStage = stringField(outputSummary ?? {}, "route_stage");
+    const modelTier = stringField(outputSummary ?? {}, "model_tier");
+    const errorMessage = stringField(step, "error_message");
+    const detailParts = [
+      routeStage ? `route stage ${routeStage}` : undefined,
+      modelTier ? `model tier ${modelTier}` : undefined,
+      errorMessage,
+    ].filter(Boolean);
+
+    steps.push({
+      name: stringField(step, "step_type") ?? "runtime_step",
+      status: normalizeStepStatus(stringField(step, "status")),
+      detail: detailParts.length ? detailParts.join(" / ") : "Runtime step persisted by API.",
+      durationMs: numericField(step, "latency_ms") ?? 0,
+      inputSummary: asRecord(step.input_summary) ?? undefined,
+      outputSummary: outputSummary ?? undefined,
+      errorCode: stringField(step, "error_code"),
+      errorMessage,
+    });
+  });
+
+  return steps;
 }
 
-function mapRuntimeCitations(run: Record<string, unknown>, hits: unknown[]): EvalCitation[] {
+function mapRuntimeCitations(
+  run: Record<string, unknown>,
+  retrievalHits: EvalRetrievalHit[],
+): EvalCitation[] {
   const runCitations = arrayField(run, "citations") ?? [];
   if (runCitations.length) {
     const citations: EvalCitation[] = [];
@@ -775,24 +806,54 @@ function mapRuntimeCitations(run: Record<string, unknown>, hits: unknown[]): Eva
 
   const citations: EvalCitation[] = [];
 
-  hits.forEach((item, index) => {
-    const hit = asRecord(item);
-    if (!hit || booleanField(hit, "used_as_citation") === false) {
+  retrievalHits.forEach((hit, index) => {
+    if (!hit.usedAsCitation) {
       return;
     }
 
-    const documentId = stringField(hit, "document_id") ?? "document";
     citations.push({
-      id: `${documentId}-${index}`,
-      documentId,
-      title: stringField(hit, "title") ?? documentId,
-      locator: stringField(hit, "citation_locator") ?? "locator unavailable",
+      id: `${hit.documentId}-${index}`,
+      documentId: hit.documentId,
+      title: hit.title,
+      locator: hit.locator,
       excerpt: "Retrieval hit stored by the runtime run.",
       match: "Retrieved",
     });
   });
 
   return citations;
+}
+
+function mapRuntimeRetrievalHits(payload: unknown[]): EvalRetrievalHit[] {
+  return payload
+    .map((item, index) => {
+      const hit = asRecord(item);
+      if (!hit) {
+        return null;
+      }
+
+      const aclSnapshot = asRecord(hit.acl_filter_snapshot);
+      const subjects = arrayField(aclSnapshot ?? {}, "subjects")
+        ?.filter((subject): subject is string => typeof subject === "string")
+        ?? [];
+      const documentId = stringField(hit, "document_id") ?? "document";
+
+      return {
+        id: stringField(hit, "id") ?? `${documentId}-${index}`,
+        documentId,
+        chunkId: stringField(hit, "chunk_id") ?? "chunk unavailable",
+        title: stringField(hit, "title") ?? documentId,
+        locator: stringField(hit, "citation_locator") ?? "locator unavailable",
+        rank: numericField(hit, "rank_reranked")
+          ?? numericField(hit, "rank_original")
+          ?? index + 1,
+        score: numericField(hit, "score_vector") ?? 0,
+        usedInContext: booleanField(hit, "used_in_context") ?? false,
+        usedAsCitation: booleanField(hit, "used_as_citation") ?? false,
+        aclSubjects: subjects,
+      };
+    })
+    .filter((item): item is EvalRetrievalHit => item !== null);
 }
 
 function runtimeFinding(guardrail: Record<string, unknown> | null, citationCount: number) {

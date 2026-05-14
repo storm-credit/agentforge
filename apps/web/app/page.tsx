@@ -2,7 +2,7 @@ import Link from "next/link";
 
 const readinessStats = [
   { label: "Release gate", value: "83%", note: "5 of 6 checks passing", tone: "" },
-  { label: "Open blockers", value: "1", note: "Trace payload expansion", tone: "warn" },
+  { label: "Open blockers", value: "1", note: "Real vector adapter", tone: "warn" },
   { label: "Eval corpus", value: "30", note: "API-backed cases", tone: "" },
 ];
 
@@ -11,7 +11,7 @@ const releaseSteps = [
   { label: "Knowledge", status: "Ready", detail: "Upload, index, ACL preview verified" },
   { label: "Runtime trace", status: "Ready", detail: "Runs, steps, retrieval hits stored" },
   { label: "Eval report", status: "Ready", detail: "Persisted through /api/v1/eval" },
-  { label: "Trace viewer", status: "Started", detail: "Eval case runtime trace sync wired" },
+  { label: "Trace viewer", status: "Ready", detail: "Step payloads and retrieval comparison wired" },
 ];
 
 const evidence = [
@@ -60,7 +60,7 @@ export default function Home() {
       <section className="nextAction">
         <div>
           <span className="badge warn">Next required action</span>
-          <strong>Add step payload expansion and retrieval-hit comparison to Trace Viewer.</strong>
+          <strong>Connect the next real vector adapter behind the retrieval trace.</strong>
         </div>
         <Link className="button secondary" href="/audit">
           Inspect evidence

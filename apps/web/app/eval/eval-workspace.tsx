@@ -5,6 +5,7 @@ import {
   EvalCaseResult,
   EvalCitation,
   EvalOutcome,
+  EvalRetrievalHit,
   EvalOverview,
   EvalRunSummary,
   EvalSuite,
@@ -421,6 +422,7 @@ function buildSeedCase(definition: SeedCaseDefinition): EvalCaseResult {
     forbiddenCount: definition.forbiddenCount ?? 0,
     citations,
     trace: buildTrace(definition, outcome, citations),
+    retrievalHits: buildSeedRetrievalHits(definition, citations),
   };
 }
 
@@ -476,6 +478,24 @@ function defaultFinding(expectedBehavior: string, citationCount: number) {
     return "Returned no-context behavior instead of fabricating an unsupported answer.";
   }
   return "Refused the request before retrieval or write action execution.";
+}
+
+function buildSeedRetrievalHits(
+  definition: SeedCaseDefinition,
+  citations: EvalCitation[],
+): EvalRetrievalHit[] {
+  return citations.map((citation, index) => ({
+    id: `${definition.id}-${citation.documentId}-${index}`,
+    documentId: citation.documentId,
+    chunkId: `${citation.documentId.toLowerCase()}-chunk-${index + 1}`,
+    title: citation.title,
+    locator: citation.locator,
+    rank: index + 1,
+    score: 0.92 - index * 0.03,
+    usedInContext: true,
+    usedAsCitation: true,
+    aclSubjects: ["all-employees"],
+  }));
 }
 
 function mergeApiOverview(overview: EvalOverview): EvalOverview {
@@ -629,6 +649,7 @@ export function EvalWorkspace() {
                 deniedCount: traceEvidence.deniedCount,
                 finding: traceEvidence.finding,
                 latencyMs: traceEvidence.latencyMs,
+                retrievalHits: traceEvidence.retrievalHits,
                 status: traceEvidence.status,
                 trace: traceEvidence.trace.length ? traceEvidence.trace : caseResult.trace,
                 traceId: traceEvidence.endpoint ?? caseResult.traceId,
@@ -646,12 +667,21 @@ export function EvalWorkspace() {
     setPendingAction(null);
   }
 
-  function selectSuite(suiteId: string) {
+function selectSuite(suiteId: string) {
     const nextCase = cases.find((caseResult) => caseResult.suiteId === suiteId);
     setSelectedSuiteId(suiteId);
     if (nextCase) {
       setSelectedCaseId(nextCase.id);
     }
+  }
+
+  function hasStepPayload(step: EvalTraceStep) {
+    return Boolean(
+      Object.keys(step.inputSummary ?? {}).length
+        || Object.keys(step.outputSummary ?? {}).length
+        || step.errorCode
+        || step.errorMessage,
+    );
   }
 
   return (
@@ -872,10 +902,57 @@ export function EvalWorkspace() {
                 <div>
                   <strong>{step.name}</strong>
                   <p>{step.detail}</p>
+                  {hasStepPayload(step) ? (
+                    <details className="tracePayload">
+                      <summary>Payload</summary>
+                      <div className="payloadGrid">
+                        <div>
+                          <span>Input</span>
+                          <pre>{formatPayload(step.inputSummary)}</pre>
+                        </div>
+                        <div>
+                          <span>Output</span>
+                          <pre>{formatPayload(step.outputSummary)}</pre>
+                        </div>
+                      </div>
+                      {step.errorCode || step.errorMessage ? (
+                        <p>
+                          {step.errorCode ?? "error"}: {step.errorMessage ?? "No message"}
+                        </p>
+                      ) : null}
+                    </details>
+                  ) : null}
                 </div>
                 <span className={`badge ${stepTone(step.status)}`}>{step.status}</span>
               </article>
             ))}
+          </div>
+
+          <div className="citationSection">
+            <h3>Retrieval comparison</h3>
+            {selectedCase.retrievalHits.length ? (
+              <div className="retrievalHitGrid">
+                {selectedCase.retrievalHits.map((hit) => (
+                  <article className="citationRow" key={`${selectedCase.id}-${hit.id}`}>
+                    <div>
+                      <strong>{hit.title}</strong>
+                      <small>
+                        rank {hit.rank} / score {formatScore(hit.score)} / {hit.documentId}
+                      </small>
+                    </div>
+                    <p>{hit.locator}</p>
+                    <span className={`badge ${hit.usedAsCitation ? "" : "neutral"}`}>
+                      {hit.usedAsCitation ? "Used as citation" : "Context only"}
+                    </span>
+                    <small>
+                      ACL {hit.aclSubjects.length ? hit.aclSubjects.join(", ") : "snapshot unavailable"}
+                    </small>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <p className="emptyState">No retrieval hits synced for this case yet.</p>
+            )}
           </div>
 
           <div className="citationSection">
@@ -913,4 +990,15 @@ export function EvalWorkspace() {
       </div>
     </section>
   );
+}
+
+function formatPayload(payload: Record<string, unknown> | undefined) {
+  if (!payload || Object.keys(payload).length === 0) {
+    return "none";
+  }
+  return JSON.stringify(payload, null, 2);
+}
+
+function formatScore(value: number) {
+  return value.toFixed(2);
 }

@@ -76,7 +76,18 @@ export type EvalApiResult<T> = {
   error?: string;
 };
 
+export type RuntimeTraceEvidence = {
+  trace: EvalTraceStep[];
+  citations: EvalCitation[];
+  finding: string;
+  status: string;
+  latencyMs: number;
+  deniedCount: number;
+  endpoint?: string;
+};
+
 const endpointRoots = buildEndpointRoots();
+const runtimeEndpointRoots = buildRuntimeEndpointRoots();
 const requestTimeoutMs = 2500;
 
 const suiteCopy: Record<string, { label: string; description: string }> = {
@@ -112,6 +123,19 @@ function buildEndpointRoots() {
   }
 
   roots.push("/api/v1/eval", "/api/eval");
+  return Array.from(new Set(roots));
+}
+
+function buildRuntimeEndpointRoots() {
+  const configuredBase = process.env.NEXT_PUBLIC_AGENT_FORGE_API_BASE_URL;
+  const roots = [];
+
+  if (configuredBase) {
+    const normalizedBase = configuredBase.replace(/\/$/, "");
+    roots.push(normalizedBase.endsWith("/runs") ? normalizedBase : `${normalizedBase}/runs`);
+  }
+
+  roots.push("/api/v1/runs", "/api/runs");
   return Array.from(new Set(roots));
 }
 
@@ -153,6 +177,36 @@ async function requestEval<T>(paths: string[], init?: RequestInit): Promise<Eval
         return { ok: true, data, endpoint };
       } catch (error) {
         lastError = error instanceof Error ? error.message : "Eval API request failed.";
+      } finally {
+        window.clearTimeout(timeout);
+      }
+    }
+  }
+
+  return { ok: false, error: lastError };
+}
+
+async function requestRuntime<T>(paths: string[]): Promise<EvalApiResult<T>> {
+  let lastError = "Runtime API is not available yet.";
+
+  for (const root of runtimeEndpointRoots) {
+    for (const path of paths) {
+      const endpoint = joinEndpoint(root, path);
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), requestTimeoutMs);
+
+      try {
+        const response = await fetch(endpoint, { signal: controller.signal });
+
+        if (!response.ok) {
+          lastError = `${response.status} ${response.statusText}`.trim();
+          continue;
+        }
+
+        const data = (await response.json()) as T;
+        return { ok: true, data, endpoint };
+      } catch (error) {
+        lastError = error instanceof Error ? error.message : "Runtime API request failed.";
       } finally {
         window.clearTimeout(timeout);
       }
@@ -209,6 +263,56 @@ export async function fetchEvalOverview(): Promise<EvalApiResult<EvalOverview>> 
     ok: true,
     data: overview,
     endpoint: resultPayload?.endpoint ?? runsResult.endpoint,
+  };
+}
+
+export async function fetchRuntimeTrace(runId: string): Promise<EvalApiResult<RuntimeTraceEvidence>> {
+  if (!runId || runId.startsWith("run-")) {
+    return {
+      ok: false,
+      error: "A persisted runtime run ID is required for trace sync.",
+    };
+  }
+
+  const encodedRunId = encodeURIComponent(runId);
+  const [runResult, stepsResult, hitsResult] = await Promise.all([
+    requestRuntime<unknown>([encodedRunId]),
+    requestRuntime<unknown>([`${encodedRunId}/steps`]),
+    requestRuntime<unknown>([`${encodedRunId}/retrieval-hits`]),
+  ]);
+
+  if (!runResult.ok || !runResult.data) {
+    return withoutData(runResult);
+  }
+
+  const run = asRecord(runResult.data);
+  if (!run) {
+    return {
+      ok: false,
+      endpoint: runResult.endpoint,
+      error: "Runtime API response did not include a run record.",
+    };
+  }
+
+  const steps = arrayPayload(stepsResult.data);
+  const hits = arrayPayload(hitsResult.data);
+  const trace = mapRuntimeSteps(steps);
+  const citations = mapRuntimeCitations(run, hits);
+  const guardrail = asRecord(run.guardrail);
+  const endpoint = stepsResult.endpoint ?? runResult.endpoint;
+
+  return {
+    ok: true,
+    endpoint,
+    data: {
+      trace,
+      citations,
+      status: stringField(run, "status") ?? "unknown",
+      latencyMs: numericField(run, "latency_ms") ?? 0,
+      deniedCount: numericField(run, "retrieval_denied_count") ?? 0,
+      finding: runtimeFinding(guardrail, citations.length),
+      endpoint,
+    },
   };
 }
 
@@ -614,6 +718,100 @@ function fallbackTrace(outcome: EvalOutcome, citationCount: number): EvalTraceSt
       durationMs: 42,
     },
   ];
+}
+
+function mapRuntimeSteps(payload: unknown[]): EvalTraceStep[] {
+  return payload
+    .map((item) => {
+      const step = asRecord(item);
+      if (!step) {
+        return null;
+      }
+
+      const outputSummary = asRecord(step.output_summary);
+      const routeStage = stringField(outputSummary ?? {}, "route_stage");
+      const modelTier = stringField(outputSummary ?? {}, "model_tier");
+      const errorMessage = stringField(step, "error_message");
+      const detailParts = [
+        routeStage ? `route stage ${routeStage}` : undefined,
+        modelTier ? `model tier ${modelTier}` : undefined,
+        errorMessage,
+      ].filter(Boolean);
+
+      return {
+        name: stringField(step, "step_type") ?? "runtime_step",
+        status: normalizeStepStatus(stringField(step, "status")),
+        detail: detailParts.length ? detailParts.join(" / ") : "Runtime step persisted by API.",
+        durationMs: numericField(step, "latency_ms") ?? 0,
+      };
+    })
+    .filter((item): item is EvalTraceStep => item !== null);
+}
+
+function mapRuntimeCitations(run: Record<string, unknown>, hits: unknown[]): EvalCitation[] {
+  const runCitations = arrayField(run, "citations") ?? [];
+  if (runCitations.length) {
+    const citations: EvalCitation[] = [];
+
+    runCitations.forEach((item, index) => {
+      const citation = asRecord(item);
+      if (!citation) {
+        return;
+      }
+
+      const documentId = stringField(citation, "document_id") ?? "document";
+      citations.push({
+        id: `${documentId}-${index}`,
+        documentId,
+        title: stringField(citation, "title") ?? documentId,
+        locator: stringField(citation, "citation_locator") ?? "locator unavailable",
+        excerpt: "Citation returned by the runtime run.",
+        match: "Retrieved",
+      });
+    });
+
+    return citations;
+  }
+
+  const citations: EvalCitation[] = [];
+
+  hits.forEach((item, index) => {
+    const hit = asRecord(item);
+    if (!hit || booleanField(hit, "used_as_citation") === false) {
+      return;
+    }
+
+    const documentId = stringField(hit, "document_id") ?? "document";
+    citations.push({
+      id: `${documentId}-${index}`,
+      documentId,
+      title: stringField(hit, "title") ?? documentId,
+      locator: stringField(hit, "citation_locator") ?? "locator unavailable",
+      excerpt: "Retrieval hit stored by the runtime run.",
+      match: "Retrieved",
+    });
+  });
+
+  return citations;
+}
+
+function runtimeFinding(guardrail: Record<string, unknown> | null, citationCount: number) {
+  const outcome = stringField(guardrail ?? {}, "outcome") ?? "unknown";
+  const routeSummary = asRecord(guardrail?.model_route_summary);
+  const generator = asRecord(routeSummary?.answer_generator);
+  const generatorTier = stringField(generator ?? {}, "tier");
+  if (citationCount > 0) {
+    return `Runtime ${outcome} path returned ${citationCount} citation(s); answer generator tier ${generatorTier ?? "unknown"}.`;
+  }
+  return `Runtime ${outcome} path failed closed without generated citations.`;
+}
+
+function arrayPayload(payload: unknown): unknown[] {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+  const record = asRecord(payload);
+  return arrayField(record ?? {}, "items") ?? arrayField(record ?? {}, "data") ?? [];
 }
 
 function formatDateLabel(value: string | undefined) {

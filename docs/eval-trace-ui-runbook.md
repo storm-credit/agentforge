@@ -12,7 +12,7 @@ The Agent Studio UI currently provides the operator entry points for eval and tr
 - `/audit` is the governance and trace review landing page.
 - `/knowledge` can be used to re-check upload, indexing, and retrieval preview behavior.
 
-Use `/api/v1/eval/overview` or `/api/v1/eval/runs/latest` for the persisted report, and use the `/runs` API endpoints as the detailed trace evidence behind those screens until the full Trace Viewer is wired into the UI.
+Use `/api/v1/eval/overview` or `/api/v1/eval/runs/latest` for the persisted report. The Eval screen can now sync an individual case trace from `/runs/{run_id}`, `/steps`, and `/retrieval-hits`, while the API endpoints remain the authoritative drill-down evidence.
 
 ## Run The Eval And Keep The UI Available
 
@@ -80,7 +80,7 @@ Trace evidence to confirm:
 - No-context and policy-denied traces do not record a `generator` step because the runtime must not generate without authorized citations.
 - Retrieval hits include ACL filter snapshots and do not include unauthorized chunks.
 
-Open `Audit` in Agent Studio while reviewing trace evidence. The current page is the governance landing surface; detailed event filtering remains a follow-up to the Audit Explorer.
+Open `Audit` in Agent Studio while reviewing trace evidence. The page can sync `/api/v1/audit/events` and filter by event type, target type, and text query.
 
 ## Pass Criteria
 
@@ -96,4 +96,4 @@ The workflow passes when:
 
 ## Follow-Up
 
-Next follow-up is the full Trace Viewer: the trace-review steps should keep `/runs/{run_id}`, `/steps`, and `/retrieval-hits` as the drill-down path, but the UI should make those links first-class from each eval case.
+Next follow-up is a deeper Trace Viewer: keep `/runs/{run_id}`, `/steps`, and `/retrieval-hits` as the drill-down path, then add linked step payload expansion and retrieval-hit comparison from each eval case.

@@ -10,6 +10,7 @@ import {
   EvalSuite,
   EvalTraceStep,
   fetchEvalOverview,
+  fetchRuntimeTrace,
 } from "./api";
 
 const seedSuites: EvalSuite[] = [
@@ -611,6 +612,40 @@ export function EvalWorkspace() {
     setPendingAction(null);
   }
 
+  async function syncSelectedTrace() {
+    setPendingAction("trace");
+    const result = await fetchRuntimeTrace(selectedCase.runId);
+
+    if (result.ok && result.data) {
+      const traceEvidence = result.data;
+      setCases((currentCases) =>
+        currentCases.map((caseResult) =>
+          caseResult.id === selectedCase.id
+            ? {
+                ...caseResult,
+                citations: traceEvidence.citations.length
+                  ? traceEvidence.citations
+                  : caseResult.citations,
+                deniedCount: traceEvidence.deniedCount,
+                finding: traceEvidence.finding,
+                latencyMs: traceEvidence.latencyMs,
+                status: traceEvidence.status,
+                trace: traceEvidence.trace.length ? traceEvidence.trace : caseResult.trace,
+                traceId: traceEvidence.endpoint ?? caseResult.traceId,
+              }
+            : caseResult,
+        ),
+      );
+      setNotice(`Synced runtime trace for ${selectedCase.id} from ${result.endpoint ?? "runs API"}.`);
+    } else {
+      setNotice(
+        `Runtime trace unavailable for ${selectedCase.id} (${result.error ?? "request failed"}).`,
+      );
+    }
+
+    setPendingAction(null);
+  }
+
   function selectSuite(suiteId: string) {
     const nextCase = cases.find((caseResult) => caseResult.suiteId === suiteId);
     setSelectedSuiteId(suiteId);
@@ -791,9 +826,19 @@ export function EvalWorkspace() {
               <h2>Trace and citations</h2>
               <p>{selectedCase.id} runtime evidence.</p>
             </div>
-            <span className={`badge ${outcomeTone(selectedCase.outcome)}`}>
-              {selectedCase.outcome}
-            </span>
+            <div className="buttonRow">
+              <button
+                className="button secondary"
+                disabled={pendingAction === "trace" || isPending}
+                onClick={() => startTransition(() => void syncSelectedTrace())}
+                type="button"
+              >
+                {pendingAction === "trace" ? "Syncing" : "Sync trace"}
+              </button>
+              <span className={`badge ${outcomeTone(selectedCase.outcome)}`}>
+                {selectedCase.outcome}
+              </span>
+            </div>
           </div>
 
           <dl className="detailGrid">

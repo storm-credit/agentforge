@@ -2,7 +2,7 @@ import Link from "next/link";
 
 const readinessStats = [
   { label: "Release gate", value: "83%", note: "5 of 6 checks passing", tone: "" },
-  { label: "Open blockers", value: "1", note: "Trace viewer deep link", tone: "warn" },
+  { label: "Open blockers", value: "1", note: "Trace payload expansion", tone: "warn" },
   { label: "Eval corpus", value: "30", note: "API-backed cases", tone: "" },
 ];
 
@@ -11,7 +11,7 @@ const releaseSteps = [
   { label: "Knowledge", status: "Ready", detail: "Upload, index, ACL preview verified" },
   { label: "Runtime trace", status: "Ready", detail: "Runs, steps, retrieval hits stored" },
   { label: "Eval report", status: "Ready", detail: "Persisted through /api/v1/eval" },
-  { label: "Trace viewer", status: "Needs review", detail: "UI drill-down still pending" },
+  { label: "Trace viewer", status: "Started", detail: "Eval case runtime trace sync wired" },
 ];
 
 const evidence = [
@@ -30,7 +30,7 @@ const evidence = [
   {
     name: "Audit event coverage",
     owner: "Security",
-    state: "Review",
+    state: "Passed",
     target: "/audit",
   },
 ];
@@ -60,7 +60,7 @@ export default function Home() {
       <section className="nextAction">
         <div>
           <span className="badge warn">Next required action</span>
-          <strong>Wire eval case run IDs into a first-class Trace Viewer entry point.</strong>
+          <strong>Add step payload expansion and retrieval-hit comparison to Trace Viewer.</strong>
         </div>
         <Link className="button secondary" href="/audit">
           Inspect evidence

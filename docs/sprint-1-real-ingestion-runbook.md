@@ -50,7 +50,7 @@ For browser-based Eval/Trace review after the runner, keep the stack running:
 ./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0 -KeepStack
 ```
 
-Then follow [Eval and Trace UI Runbook](eval-trace-ui-runbook.md). In the current Sprint 1 UI, `/eval` can sync the persisted eval report, `/audit` is the governance landing page, and `/api/v1/runs/<run-id>`, `/steps`, and `/retrieval-hits` remain the authoritative runtime trace drill-down evidence until the full Trace Viewer is wired in.
+Then follow [Eval and Trace UI Runbook](eval-trace-ui-runbook.md). In the current Sprint 1 UI, `/eval` can sync the persisted eval report and pull a selected case's runtime trace, `/audit` can sync audit events, and `/api/v1/runs/<run-id>`, `/steps`, and `/retrieval-hits` remain the authoritative runtime trace drill-down evidence.
 
 The script checks:
 
@@ -94,7 +94,7 @@ After `api-eval-runner-smoke.ps1` passes with `-KeepStack`, open the Web URL pri
 - `Audit`: governance landing page for trace/audit review.
 - API trace endpoints: use a `run_id` from the runner JSON to inspect run detail, ordered steps, and retrieval hits.
 
-The current API-backed eval report is the release evidence source of truth. Treat `/api/v1/eval/overview` and `/api/v1/eval/runs/latest` as the report entry points, and use the `/runs` endpoints as the detailed trace drill-down until the full Trace Viewer is implemented.
+The current API-backed eval report is the release evidence source of truth. Treat `/api/v1/eval/overview` and `/api/v1/eval/runs/latest` as the report entry points, and use the `/runs` endpoints as the detailed trace drill-down behind the Eval trace sync.
 
 ## API Notes
 

@@ -345,3 +345,17 @@ class EvalOverviewRead(BaseModel):
 
 class EvalBaselineApproval(BaseModel):
     reason: str = Field(default="Approve eval run as baseline")
+
+
+class AuditEventRead(BaseModel):
+    id: str
+    event_type: str
+    actor_id: str
+    actor_department: str
+    target_type: str
+    target_id: str
+    reason: str
+    payload: dict[str, Any]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

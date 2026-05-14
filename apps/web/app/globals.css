@@ -638,6 +638,7 @@ p {
 }
 
 input,
+select,
 textarea {
   width: 100%;
   border: 1px solid var(--line);
@@ -647,7 +648,8 @@ textarea {
   font: inherit;
 }
 
-input {
+input,
+select {
   min-height: 40px;
   padding: 0 11px;
 }
@@ -663,6 +665,7 @@ textarea {
 }
 
 input:focus,
+select:focus,
 textarea:focus {
   border-color: var(--accent);
   outline: 3px solid var(--focus);

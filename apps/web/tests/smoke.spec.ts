@@ -87,15 +87,19 @@ test.describe("Agent Studio shell", () => {
     await expect(page.getByText(/Matched expected answer path/)).toBeVisible();
     await expect(page.getByText("Expense Reimbursement Policy")).toBeVisible();
     await expect(page.getByText("citation_validator")).toBeVisible();
+
+    await page.getByRole("button", { name: "Sync trace" }).click();
+    await expect(page.getByText(/Runtime trace unavailable/)).toBeVisible();
   });
 
-  test("audit page does not imply a queryable audit API yet", async ({ page }) => {
+  test("audit page exposes queryable audit explorer shell", async ({ page }) => {
     await page.goto("/audit");
 
     await expect(page.getByRole("heading", { name: "Audit", exact: true })).toBeVisible();
-    await expect(page.getByText("Audit read API pending")).toBeVisible();
-    await expect(page.getByText("eval_run.created")).toBeVisible();
-    await expect(page.getByText("audit.search_api")).toBeVisible();
+    await expect(page.getByText("Audit API", { exact: true })).toBeVisible();
+    await expect(page.locator(".timeline").getByText("eval_run.created", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Event type")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Sync audit" })).toBeVisible();
   });
 
   test("agent rows drive the selected governance detail panel", async ({ page }) => {

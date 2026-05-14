@@ -11,17 +11,18 @@
 5. [Orchestration Plan](orchestration-plan.md)
 6. [Agent Operating Model](agent-operating-model.md)
 7. [Deep Specialist Audit](deep-specialist-audit.md)
-8. [Open Design Adoption Review](open-design-adoption.md)
-9. [Architecture](architecture.md)
-10. [Security Model](security-model.md)
-11. [Agent Build Spec](agent-build-spec.md)
-12. [RAG Design](rag-design.md)
-13. [Implementation Plan](implementation-plan.md)
-14. [Implementation Backlog](implementation-backlog.md)
-15. [Sprint 0 Runbook](sprint-0-runbook.md)
-16. [Sprint 1 Real Ingestion Runbook](sprint-1-real-ingestion-runbook.md)
-17. [Eval and Trace UI Runbook](eval-trace-ui-runbook.md)
-18. [Evaluation Plan](evaluation-plan.md)
+8. [Agent Model Routing Policy](agent-model-routing-policy.md)
+9. [Open Design Adoption Review](open-design-adoption.md)
+10. [Architecture](architecture.md)
+11. [Security Model](security-model.md)
+12. [Agent Build Spec](agent-build-spec.md)
+13. [RAG Design](rag-design.md)
+14. [Implementation Plan](implementation-plan.md)
+15. [Implementation Backlog](implementation-backlog.md)
+16. [Sprint 0 Runbook](sprint-0-runbook.md)
+17. [Sprint 1 Real Ingestion Runbook](sprint-1-real-ingestion-runbook.md)
+18. [Eval and Trace UI Runbook](eval-trace-ui-runbook.md)
+19. [Evaluation Plan](evaluation-plan.md)
 
 ## 현재 결정
 
@@ -38,12 +39,12 @@
 
 | 전문가 | 공식 문서 |
 |---|---|
-| 오케스트라 총괄 | [Orchestration Plan](orchestration-plan.md), [Agent Operating Model](agent-operating-model.md), [Deep Specialist Audit](deep-specialist-audit.md) |
+| 오케스트라 총괄 | [Orchestration Plan](orchestration-plan.md), [Agent Operating Model](agent-operating-model.md), [Deep Specialist Audit](deep-specialist-audit.md), [Agent Model Routing Policy](agent-model-routing-policy.md) |
 | PM Agent | [Project Proposal](project-proposal.md), [Use Case Definition](use-case-definition.md) |
 | PM Agent / 오케스트라 | [Pilot Readiness](pilot-readiness.md) |
 | 수석 아키텍트 | [Architecture](architecture.md) |
 | 보안 아키텍트 | [Security Model](security-model.md) |
-| AI 아키텍트 | [Agent Build Spec](agent-build-spec.md) |
+| AI 아키텍트 | [Agent Build Spec](agent-build-spec.md), [Agent Model Routing Policy](agent-model-routing-policy.md) |
 | RAG 전문가 | [RAG Design](rag-design.md) |
 | 프론트엔드 전문가 / 오케스트라 | [Open Design Adoption Review](open-design-adoption.md) |
 | 구현 전문가 | [Implementation Plan](implementation-plan.md), [Implementation Backlog](implementation-backlog.md), [Sprint 0 Runbook](sprint-0-runbook.md), [Sprint 1 Real Ingestion Runbook](sprint-1-real-ingestion-runbook.md), [Eval and Trace UI Runbook](eval-trace-ui-runbook.md) |

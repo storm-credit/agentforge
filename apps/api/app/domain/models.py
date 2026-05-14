@@ -253,6 +253,9 @@ class EvalRun(Base):
     setup_findings: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     setup: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    model_routing_policy_ref: Mapped[str] = mapped_column(String(240), default="", nullable=False)
+    budget_class: Mapped[str] = mapped_column(String(40), default="standard", nullable=False)
+    model_route_summary: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     created_by: Mapped[str] = mapped_column(String(120), nullable=False)
     approved_baseline_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True

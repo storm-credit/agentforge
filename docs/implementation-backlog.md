@@ -41,6 +41,7 @@ This backlog translates the Agent Forge MVP design into development-ready epics 
 | AF-020 | Add synthetic corpus schema | ACL/citation cases have machine-readable expected results |
 | AF-021 | Add compose boot smoke | Fresh stack boot and health checks are repeatable |
 | AF-022 | Add Agent Studio smoke workflow | Navigation and first operator workflow pass Playwright smoke |
+| AF-023 | Add model routing policy | Agent Card config, eval reports, and runtime traces validate model tier/budget route |
 
 ## 3. Sprint Plan
 
@@ -90,7 +91,7 @@ Verification status:
 
 - Full compose boot passed on 2026-05-10 using an auto-selected web port.
 - API HTTP smoke passed for agent create/detail/update/version validate/publish.
-- Playwright route smoke passed 7/7 against the compose web service.
+- Playwright route/workflow smoke was expanded from 7 route checks to 13 checks covering active navigation, Agent selection, locked policy switch semantics, and mobile overflow.
 - Retrieval preview HTTP smoke passed for Finance vs HR ACL filtering.
 
 ### Sprint 1
@@ -123,6 +124,7 @@ Sprint 1 progress:
 - Runtime contract coverage verifies published-version gating, ACL-filtered retrieval hits, step trace ordering, and citation trace storage.
 - AF-016 citation validator started with required-citation pass/fail contracts and runtime no-citation failure trace coverage.
 - API-backed eval report persistence started with `/api/v1/eval/runs`, `/overview`, latest/result reads, and baseline approval audit events.
+- AF-023 model routing policy is now API-enforced for Agent version config and eval report persistence; runtime traces include stage-complete route metadata aligned to the shared policy contract.
 
 ### Sprint 2
 

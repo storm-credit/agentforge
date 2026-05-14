@@ -8,6 +8,11 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.core.principal import Principal, get_principal
+from app.domain.model_routing import (
+    ModelRoutingPolicyError,
+    validate_model_route_summary,
+    validate_model_routing_policy_ref,
+)
 from app.domain.models import EvalCaseResult, EvalRun
 from app.domain.schemas import (
     EvalBaselineApproval,
@@ -45,6 +50,7 @@ def create_eval_run(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> EvalRun:
+    _validate_eval_model_route_or_422(payload)
     passed = payload.passed and payload.failed_cases == 0 and not payload.setup_findings
     eval_run = EvalRun(
         corpus_id=payload.corpus_id,
@@ -58,6 +64,9 @@ def create_eval_run(
         setup_findings=list(payload.setup_findings),
         setup=dict(payload.setup),
         summary=_build_summary(payload),
+        model_routing_policy_ref=payload.model_routing_policy_ref,
+        budget_class=payload.budget_class,
+        model_route_summary=dict(payload.model_route_summary),
         created_by=principal.user_id,
     )
     db.add(eval_run)
@@ -92,6 +101,8 @@ def create_eval_run(
             "passed": eval_run.passed,
             "total_cases": eval_run.total_cases,
             "failed_cases": eval_run.failed_cases,
+            "budget_class": eval_run.budget_class,
+            "model_routing_policy_ref": eval_run.model_routing_policy_ref,
         },
     )
     db.commit()
@@ -204,4 +215,21 @@ def _build_summary(payload: EvalRunCreate) -> dict:
         "citation_coverage": citation_coverage,
         "trace_completeness": trace_completeness,
         "acl_violation_count": acl_violation_count,
+        "budget_class": payload.budget_class,
+        "model_routing_policy_ref": payload.model_routing_policy_ref,
+        "model_route_summary": payload.model_route_summary,
     }
+
+
+def _validate_eval_model_route_or_422(payload: EvalRunCreate) -> None:
+    try:
+        validate_model_routing_policy_ref(payload.model_routing_policy_ref)
+        validate_model_route_summary(
+            payload.model_route_summary,
+            budget_class=payload.budget_class,
+        )
+    except ModelRoutingPolicyError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc

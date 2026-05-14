@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.principal import Principal, get_principal
+from app.domain.model_routing import ModelRoutingPolicyError, normalize_agent_config
 from app.domain.models import Agent, AgentVersion
 from app.domain.schemas import (
     AgentCreate,
@@ -91,7 +92,9 @@ def create_agent_version(
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
-    version = AgentVersion(**payload.model_dump(), created_by=principal.user_id)
+    version_data = payload.model_dump()
+    version_data["config"] = _normalize_config_or_422(version_data["config"])
+    version = AgentVersion(**version_data, created_by=principal.user_id)
     db.add(version)
     db.flush()
     write_audit_event(
@@ -133,6 +136,7 @@ def validate_agent_version(
     if version is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent version not found")
 
+    version.config = _normalize_config_or_422(version.config)
     version.status = "validated"
     write_audit_event(
         db,
@@ -163,6 +167,8 @@ def publish_agent_version(
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
+    version.config = _normalize_config_or_422(version.config)
+
     published_versions = db.scalars(
         select(AgentVersion).where(
             AgentVersion.agent_id == version.agent_id,
@@ -186,3 +192,13 @@ def publish_agent_version(
     db.commit()
     db.refresh(version)
     return version
+
+
+def _normalize_config_or_422(config: dict) -> dict:
+    try:
+        return normalize_agent_config(config)
+    except ModelRoutingPolicyError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc

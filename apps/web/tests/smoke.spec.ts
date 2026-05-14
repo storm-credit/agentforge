@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 const routes = [
-  { path: "/", heading: "Governed agent build workspace" },
+  { path: "/", heading: "Agent readiness control" },
   { path: "/agents", heading: "Agents" },
   { path: "/knowledge", heading: "Knowledge" },
   { path: "/eval", heading: "Evaluation" },
@@ -25,6 +25,10 @@ test.describe("Agent Studio shell", () => {
 
     await primaryNav.getByRole("link", { name: "Agents", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Agents", exact: true })).toBeVisible();
+    await expect(primaryNav.getByRole("link", { name: "Agents", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
+    );
 
     await primaryNav.getByRole("link", { name: "Knowledge", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Knowledge", exact: true })).toBeVisible();
@@ -71,10 +75,10 @@ test.describe("Agent Studio shell", () => {
 
     await expect(page.getByRole("heading", { name: "Evaluation", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Synthetic corpus suites" })).toBeVisible();
-    await expect(page.getByText(/No \/api\/v1\/eval API yet/)).toBeVisible();
+    await expect(page.getByText(/Eval reports are persisted through \/api\/v1\/eval/)).toBeVisible();
 
     await page.getByRole("button", { name: "Sync API" }).click();
-    await expect(page.getByText(/Eval API not ready/)).toBeVisible();
+    await expect(page.getByText(/Persisted eval report unavailable/)).toBeVisible();
 
     await page.getByRole("button", { name: /Citation integrity/ }).click();
     await page.getByRole("button", { name: /cit_003/ }).click();
@@ -90,6 +94,38 @@ test.describe("Agent Studio shell", () => {
 
     await expect(page.getByRole("heading", { name: "Audit", exact: true })).toBeVisible();
     await expect(page.getByText("Audit read API pending")).toBeVisible();
-    await expect(page.getByText("Captured")).toHaveCount(0);
+    await expect(page.getByText("eval_run.created")).toBeVisible();
+    await expect(page.getByText("audit.search_api")).toBeVisible();
+  });
+
+  test("agent rows drive the selected governance detail panel", async ({ page }) => {
+    await page.goto("/agents");
+
+    await page.getByRole("button", { name: /Security Policy Assistant/ }).click();
+
+    await expect(
+      page.getByRole("heading", { name: "Security Policy Assistant", exact: true }),
+    ).toBeVisible();
+    await expect(page.getByText("Run ACL suite", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Security Policy Assistant/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  test("locked release policies expose real switch semantics", async ({ page }) => {
+    await page.goto("/admin/settings");
+
+    await expect(page.getByRole("switch", { name: "Citation required locked on" })).toBeChecked();
+    await expect(page.getByRole("switch", { name: "ACL filter required locked on" })).toBeChecked();
+  });
+
+  test("mobile console layout avoids horizontal overflow", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/agents");
+
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth);
+
+    expect(overflow).toBe(false);
   });
 });

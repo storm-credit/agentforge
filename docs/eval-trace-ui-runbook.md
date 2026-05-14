@@ -39,6 +39,7 @@ The runner output includes:
 - `setup.knowledge_source_id`
 - `setup.agent_id`
 - `setup.agent_version_id`
+- `model_routing_policy_ref`, `budget_class`, and `model_route_summary` with every runtime policy stage
 - per-case `case_id`, `suite`, `expected_behavior`, `passed`, `findings`, `run_id`, `status`, citation document IDs, retrieval document IDs, and denied retrieval count
 
 ## Eval UI Review
@@ -75,7 +76,8 @@ Trace evidence to confirm:
 - Answer cases have authorized citations and `guardrail.acl_filter_applied=true`.
 - Citation-required answer cases have `guardrail.citation_validation_pass=true`.
 - Refusal and denied cases do not expose forbidden documents in citations or retrieval hits.
-- Runtime steps show the actual path taken. Standard answered runs include `guard_input`, `retriever`, `generator`, `citation_validator`, and `guard_output`; input-guard refusals stop earlier.
+- Runtime steps show the actual path taken. Standard answered runs include `guard_input`, `retriever`, `generator`, `citation_validator`, and `guard_output`; the `generator` step maps to policy stage `answer_generator`; input-guard refusals stop earlier.
+- No-context and policy-denied traces do not record a `generator` step because the runtime must not generate without authorized citations.
 - Retrieval hits include ACL filter snapshots and do not include unauthorized chunks.
 
 Open `Audit` in Agent Studio while reviewing trace evidence. The current page is the governance landing surface; detailed event filtering remains a follow-up to the Audit Explorer.
@@ -87,6 +89,7 @@ The workflow passes when:
 - `api-eval-runner-smoke.ps1` exits successfully.
 - The API-backed eval report has `passed=true`.
 - `/api/v1/eval/overview` returns the persisted latest report.
+- The persisted eval report and at least one runtime run expose `model_routing_policy_ref`, `budget_class`, and stage-complete `model_route_summary`.
 - `/eval` and `/audit` render in Agent Studio.
 - At least one passing answer case has inspectable run detail, ordered steps, and retrieval hits.
 - Failed or denied cases have trace evidence explaining refusal, no-context, or policy-denied behavior without forbidden citations.

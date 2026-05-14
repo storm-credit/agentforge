@@ -1,5 +1,7 @@
 import importlib.util
+import json
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
@@ -74,10 +76,7 @@ def test_runtime_run_records_steps_hits_and_acl_trace(client):
     _index_document(
         client,
         document_id=public_document["id"],
-        source_text=(
-            "# Remote Work\n\n"
-            "Employees may request remote work after manager approval."
-        ),
+        source_text=("# Remote Work\n\nEmployees may request remote work after manager approval."),
     )
     _index_document(
         client,
@@ -109,6 +108,12 @@ def test_runtime_run_records_steps_hits_and_acl_trace(client):
     assert run["guardrail"]["acl_filter_applied"] is True
     assert run["guardrail"]["citation_count"] == 1
     assert run["guardrail"]["outcome"] == "answer"
+    assert run["guardrail"]["budget_class"] == "standard"
+    assert run["guardrail"]["model_routing_policy_ref"] == (
+        "packages/shared-contracts/model-routing-policy.v0.1.json"
+    )
+    assert run["guardrail"]["model_route_summary"]["answer_generator"]["tier"] == "standard-rag"
+    assert run["input"]["model_route_summary"]["retriever"]["tier"] == "deterministic"
     assert run["citations"][0]["document_id"] == public_document["id"]
     assert run["citations"][0]["chunk_id"]
     assert run["answer"] == "Synthetic runtime response based on 1 authorized citation(s)."
@@ -131,6 +136,10 @@ def test_runtime_run_records_steps_hits_and_acl_trace(client):
     ]
     assert steps[1]["output_summary"]["hit_count"] == 1
     assert steps[1]["output_summary"]["denied_count"] == 1
+    assert steps[1]["output_summary"]["route_stage"] == "retriever"
+    assert steps[1]["output_summary"]["model_tier"] == "deterministic"
+    assert steps[2]["output_summary"]["route_stage"] == "answer_generator"
+    assert steps[2]["output_summary"]["model_tier"] == "standard-rag"
     assert steps[3]["status"] == "succeeded"
     assert steps[3]["output_summary"]["passed"] is True
 
@@ -220,7 +229,13 @@ def test_runtime_run_fails_citation_validation_without_authorized_context(client
 
     assert steps_response.status_code == 200
     steps = steps_response.json()
-    citation_step = steps[3]
+    assert [step["step_type"] for step in steps] == [
+        "guard_input",
+        "retriever",
+        "citation_validator",
+        "guard_output",
+    ]
+    citation_step = steps[2]
     assert citation_step["step_type"] == "citation_validator"
     assert citation_step["status"] == "failed"
     assert citation_step["error_code"] == "NO_CITATION"
@@ -270,11 +285,37 @@ def test_runtime_run_marks_no_context_without_zero_score_citations(client):
     assert run["citations"] == []
     assert run["retrieval_denied_count"] == 0
     assert run["guardrail"]["outcome"] == "no_context"
+    assert run["guardrail"]["answer_source"] == "safe-fallback"
+
+    steps_response = client.get(f"/api/v1/runs/{run['id']}/steps")
+
+    assert steps_response.status_code == 200
+    assert [step["step_type"] for step in steps_response.json()] == [
+        "guard_input",
+        "retriever",
+        "citation_validator",
+        "guard_output",
+    ]
 
     hits_response = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits")
 
     assert hits_response.status_code == 200
     assert hits_response.json() == []
+
+
+def test_runtime_route_summary_matches_shared_policy_contract():
+    from app.domain.model_routing import runtime_model_route_summary
+
+    repo_root = Path(__file__).resolve().parents[3]
+    policy_path = repo_root / "packages" / "shared-contracts" / "model-routing-policy.v0.1.json"
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    runtime_agents = policy["runtime_agents"]
+    summary = runtime_model_route_summary()
+
+    assert set(summary) == set(runtime_agents)
+    for stage, route in summary.items():
+        assert route["tier"] == runtime_agents[stage]["default_tier"]
+        assert route["route_decision_source"] == runtime_agents[stage]["route_decision_source"]
 
 
 def test_runtime_refuses_write_action_before_retrieval(client):

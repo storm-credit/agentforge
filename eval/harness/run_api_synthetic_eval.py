@@ -28,6 +28,50 @@ from agentforge_eval.api_eval import (  # noqa: E402
 )
 from agentforge_eval.corpus import Corpus, Document, load_corpus  # noqa: E402
 
+MODEL_ROUTING_POLICY_REF = "packages/shared-contracts/model-routing-policy.v0.1.json"
+EVAL_MODEL_ROUTE_SUMMARY = {
+    "security_precheck": {
+        "tier": "fast-small",
+        "temperature": 0.0,
+        "route_decision_source": "input_guard",
+    },
+    "planner": {
+        "tier": "fast-small",
+        "temperature": 0.0,
+        "route_decision_source": "agent_card",
+    },
+    "retriever": {
+        "tier": "deterministic",
+        "uses": ["embedding", "reranker"],
+        "route_decision_source": "acl_filter",
+    },
+    "answer_generator": {
+        "tier": "standard-rag",
+        "temperature": 0.2,
+        "route_decision_source": "authorized_context",
+    },
+    "critic": {
+        "tier": "fast-small",
+        "escalation_tier": "deep-review",
+        "temperature": 0.0,
+        "route_decision_source": "citation_gate",
+    },
+    "security_finalcheck": {
+        "tier": "fast-small",
+        "escalation_tier": "deep-review",
+        "temperature": 0.0,
+        "route_decision_source": "output_guard",
+    },
+    "formatter": {
+        "tier": "deterministic",
+        "route_decision_source": "response_envelope",
+    },
+    "cost_latency_controller": {
+        "tier": "deterministic",
+        "route_decision_source": "budget_policy",
+    },
+}
+
 
 class ApiError(RuntimeError):
     def __init__(
@@ -244,7 +288,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         persisted_eval_run = client.post_json(
             "/eval/runs",
-            report.to_dict(),
+            _eval_run_payload(report.to_dict()),
             headers=admin_headers,
         )
     except ApiError as exc:
@@ -265,13 +309,22 @@ def main(argv: list[str] | None = None) -> int:
             results=results,
         )
 
-    report_payload = report.to_dict()
+    report_payload = _eval_run_payload(report.to_dict())
     if isinstance(persisted_eval_run, Mapping) and isinstance(persisted_eval_run.get("id"), str):
         report_payload["setup"]["eval_run_id"] = persisted_eval_run["id"]
         report_payload["setup"]["eval_api_endpoint"] = "/eval/runs"
 
     print(json.dumps(report_payload, indent=2, sort_keys=True))
     return 0 if report.passed else 1
+
+
+def _eval_run_payload(report_payload: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        **dict(report_payload),
+        "model_routing_policy_ref": MODEL_ROUTING_POLICY_REF,
+        "budget_class": "release-gate",
+        "model_route_summary": EVAL_MODEL_ROUTE_SUMMARY,
+    }
 
 
 def parse_args(argv: list[str] | None) -> argparse.Namespace:

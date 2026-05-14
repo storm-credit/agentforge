@@ -1,6 +1,6 @@
 # Deep Specialist Audit
 
-Date: 2026-05-09
+Date: 2026-05-14
 
 Orchestrator conclusion: the specialist structure is real, but the project must distinguish design depth from implementation verification.
 
@@ -19,16 +19,16 @@ Most specialist workstreams are now at D2 for design. That means they include do
 
 | Specialist | Current Depth | Evidence | Gap To D3 | Orchestrator Decision |
 |---|---:|---|---|---|
-| Orchestrator | D2.5 | Operating model, dispatch board, ADRs, docs index, Sprint 0 direction | Periodic audit cadence and objective D3 gates | Pass with follow-up |
+| Orchestrator | D2.7 | Operating model, dispatch board, ADRs, docs index, model routing policy | Periodic audit cadence and objective D3 gates | Pass with follow-up |
 | PM Agent | D2 partial | WBS, pilot checklist, backlog, risks | Real pilot owner, stakeholder map, decision calendar | Needs targeted PM follow-up |
 | Chief Architect | D2 | Control/Runtime/Data Plane, closed-net boundaries, extension rules | Architecture fitness tests and deployment validation | Pass for design |
 | Security Architect | D2 plus D3 seed | ACL matrix, deny-by-default, audit, prompt injection, cache invalidation rules | Policy tests, threat model drill, audit event validation | ACL retrieval preview started |
 | RAG/Data Specialist | D2 strong plus D3 seed | deterministic ingestion, parsing, chunking, metadata, ACL-first retrieval, citation gates | Parser smoke, fake retrieval, ACL/citation golden set | Parser smoke and chunk metadata started |
-| AI Runtime Architect | D2 strong | Agent Build contract, runtime flow, guards, critic, quality gates | Schema validation, runtime state tests, mock model gateway | Pass for design, D3 pending |
+| AI Runtime Architect | D2 strong plus model policy | Agent Build contract, runtime flow, guards, critic, quality gates, model routing policy | Schema validation, runtime state tests, model gateway route traces | Pass for design, D3 pending |
 | Backend Specialist | D2 plus D3 seed | API draft, DB draft, FastAPI skeleton, Alembic migration, audit writer | Contract tests, auth policy, CRUD completeness, run/index job models | Continue immediately |
 | Frontend Specialist | D2 | Agent Studio route IA, Builder flow, Test Chat, Run Trace, Eval Dashboard, Open Design review | Implement real Agent Studio views and Playwright smoke | Continue after API contracts firm up |
 | DevOps/MLOps | D2 | closed-net topology, release bundle, model serving, backup, monitoring, compose stack | Full compose boot, offline bundle skeleton, smoke scripts | D3 environment validation pending |
-| QA/Eval | D2 | release gates, golden set plan, deterministic scorer design, failure taxonomy | Eval case files, runner, automated ACL/citation checks | Must start before Runtime work expands |
+| QA/Eval | D2 plus D3 seed | release gates, golden set plan, deterministic scorer design, failure taxonomy, persisted eval report | Eval route metadata and baseline approval review | Continue D3 evidence |
 
 ## 3. Key Finding
 
@@ -49,6 +49,7 @@ That is expected at this point. The repository has moved from project definition
 | Frontend | Playwright smoke for navigation, Builder draft path, Trace placeholder |
 | DevOps/MLOps | compose boot smoke, DB migration smoke, offline package manifest draft |
 | QA/Eval | eval case JSON/YAML schema, 30 synthetic ACL/citation cases, scorer skeleton |
+| Model Routing | shared routing policy, Agent Card model policy, route trace in eval/runtime logs |
 
 ## 5. Immediate Dispatch
 
@@ -71,9 +72,11 @@ The orchestrator should now dispatch the next work in this order:
 | RAG + Security ACL retrieval preview API | Started | `POST /api/v1/knowledge/retrieval/preview` filters unauthorized documents |
 | Backend + RAG + QA index job skeleton | Started | `index_jobs`, `document_chunks`, and TXT/MD parser smoke |
 | Backend + RAG + Security fake vector adapter | Started | `apps/api/app/domain/vector.py` requires ACL-filtered search |
-| AI Runtime + Backend runtime trace API | Started | `POST /api/v1/runs` stores `runs`, `run_steps`, `retrieval_hits`, and audit metadata |
+| AI Runtime + Backend runtime trace API | Hardened | `POST /api/v1/runs` stores model route metadata, skips generation without citations, and maps generator traces to `answer_generator` |
 | DevOps compose smoke | Verified | `tools/smoke/compose-smoke.ps1 -Boot -WebPort 0` passed |
-| Frontend route smoke | Verified | `apps/web/tests/smoke.spec.ts` passed 7/7 |
+| Frontend route/workflow smoke | Expanded | `apps/web/tests/smoke.spec.ts` covers 13 route, workflow, semantics, and mobile checks |
+| Eval report persistence | Started | `/api/v1/eval/runs`, `/overview`, latest/result reads, baseline approval audit |
+| Agent model routing policy | Hardened | Shared contract, Agent Card config validation, eval route validation, and runtime route summary contract test |
 | PM owner closure | Pending | pilot department and document owner still open |
 
 ## 7. Acceptance Rule

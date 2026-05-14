@@ -74,6 +74,12 @@ def test_eval_run_report_can_be_persisted_and_read_as_overview(client):
     assert created["summary"]["pass_rate"] == 1
     assert created["summary"]["citation_coverage"] == 1
     assert created["summary"]["trace_completeness"] == 1
+    assert created["model_routing_policy_ref"] == (
+        "packages/shared-contracts/model-routing-policy.v0.1.json"
+    )
+    assert created["budget_class"] == "release-gate"
+    assert created["model_route_summary"]["answer_generator"]["tier"] == "standard-rag"
+    assert created["summary"]["model_route_summary"]["critic"]["escalation_tier"] == "deep-review"
     assert len(created["results"]) == 2
 
     overview_response = client.get("/api/v1/eval/overview")
@@ -137,10 +143,29 @@ def test_eval_run_baseline_approval_is_audited(client):
     assert baseline_events[0].actor_id == "qa-lead"
 
 
+def test_eval_run_rejects_incomplete_model_route_summary(client):
+    payload = _report_payload()
+    payload["model_route_summary"].pop("critic")
+
+    response = client.post(
+        "/api/v1/eval/runs",
+        headers={"X-Agent-Forge-User": "eval-api-runner"},
+        json=payload,
+    )
+
+    assert response.status_code == 422
+    assert "missing runtime stages" in response.json()["detail"]
+
+
 def _report_payload() -> dict:
+    from app.domain.model_routing import runtime_model_route_summary
+
     return {
         "corpus_id": "synthetic-corpus-v0.1",
         "mode": "api",
+        "model_routing_policy_ref": "packages/shared-contracts/model-routing-policy.v0.1.json",
+        "budget_class": "release-gate",
+        "model_route_summary": runtime_model_route_summary(),
         "passed": True,
         "total_cases": 2,
         "passed_cases": 2,

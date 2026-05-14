@@ -233,6 +233,9 @@ Current Sprint 1 command:
 - chat model version
 - embedding model version
 - reranker version
+- model routing policy version
+- budget class
+- per-stage model route summary
 - vector store type
 - corpus version
 - eval suite version

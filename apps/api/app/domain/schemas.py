@@ -290,6 +290,13 @@ class EvalCaseResultRead(EvalCaseResultCreate):
 class EvalRunCreate(BaseModel):
     corpus_id: str = Field(min_length=1, max_length=120)
     mode: str = Field(default="api", min_length=1, max_length=40)
+    model_routing_policy_ref: str = Field(
+        default="packages/shared-contracts/model-routing-policy.v0.1.json",
+        min_length=1,
+        max_length=240,
+    )
+    budget_class: str = Field(default="standard", min_length=1, max_length=40)
+    model_route_summary: dict[str, Any] = Field(default_factory=dict)
     passed: bool = False
     total_cases: int = Field(ge=0)
     passed_cases: int = Field(ge=0)
@@ -314,6 +321,9 @@ class EvalRunRead(BaseModel):
     setup_findings: list[str]
     setup: dict[str, Any]
     summary: dict[str, Any]
+    model_routing_policy_ref: str
+    budget_class: str
+    model_route_summary: dict[str, Any]
     created_by: str
     approved_baseline_at: datetime | None
     approved_baseline_by: str | None

@@ -62,6 +62,7 @@ The script checks:
 - A published agent version can run through `POST /api/v1/runs`.
 - Runtime steps and retrieval hits are stored for trace review.
 - `python eval/harness/run_api_synthetic_eval.py` uploads the 10 synthetic corpus documents, indexes them from object storage, runs all 30 cases, compares `answer`, `policy_denied`, `no_context`, and `refuse` outcomes, and stores the report in `/api/v1/eval/runs`.
+- Runtime run records and persisted eval reports include `model_routing_policy_ref`, `budget_class`, and a stage-complete `model_route_summary` using `answer_generator`, `critic`, `formatter`, and `cost_latency_controller` policy keys.
 
 ## Runtime Trace Evidence
 
@@ -71,7 +72,9 @@ The API-backed smoke creates one published agent and one runtime run against the
 - one citation from the uploaded document
 - `guardrail.acl_filter_applied=true`
 - `guardrail.citation_validation_pass=true`
+- `input.model_routing_policy_ref` and `guardrail.model_route_summary.answer_generator.tier=standard-rag`
 - five ordered runtime steps: `guard_input`, `retriever`, `generator`, `citation_validator`, `guard_output`
+- the `generator` step records `route_stage=answer_generator`; no-context and policy-denied traces must skip generation and fail closed through `citation_validator` plus `guard_output`
 - one stored retrieval hit with the uploaded chunk ID
 
 Trace review endpoints:

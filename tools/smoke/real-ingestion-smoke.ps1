@@ -161,6 +161,9 @@ $run = Invoke-RestMethod `
 Assert-Smoke ($run.status -eq "succeeded") "Expected runtime run to succeed"
 Assert-Smoke ($run.citations.Count -eq 1) "Expected runtime citation from uploaded document"
 Assert-Smoke ($run.guardrail.citation_validation_pass -eq $true) "Expected citation validator pass"
+Assert-Smoke ($run.input.model_routing_policy_ref -eq "packages/shared-contracts/model-routing-policy.v0.1.json") "Expected runtime input model routing policy ref"
+Assert-Smoke ($run.guardrail.budget_class -eq "standard") "Expected runtime standard model budget"
+Assert-Smoke ($run.guardrail.model_route_summary.answer_generator.tier -eq "standard-rag") "Expected answer generator route tier"
 
 $steps = Invoke-RestMethod `
     -Method Get `
@@ -173,6 +176,7 @@ $hits = Invoke-RestMethod `
     -Headers $headers
 
 Assert-Smoke ($steps.Count -eq 5) "Expected five runtime trace steps"
+Assert-Smoke ($steps[2].output_summary.route_stage -eq "answer_generator") "Expected generator trace route stage"
 Assert-Smoke ($hits.Count -eq 1) "Expected one stored retrieval hit"
 
 Write-Host "[smoke] Real upload ingestion smoke passed"

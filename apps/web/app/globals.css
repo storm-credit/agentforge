@@ -9,6 +9,8 @@
   --accent-strong: #0f4d63;
   --warn: #a45c21;
   --ok: #236c54;
+  --danger: #9d2e2e;
+  --focus: rgba(72, 166, 167, 0.18);
 }
 
 * {
@@ -73,6 +75,13 @@ nav a {
 
 nav a:hover {
   background: rgba(255, 255, 255, 0.09);
+}
+
+nav a.active,
+nav a[aria-current="page"] {
+  background: #e9f5f4;
+  color: #0d2b32;
+  font-weight: 800;
 }
 
 main {
@@ -187,6 +196,223 @@ p {
   display: block;
   margin-bottom: 4px;
   font-size: 28px;
+}
+
+.stat.warn {
+  border-color: #efc28d;
+  background: #fff8ef;
+}
+
+.overviewPage,
+.agentsPage,
+.auditPage,
+.settingsPage {
+  gap: 20px;
+}
+
+.nextAction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid #efc28d;
+  border-radius: 8px;
+  background: #fff8ef;
+}
+
+.nextAction div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.nextAction strong {
+  overflow-wrap: anywhere;
+}
+
+.readinessGrid,
+.agentWorkbench,
+.auditGrid,
+.settingsGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(340px, 0.75fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.releasePath {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.releasePath li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 13px 0;
+  border-top: 1px solid var(--line);
+}
+
+.releasePath li:first-child {
+  border-top: 0;
+}
+
+.releasePath p,
+.evidenceRow span,
+.agentRow span,
+.routeStep small,
+.timelineEvent p,
+.timelineEvent small {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.evidenceList,
+.agentRows,
+.gateStack,
+.configList,
+.toggleList {
+  display: grid;
+  gap: 10px;
+}
+
+.evidenceRow,
+.agentRow,
+.gateRow,
+.toggleRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 54px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.evidenceRow:hover {
+  border-color: rgba(23, 107, 135, 0.55);
+  background: #eef8f8;
+}
+
+.evidenceRow div,
+.agentRow div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.agentRow {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.agentRow strong:last-child {
+  color: var(--accent-strong);
+  font-size: 18px;
+}
+
+.agentRow:hover,
+.agentRow[aria-pressed="true"] {
+  border-color: rgba(23, 107, 135, 0.55);
+  background: #eef8f8;
+}
+
+.agentRow:focus-visible {
+  border-color: var(--accent);
+  outline: 3px solid var(--focus);
+}
+
+.agentDetailPanel {
+  position: sticky;
+  top: 24px;
+}
+
+.modelRouteGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.routeStep {
+  display: grid;
+  gap: 6px;
+  min-height: 104px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.routeStep span {
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.timeline {
+  display: grid;
+}
+
+.timelineEvent {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+
+.timelineEvent:first-child {
+  border-top: 0;
+}
+
+.timelineEvent small {
+  grid-column: 2 / 4;
+}
+
+.timelineDot {
+  width: 12px;
+  height: 12px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px #e4f4f2;
+}
+
+.configList label {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.configList input:disabled {
+  background: #f4f7f8;
+  color: #526273;
+}
+
+.toggleRow {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.toggleInput {
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  accent-color: var(--accent);
 }
 
 .statusList {
@@ -439,7 +665,7 @@ textarea {
 input:focus,
 textarea:focus {
   border-color: var(--accent);
-  outline: 3px solid rgba(72, 166, 167, 0.18);
+  outline: 3px solid var(--focus);
 }
 
 .fieldGrid {
@@ -791,6 +1017,11 @@ textarea:focus {
 
   .knowledgeFlow,
   .knowledgeGrid,
+  .readinessGrid,
+  .agentWorkbench,
+  .auditGrid,
+  .settingsGrid,
+  .modelRouteGrid,
   .suiteGrid,
   .evalGrid,
   .runSummaryGrid,
@@ -806,6 +1037,12 @@ textarea:focus {
   .metadataList div,
   .sectionHeading,
   .retrievalResult div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .nextAction,
+  .nextAction div {
     align-items: stretch;
     flex-direction: column;
   }
@@ -830,6 +1067,27 @@ textarea:focus {
   .traceStep .badge {
     grid-column: 2;
     justify-self: start;
+  }
+
+  .releasePath li,
+  .agentRow,
+  .timelineEvent,
+  .toggleRow {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .releasePath .badge,
+  .agentRow .badge,
+  .agentRow strong:last-child,
+  .timelineEvent .badge,
+  .timelineEvent small,
+  .toggleRow .badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .agentDetailPanel {
+    position: static;
   }
 }
 

@@ -42,7 +42,7 @@ To boot the compose stack and then run the eval smoke:
 ./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0
 ```
 
-The wrapper stops the compose stack after the run unless `-KeepStack` is passed.
+The wrapper auto-selects an API port when booting the stack, and stops the compose stack after the run unless `-KeepStack` is passed.
 
 For browser-based Eval/Trace review after the runner, keep the stack running:
 

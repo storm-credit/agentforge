@@ -22,7 +22,7 @@ From the repository root:
 ./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0 -KeepStack
 ```
 
-Use `-KeepStack` for UI review. Without it, the wrapper stops the compose stack after the smoke completes. The compose smoke prints the selected Web port when `-WebPort 0` is used.
+Use `-KeepStack` for UI review. Without it, the wrapper stops the compose stack after the smoke completes. When booting, the wrapper auto-selects the API port to avoid local conflicts, and the compose smoke prints the selected Web port when `-WebPort 0` is used.
 
 If the stack is already running:
 

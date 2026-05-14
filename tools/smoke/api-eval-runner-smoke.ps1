@@ -1,6 +1,7 @@
 param(
     [string]$ApiBaseUrl = "http://127.0.0.1:8000/api/v1",
     [switch]$BootStack,
+    [int]$ApiPort = 0,
     [int]$WebPort = 0,
     [switch]$SkipSyntheticHarness,
     [switch]$SkipApiEval,
@@ -14,13 +15,32 @@ function Write-Step {
     Write-Host "[smoke] $Message"
 }
 
+function Resolve-Port {
+    param([int]$RequestedPort)
+
+    if ($RequestedPort -ne 0) {
+        return $RequestedPort
+    }
+
+    $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 0)
+    $listener.Start()
+    try {
+        return $listener.LocalEndpoint.Port
+    }
+    finally {
+        $listener.Stop()
+    }
+}
+
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "../..")
 Push-Location $repoRoot
 
 try {
     if ($BootStack) {
+        $ApiPort = Resolve-Port -RequestedPort $ApiPort
+        $ApiBaseUrl = "http://127.0.0.1:$ApiPort/api/v1"
         Write-Step "Booting local compose stack"
-        & (Join-Path $PSScriptRoot "compose-smoke.ps1") -Boot -WebPort $WebPort
+        & (Join-Path $PSScriptRoot "compose-smoke.ps1") -Boot -ApiPort $ApiPort -WebPort $WebPort
     }
 
     if (-not $SkipSyntheticHarness) {

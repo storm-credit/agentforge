@@ -106,6 +106,12 @@ def test_agent_and_version_contract(client):
     assert version["agent_id"] == agent["id"]
     assert version["version"] == 1
     assert version["created_by"] == "agent-owner"
+    assert version["config"]["model_policy"]["routing_profile_ref"] == (
+        "packages/shared-contracts/model-routing-policy.v0.1.json"
+    )
+    assert version["config"]["model_policy"]["stages"]["answer_generator"]["tier"] == (
+        "standard-rag"
+    )
 
     versions_response = client.get(f"/api/v1/agents/{agent['id']}/versions")
 
@@ -136,6 +142,39 @@ def test_agent_and_version_contract(client):
     listed_agents = list_response.json()
     assert [item["id"] for item in listed_agents] == [agent["id"]]
     assert listed_agents[0]["status"] == "published"
+
+
+def test_agent_version_rejects_invalid_model_policy(client):
+    agent_response = client.post(
+        "/api/v1/agents",
+        json={
+            "name": "Invalid Policy Assistant",
+            "purpose": "Exercise model policy validation.",
+            "owner_department": "Operations",
+        },
+    )
+    agent = agent_response.json()
+
+    version_response = client.post(
+        "/api/v1/agents/versions",
+        json={
+            "agent_id": agent["id"],
+            "version": 1,
+            "config": {
+                "model_policy": {
+                    "routing_profile_ref": "packages/shared-contracts/model-routing-policy.v0.1.json",
+                    "budget_class": "standard",
+                    "stages": {
+                        "security_precheck": {"tier": "fast-small"},
+                        "planner": {"tier": "fast-small"},
+                    },
+                }
+            },
+        },
+    )
+
+    assert version_response.status_code == 422
+    assert "missing runtime stages" in version_response.json()["detail"]
 
 
 def test_knowledge_source_and_document_contract(client):

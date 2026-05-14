@@ -41,6 +41,7 @@ This backlog translates the Agent Forge MVP design into development-ready epics 
 | AF-020 | Add synthetic corpus schema | ACL/citation cases have machine-readable expected results |
 | AF-021 | Add compose boot smoke | Fresh stack boot and health checks are repeatable |
 | AF-022 | Add Agent Studio smoke workflow | Navigation and first operator workflow pass Playwright smoke |
+| AF-023 | Add model routing policy | Agent Card config, eval reports, and runtime traces validate model tier/budget route |
 
 ## 3. Sprint Plan
 
@@ -61,7 +62,7 @@ Scope:
 Current implementation:
 
 - `apps/api` contains the FastAPI service, metadata routes, SQLAlchemy models, Alembic base, and audit event writer.
-- `apps/web` contains the Next.js shell for Overview, Agents, Knowledge, Eval, Audit, and Settings.
+- `apps/web` contains the Next.js shell for Overview, Agents, Knowledge, Eval, Trace, Audit, and Settings.
 - `deploy/compose/docker-compose.dev.yaml` defines Postgres, MinIO, Qdrant, API, and Web services.
 - `docs/sprint-0-runbook.md` describes the local run path.
 
@@ -90,7 +91,7 @@ Verification status:
 
 - Full compose boot passed on 2026-05-10 using an auto-selected web port.
 - API HTTP smoke passed for agent create/detail/update/version validate/publish.
-- Playwright route smoke passed 7/7 against the compose web service.
+- Playwright route/workflow smoke was expanded to cover active navigation, Agent selection, locked policy switch semantics, trace review, and mobile overflow.
 - Retrieval preview HTTP smoke passed for Finance vs HR ACL filtering.
 
 ### Sprint 1
@@ -119,9 +120,14 @@ Sprint 1 progress:
 - AF-011 TXT/MD parser smoke started with deterministic chunk IDs, line locators, and heading paths.
 - `tools/smoke/indexing-smoke.ps1` verifies job creation, chunk metadata, chunk retrieval preview, and fail-closed no-ACL indexing.
 - AF-012 vector adapter interface started with a deterministic fake adapter and ACL-required search contract.
+- Qdrant adapter wiring started behind `AGENT_FORGE_VECTOR_STORE_BACKEND=qdrant`, with ACL filters pushed into the vector query and adapter metadata captured in trace/audit payloads.
 - AF-015 runtime run API skeleton started with `runs`, `run_steps`, `retrieval_hits`, and `POST /api/v1/runs`.
 - Runtime contract coverage verifies published-version gating, ACL-filtered retrieval hits, step trace ordering, and citation trace storage.
 - AF-016 citation validator started with required-citation pass/fail contracts and runtime no-citation failure trace coverage.
+- API-backed eval report persistence started with `/api/v1/eval/runs`, `/overview`, latest/result reads, and baseline approval audit events.
+- AF-023 model routing policy is now API-enforced for Agent version config and eval report persistence; runtime traces include stage-complete route metadata aligned to the shared policy contract.
+- Audit read/search API started at `/api/v1/audit/events` with event type, actor, target, and text filters.
+- Agent Studio now has Trace Viewer entry points: Eval cases can sync the selected `run_id` through `/runs/{run_id}`, `/steps`, and `/retrieval-hits`, open `/trace?run_id=<run-id>`, then inspect step payloads and retrieval-hit comparison from a shareable URL.
 
 ### Sprint 2
 
@@ -130,12 +136,13 @@ Goal: minimal real RAG works with ACL filtering and citations.
 Scope:
 
 - One embedding adapter
-- One vector store adapter, Qdrant or pgvector
-- ACL-aware vector search
+- One vector store adapter, Qdrant or pgvector - Qdrant wiring started
+- ACL-aware vector search - Qdrant adapter pushes access group, clearance, status, and knowledge source filters into the query
 - Answer-generation mock or local model gateway
 - Citation validator
 - Test Chat UI draft
-- Run Trace Viewer draft
+- Trace URL links from audit/event detail and richer timing controls
+- Audit Explorer result detail and saved filter presets
 - ACL/citation golden set execution
 
 ## 4. Release Gate

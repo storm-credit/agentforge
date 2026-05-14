@@ -39,7 +39,7 @@ model_policy:
     provider: "internal_gateway"
     model: "local-llm-small"
     temperature: 0.0
-  generator:
+  answer_generator:
     provider: "internal_gateway"
     model: "local-llm-rag"
     temperature: 0.2
@@ -86,6 +86,51 @@ quality_gates:
 observability:
   retention_days: 180
 ```
+
+## Model Routing
+
+Agent Card `model_policy` must follow the orchestrated routing policy in [Agent Model Routing Policy](agent-model-routing-policy.md). The key rule is deterministic first, small model for routing, standard model for grounded generation, and deep-review model only for gated judgement.
+
+Recommended MVP profile:
+
+```yaml
+model_policy:
+  routing_profile_ref: "packages/shared-contracts/model-routing-policy.v0.1.json"
+  budget_class: "standard"
+  stages:
+    security_precheck:
+      tier: "fast-small"
+      temperature: 0.0
+      max_tokens: 400
+    planner:
+      tier: "fast-small"
+      temperature: 0.0
+      max_tokens: 800
+    retriever:
+      tier: "deterministic"
+      embedding_tier: "embedding"
+      reranker_tier: "reranker"
+    answer_generator:
+      tier: "standard-rag"
+      temperature: 0.2
+      max_tokens: 2400
+    critic:
+      tier: "fast-small"
+      escalation_tier: "deep-review"
+      temperature: 0.0
+      max_tokens: 1200
+    security_finalcheck:
+      tier: "fast-small"
+      escalation_tier: "deep-review"
+      temperature: 0.0
+      max_tokens: 800
+  fallback:
+    on_timeout: "safe-fallback"
+    on_model_error: "safe_failure"
+    on_policy_conflict: "deep-review"
+```
+
+The Agent Registry should reject production publish when a runtime stage has no explicit tier or when ACL/security decisions depend only on an unverified generator answer.
 
 ## Runtime Flow
 

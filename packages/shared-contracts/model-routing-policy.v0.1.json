@@ -1,0 +1,194 @@
+{
+  "schema_version": "agentforge.model_routing_policy/v0.1",
+  "policy_id": "mvp-rag-model-routing-v0.1",
+  "default_budget_class": "standard",
+  "model_tiers": {
+    "deterministic": {
+      "purpose": "Schema validation, ACL filtering, scoring, static routing, and response formatting.",
+      "generative": false,
+      "max_latency_ms": 100,
+      "allowed_for": ["validation", "acl_filter", "formatting", "scoring", "budget_routing"]
+    },
+    "fast-small": {
+      "purpose": "Low-risk classification, extraction, planning, and bounded critique.",
+      "generative": true,
+      "temperature": 0.0,
+      "max_input_tokens": 4000,
+      "max_output_tokens": 1200,
+      "max_latency_ms": 1500,
+      "allowed_for": ["intent_classification", "risk_labeling", "query_planning", "short_critique"]
+    },
+    "standard-rag": {
+      "purpose": "Grounded answer generation from authorized retrieved context.",
+      "generative": true,
+      "temperature": 0.2,
+      "max_input_tokens": 12000,
+      "max_output_tokens": 2400,
+      "max_latency_ms": 5000,
+      "allowed_for": ["grounded_generation", "workflow_review", "specialist_draft"]
+    },
+    "deep-review": {
+      "purpose": "Security, architecture, release-gate, incident, and failed-case review.",
+      "generative": true,
+      "temperature": 0.0,
+      "max_input_tokens": 24000,
+      "max_output_tokens": 4000,
+      "max_latency_ms": 12000,
+      "allowed_for": ["release_gate", "security_review", "architecture_review", "incident_triage", "policy_conflict"]
+    },
+    "embedding": {
+      "purpose": "Document chunk and query embeddings.",
+      "generative": false,
+      "version_pinned": true,
+      "allowed_for": ["indexing", "query_embedding"]
+    },
+    "reranker": {
+      "purpose": "Ranking authorized retrieval candidates after ACL filtering.",
+      "generative": false,
+      "version_pinned": true,
+      "allowed_for": ["post_acl_rerank"]
+    },
+    "safe-fallback": {
+      "purpose": "Safe failure response for timeout, policy conflict, or model outage.",
+      "generative": false,
+      "allowed_for": ["timeout_response", "model_error_response", "policy_conflict_response"]
+    }
+  },
+  "budget_classes": {
+    "smoke": {
+      "p95_latency_ms": 3000,
+      "deep_review_allowed": false
+    },
+    "standard": {
+      "p95_latency_ms": 8000,
+      "deep_review_allowed": true,
+      "deep_review_max_calls": 1
+    },
+    "release-gate": {
+      "p95_latency_ms": 15000,
+      "deep_review_allowed": true,
+      "deep_review_required_for": ["failed_case_triage", "baseline_approval", "policy_change"]
+    },
+    "incident": {
+      "p95_latency_ms": 30000,
+      "deep_review_allowed": true,
+      "deep_review_required_for": ["acl_leak", "audit_failure", "security_bypass"]
+    }
+  },
+  "project_specialist_agents": {
+    "orchestrator": {
+      "default_tier": "fast-small",
+      "escalation_tier": "deep-review",
+      "escalate_when": ["scope_conflict", "release_decision", "cross_workstream_conflict"],
+      "d3_evidence": ["decision_log", "dispatch_board", "release_gate_status"]
+    },
+    "pm_agent": {
+      "default_tier": "fast-small",
+      "escalation_tier": "standard-rag",
+      "escalate_when": ["pilot_risk", "stakeholder_tradeoff", "acceptance_change"],
+      "d3_evidence": ["owner_matrix", "risk_log", "decision_calendar"]
+    },
+    "chief_architect": {
+      "default_tier": "standard-rag",
+      "escalation_tier": "deep-review",
+      "escalate_when": ["service_boundary_change", "data_ownership_change", "deployment_topology_change"],
+      "d3_evidence": ["architecture_fitness_test", "compose_or_release_validation"]
+    },
+    "security_architect": {
+      "default_tier": "deep-review",
+      "escalation_tier": "deep-review",
+      "escalate_when": ["acl_policy", "audit_policy", "pii_policy", "prompt_injection_policy"],
+      "d3_evidence": ["policy_test", "threat_model_update", "audit_event_validation"]
+    },
+    "ai_runtime_architect": {
+      "default_tier": "standard-rag",
+      "escalation_tier": "deep-review",
+      "escalate_when": ["agent_contract_change", "runtime_flow_change", "model_policy_change"],
+      "d3_evidence": ["agent_card_schema", "runtime_state_test", "model_route_trace"]
+    },
+    "rag_data_specialist": {
+      "default_tier": "standard-rag",
+      "escalation_tier": "deep-review",
+      "escalate_when": ["chunking_change", "acl_retrieval_change", "citation_failure"],
+      "d3_evidence": ["parser_smoke", "retrieval_contract", "eval_case"]
+    },
+    "backend_specialist": {
+      "default_tier": "standard-rag",
+      "escalation_tier": "deep-review",
+      "escalate_when": ["migration", "auth_boundary", "audit_persistence"],
+      "d3_evidence": ["contract_test", "integration_test", "migration_smoke"]
+    },
+    "frontend_specialist": {
+      "default_tier": "fast-small",
+      "escalation_tier": "standard-rag",
+      "escalate_when": ["operator_workflow", "error_state", "release_gate_ui"],
+      "d3_evidence": ["playwright_smoke", "ui_runbook"]
+    },
+    "devops_mlops": {
+      "default_tier": "standard-rag",
+      "escalation_tier": "deep-review",
+      "escalate_when": ["closed_net_release", "model_serving", "backup_restore"],
+      "d3_evidence": ["compose_smoke", "offline_manifest", "install_runbook"]
+    },
+    "qa_eval": {
+      "default_tier": "standard-rag",
+      "escalation_tier": "deep-review",
+      "escalate_when": ["release_gate", "failed_case_triage", "scorer_policy"],
+      "d3_evidence": ["eval_report", "failure_taxonomy", "baseline_approval"]
+    }
+  },
+  "runtime_agents": {
+    "security_precheck": {
+      "default_tier": "fast-small",
+      "route_decision_source": "input_guard",
+      "deterministic_first": true,
+      "escalation_tier": "deep-review",
+      "escalate_when": ["high_risk_export", "prompt_injection_uncertain", "personal_data_uncertain"]
+    },
+    "planner": {
+      "default_tier": "fast-small",
+      "route_decision_source": "agent_card",
+      "escalation_tier": "standard-rag",
+      "escalate_when": ["ambiguous_intent", "multi_source_plan"],
+      "must_not": ["final_answer_generation", "acl_override"]
+    },
+    "retriever": {
+      "default_tier": "deterministic",
+      "route_decision_source": "acl_filter",
+      "uses": ["embedding", "reranker"],
+      "must": ["apply_acl_before_rerank", "return_citation_locators"],
+      "must_not": ["send_unauthorized_chunks_to_reranker"]
+    },
+    "answer_generator": {
+      "default_tier": "standard-rag",
+      "route_decision_source": "authorized_context",
+      "must": ["use_authorized_context_only", "include_citations"],
+      "must_not": ["answer_without_citation", "change_acl_decision"]
+    },
+    "critic": {
+      "default_tier": "fast-small",
+      "route_decision_source": "citation_gate",
+      "escalation_tier": "deep-review",
+      "escalate_when": ["release_gate_failure", "citation_conflict", "security_sensitive_answer"],
+      "max_rewrites": 1
+    },
+    "security_finalcheck": {
+      "default_tier": "fast-small",
+      "route_decision_source": "output_guard",
+      "escalation_tier": "deep-review",
+      "escalate_when": ["possible_acl_leak", "pii_detected", "policy_conflict"],
+      "must": ["block_or_mask_before_response"]
+    },
+    "formatter": {
+      "default_tier": "deterministic",
+      "route_decision_source": "response_envelope",
+      "must_not": ["add_new_facts"]
+    },
+    "cost_latency_controller": {
+      "default_tier": "deterministic",
+      "route_decision_source": "budget_policy",
+      "must": ["record_model_route", "enforce_budget_class"],
+      "must_not": ["downgrade_after_generation_started"]
+    }
+  }
+}

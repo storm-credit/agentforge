@@ -10,6 +10,11 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.database import get_db
 from app.core.principal import Principal, get_principal
 from app.domain.citations import CitationValidationResult, validate_run_citations
+from app.domain.model_routing import (
+    MODEL_ROUTING_POLICY_REF,
+    ModelRoutingPolicyError,
+    runtime_policy_from_agent_config,
+)
 from app.domain.models import Agent, AgentVersion, Document, RetrievalHit, Run, RunStep
 from app.domain.schemas import (
     RetrievalHitRead,
@@ -17,8 +22,9 @@ from app.domain.schemas import (
     RunRead,
     RunStepRead,
 )
-from app.domain.vector import FakeVectorStore, VectorQuery, VectorSearchResult, build_acl_filter
+from app.domain.vector import VectorQuery, VectorSearchResult, build_acl_filter
 from app.infra.audit import write_audit_event
+from app.infra.vector_store import get_vector_store
 
 router = APIRouter()
 
@@ -43,6 +49,13 @@ def create_run(
     acl_filter = build_acl_filter(principal)
     started_at = datetime.now(UTC)
     timer_start = perf_counter()
+    try:
+        budget_class, model_route = runtime_policy_from_agent_config(agent_version.config)
+    except ModelRoutingPolicyError as exc:
+        raise HTTPException(
+            status_code=422,
+            detail=str(exc),
+        ) from exc
 
     run = Run(
         agent_id=agent.id,
@@ -56,11 +69,95 @@ def create_run(
             "debug": payload.debug,
             "knowledge_source_ids": knowledge_source_ids,
             "top_k": payload.top_k,
+            "budget_class": budget_class,
+            "model_routing_policy_ref": MODEL_ROUTING_POLICY_REF,
+            "model_route_summary": model_route,
         },
         started_at=started_at,
     )
     db.add(run)
     db.flush()
+
+    guard_decision = _input_guard_decision(payload.input.message)
+    if guard_decision is not None:
+        outcome = guard_decision["outcome"]
+        _add_step(
+            db,
+            run=run,
+            order=1,
+            step_type="guard_input",
+            input_summary={"message_length": len(payload.input.message)},
+            output_summary={
+                "allowed": False,
+                "risk_level": "blocked",
+                "outcome": outcome,
+                "reason": guard_decision["reason"],
+                "route_stage": "security_precheck",
+                "model_tier": model_route["security_precheck"]["tier"],
+            },
+            started_at=started_at,
+            status="failed",
+            error_code=guard_decision["code"],
+            error_message=guard_decision["message"],
+        )
+        _add_step(
+            db,
+            run=run,
+            order=2,
+            step_type="guard_output",
+            input_summary={"answer_length": len(guard_decision["answer"])},
+            output_summary={
+                "security_finalcheck_pass": False,
+                "citation_count": 0,
+                "outcome": outcome,
+                "route_stage": "security_finalcheck",
+                "model_tier": model_route["security_finalcheck"]["tier"],
+            },
+            status="failed",
+            error_code=guard_decision["code"],
+            error_message=guard_decision["message"],
+        )
+        run.status = "failed"
+        run.answer = guard_decision["answer"]
+        run.citations = []
+        run.retrieval_denied_count = 0
+        run.guardrail = {
+            "acl_filter_applied": False,
+            "citation_required": bool(agent_version.config.get("citation_required", True)),
+            "citation_count": 0,
+            "citation_validation_pass": False,
+            "citation_validation_error_code": guard_decision["code"],
+            "citation_validation_missing_fields": [],
+            "pii_masked": False,
+            "security_finalcheck_pass": False,
+            "outcome": outcome,
+            "input_guard_pass": False,
+            "input_guard_reason": guard_decision["reason"],
+            "budget_class": budget_class,
+            "model_routing_policy_ref": MODEL_ROUTING_POLICY_REF,
+            "model_route_summary": model_route,
+        }
+        run.finished_at = datetime.now(UTC)
+        run.latency_ms = max(1, int((perf_counter() - timer_start) * 1000))
+        write_audit_event(
+            db,
+            principal=principal,
+            event_type=f"run.{outcome}",
+            target_type="run",
+            target_id=run.id,
+            payload={
+                "agent_id": run.agent_id,
+                "agent_version_id": run.agent_version_id,
+                "query_length": len(payload.input.message),
+                "reason": guard_decision["reason"],
+                "step_count": 2,
+                "budget_class": budget_class,
+                "model_routing_policy_ref": MODEL_ROUTING_POLICY_REF,
+            },
+        )
+        db.commit()
+        db.refresh(run)
+        return run
 
     _add_step(
         db,
@@ -68,7 +165,12 @@ def create_run(
         order=1,
         step_type="guard_input",
         input_summary={"message_length": len(payload.input.message)},
-        output_summary={"allowed": True, "risk_level": "low"},
+        output_summary={
+            "allowed": True,
+            "risk_level": "low",
+            "route_stage": "security_precheck",
+            "model_tier": model_route["security_precheck"]["tier"],
+        },
         started_at=started_at,
     )
 
@@ -92,7 +194,9 @@ def create_run(
         output_summary={
             "hit_count": len(vector_result.hits),
             "denied_count": vector_result.denied_count,
-            "vector_adapter": "fake",
+            "vector_adapter": vector_result.adapter_name,
+            "route_stage": "retriever",
+            "model_tier": model_route["retriever"]["tier"],
         },
     )
 
@@ -117,7 +221,7 @@ def create_run(
                     "subjects": list(acl_filter.subjects),
                     "clearance_level": acl_filter.clearance_level,
                     "knowledge_source_ids": knowledge_source_ids,
-                    "vector_adapter": "fake",
+                    "vector_adapter": vector_result.adapter_name,
                 },
             )
         )
@@ -135,6 +239,9 @@ def create_run(
     run.answer = _build_synthetic_answer(len(citations))
     run.citations = citations
     run.retrieval_denied_count = vector_result.denied_count
+    outcome = _runtime_outcome(
+        citation_count=len(citations), denied_count=vector_result.denied_count
+    )
     citation_required = bool(agent_version.config.get("citation_required", True))
     citation_validation = validate_run_citations(
         citations,
@@ -149,48 +256,69 @@ def create_run(
         "citation_validation_missing_fields": list(citation_validation.missing_fields),
         "pii_masked": False,
         "security_finalcheck_pass": citation_validation.passed,
+        "outcome": outcome,
+        "input_guard_pass": True,
+        "budget_class": budget_class,
+        "model_routing_policy_ref": MODEL_ROUTING_POLICY_REF,
+        "model_route_summary": model_route,
     }
+
+    next_step_order = 3
+    if citations:
+        _add_step(
+            db,
+            run=run,
+            order=next_step_order,
+            step_type="generator",
+            input_summary={"context_count": len(citations)},
+            output_summary={
+                "answer_length": len(run.answer),
+                "citation_count": len(citations),
+                "mode": "synthetic",
+                "route_stage": "answer_generator",
+                "model_tier": model_route["answer_generator"]["tier"],
+            },
+        )
+        next_step_order += 1
+    else:
+        run.guardrail["answer_source"] = "safe-fallback"
 
     _add_step(
         db,
         run=run,
-        order=3,
-        step_type="generator",
-        input_summary={"context_count": len(citations)},
-        output_summary={
-            "answer_length": len(run.answer),
-            "citation_count": len(citations),
-            "mode": "synthetic",
-        },
-    )
-    _add_step(
-        db,
-        run=run,
-        order=4,
+        order=next_step_order,
         step_type="citation_validator",
         input_summary={
             "citation_required": citation_validation.required,
             "citation_count": citation_validation.citation_count,
         },
-        output_summary=_citation_validation_summary(citation_validation),
-        status="succeeded" if citation_validation.passed else "failed",
-        error_code=citation_validation.error_code,
-        error_message=citation_validation.error_message,
-    )
-    _add_step(
-        db,
-        run=run,
-        order=5,
-        step_type="guard_output",
-        input_summary={"answer_length": len(run.answer)},
         output_summary={
-            "security_finalcheck_pass": citation_validation.passed,
-            "citation_count": len(citations),
+            **_citation_validation_summary(citation_validation),
+            "route_stage": "critic",
+            "model_tier": model_route["critic"]["tier"],
         },
         status="succeeded" if citation_validation.passed else "failed",
         error_code=citation_validation.error_code,
         error_message=citation_validation.error_message,
     )
+    next_step_order += 1
+    _add_step(
+        db,
+        run=run,
+        order=next_step_order,
+        step_type="guard_output",
+        input_summary={"answer_length": len(run.answer)},
+        output_summary={
+            "security_finalcheck_pass": citation_validation.passed,
+            "citation_count": len(citations),
+            "route_stage": "security_finalcheck",
+            "model_tier": model_route["security_finalcheck"]["tier"],
+        },
+        status="succeeded" if citation_validation.passed else "failed",
+        error_code=citation_validation.error_code,
+        error_message=citation_validation.error_message,
+    )
+    next_step_order += 1
 
     run.status = "succeeded" if citation_validation.passed else "failed"
     run.finished_at = datetime.now(UTC)
@@ -211,7 +339,10 @@ def create_run(
             "retrieval_denied_count": vector_result.denied_count,
             "citation_validation_pass": citation_validation.passed,
             "citation_validation_error_code": citation_validation.error_code,
-            "step_count": 5,
+            "step_count": next_step_order - 1,
+            "budget_class": budget_class,
+            "model_routing_policy_ref": MODEL_ROUTING_POLICY_REF,
+            "vector_adapter": vector_result.adapter_name,
         },
     )
     db.commit()
@@ -234,9 +365,7 @@ def list_run_steps(run_id: str, db: Session = Depends(get_db)) -> list[RunStep]:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
     return list(
-        db.scalars(
-            select(RunStep).where(RunStep.run_id == run_id).order_by(RunStep.step_order)
-        )
+        db.scalars(select(RunStep).where(RunStep.run_id == run_id).order_by(RunStep.step_order))
     )
 
 
@@ -313,7 +442,7 @@ def _search_authorized_context(
             .order_by(Document.created_at.desc())
         )
     )
-    return FakeVectorStore().search(
+    return get_vector_store().search(
         query=VectorQuery(
             query_text=query_text,
             knowledge_source_ids=tuple(knowledge_source_ids),
@@ -372,3 +501,55 @@ def _build_synthetic_answer(citation_count: int) -> str:
         return "No authorized context was available for this runtime run."
 
     return f"Synthetic runtime response based on {citation_count} authorized citation(s)."
+
+
+def _runtime_outcome(*, citation_count: int, denied_count: int) -> str:
+    if citation_count > 0:
+        return "answer"
+    if denied_count > 0:
+        return "policy_denied"
+    return "no_context"
+
+
+def _input_guard_decision(message: str) -> dict[str, str] | None:
+    normalized = " ".join(message.casefold().split())
+    guard_checks = (
+        (
+            "no_context",
+            "NO_CONTEXT_HALLUCINATION_REQUEST",
+            "no_context",
+            "No grounded context is available, and the runtime will not make up an answer.",
+            ("make up", "cannot find"),
+        ),
+        (
+            "refuse",
+            "WRITE_ACTION_NOT_SUPPORTED",
+            "write_action",
+            "Write actions are not supported by this document RAG runtime.",
+            ("update", "record"),
+        ),
+        (
+            "refuse",
+            "PERSONAL_DATA_REQUEST",
+            "personal_data",
+            "Personal data cannot be disclosed by this runtime.",
+            ("personal phone number",),
+        ),
+        (
+            "refuse",
+            "PROMPT_INJECTION_REFUSED",
+            "prompt_injection",
+            "Instruction override requests do not change Agent Forge policy.",
+            ("bypass", "acl"),
+        ),
+    )
+    for outcome, code, reason, answer, required_terms in guard_checks:
+        if all(term in normalized for term in required_terms):
+            return {
+                "outcome": outcome,
+                "code": code,
+                "reason": reason,
+                "message": answer,
+                "answer": answer,
+            }
+    return None

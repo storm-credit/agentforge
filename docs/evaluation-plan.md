@@ -201,10 +201,19 @@ ACL 위반은 심각도와 무관하게 blocker다.
 1. Full integration stack 기동
 2. synthetic corpus ingest
 3. indexing 완료 확인
-4. golden set eval run
+4. API-backed golden set eval run
 5. deterministic scoring
-6. report artifact 저장
-7. baseline diff 생성
+6. Eval/Trace UI review
+7. report artifact 저장
+8. baseline diff 생성
+
+Current Sprint 1 command:
+
+```powershell
+./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0 -KeepStack
+```
+
+`-KeepStack` is required when the reviewer needs to open Agent Studio after the runner. The runner JSON is persisted through `/api/v1/eval/runs`; `/eval` and `/audit` provide the UI review surface, and `/api/v1/runs/<run-id>`, `/steps`, and `/retrieval-hits` provide trace drill-down. See `docs/eval-trace-ui-runbook.md`.
 
 ### 폐쇄망 Staging
 
@@ -224,6 +233,9 @@ ACL 위반은 심각도와 무관하게 blocker다.
 - chat model version
 - embedding model version
 - reranker version
+- model routing policy version
+- budget class
+- per-stage model route summary
 - vector store type
 - corpus version
 - eval suite version
@@ -239,6 +251,7 @@ ACL 위반은 심각도와 무관하게 blocker다.
 - faithfulness human review average
 - latency p50/p95
 - failed case list
+- trace run IDs for failed cases
 
 결정:
 
@@ -334,6 +347,6 @@ MVP 목표:
 2. eval case 30개 작성
 3. eval case JSON schema 확정
 4. deterministic scorer 구현
-5. `/api/v1/eval/runs` worker 연결
+5. `/api/v1/eval/runs` report persistence and runner 연결
 6. regression report 템플릿 생성
 7. Playwright 핵심 flow 5개 작성

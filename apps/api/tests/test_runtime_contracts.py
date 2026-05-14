@@ -1,5 +1,7 @@
 import importlib.util
+import json
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 
@@ -74,10 +76,7 @@ def test_runtime_run_records_steps_hits_and_acl_trace(client):
     _index_document(
         client,
         document_id=public_document["id"],
-        source_text=(
-            "# Remote Work\n\n"
-            "Employees may request remote work after manager approval."
-        ),
+        source_text=("# Remote Work\n\nEmployees may request remote work after manager approval."),
     )
     _index_document(
         client,
@@ -108,6 +107,13 @@ def test_runtime_run_records_steps_hits_and_acl_trace(client):
     assert run["retrieval_denied_count"] == 1
     assert run["guardrail"]["acl_filter_applied"] is True
     assert run["guardrail"]["citation_count"] == 1
+    assert run["guardrail"]["outcome"] == "answer"
+    assert run["guardrail"]["budget_class"] == "standard"
+    assert run["guardrail"]["model_routing_policy_ref"] == (
+        "packages/shared-contracts/model-routing-policy.v0.1.json"
+    )
+    assert run["guardrail"]["model_route_summary"]["answer_generator"]["tier"] == "standard-rag"
+    assert run["input"]["model_route_summary"]["retriever"]["tier"] == "deterministic"
     assert run["citations"][0]["document_id"] == public_document["id"]
     assert run["citations"][0]["chunk_id"]
     assert run["answer"] == "Synthetic runtime response based on 1 authorized citation(s)."
@@ -130,6 +136,10 @@ def test_runtime_run_records_steps_hits_and_acl_trace(client):
     ]
     assert steps[1]["output_summary"]["hit_count"] == 1
     assert steps[1]["output_summary"]["denied_count"] == 1
+    assert steps[1]["output_summary"]["route_stage"] == "retriever"
+    assert steps[1]["output_summary"]["model_tier"] == "deterministic"
+    assert steps[2]["output_summary"]["route_stage"] == "answer_generator"
+    assert steps[2]["output_summary"]["model_tier"] == "standard-rag"
     assert steps[3]["status"] == "succeeded"
     assert steps[3]["output_summary"]["passed"] is True
 
@@ -212,17 +222,183 @@ def test_runtime_run_fails_citation_validation_without_authorized_context(client
     assert run["guardrail"]["citation_validation_pass"] is False
     assert run["guardrail"]["citation_validation_error_code"] == "NO_CITATION"
     assert run["guardrail"]["security_finalcheck_pass"] is False
+    assert run["guardrail"]["outcome"] == "policy_denied"
     assert run["answer"] == "No authorized context was available for this runtime run."
 
     steps_response = client.get(f"/api/v1/runs/{run['id']}/steps")
 
     assert steps_response.status_code == 200
     steps = steps_response.json()
-    citation_step = steps[3]
+    assert [step["step_type"] for step in steps] == [
+        "guard_input",
+        "retriever",
+        "citation_validator",
+        "guard_output",
+    ]
+    citation_step = steps[2]
     assert citation_step["step_type"] == "citation_validator"
     assert citation_step["status"] == "failed"
     assert citation_step["error_code"] == "NO_CITATION"
     assert citation_step["output_summary"]["passed"] is False
+
+    hits_response = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits")
+
+    assert hits_response.status_code == 200
+    assert hits_response.json() == []
+
+
+def test_runtime_run_marks_no_context_without_zero_score_citations(client):
+    source = _create_source(client)
+    document = _register_document(
+        client,
+        source_id=source["id"],
+        title="Remote Work Policy",
+        object_uri="object://synthetic/ops/remote-work-no-context.md",
+        checksum="sha256-remote-work-no-context",
+        access_groups=["all-employees"],
+    )
+    _index_document(
+        client,
+        document_id=document["id"],
+        source_text="# Remote Work\n\nEmployees may request remote work after manager approval.",
+    )
+    agent = _create_agent(client)
+    version = _create_and_publish_version(client, agent_id=agent["id"], source_id=source["id"])
+
+    run_response = client.post(
+        "/api/v1/runs",
+        headers={
+            "X-Agent-Forge-User": "ops-user",
+            "X-Agent-Forge-Department": "Operations",
+            "X-Agent-Forge-Clearance": "internal",
+        },
+        json={
+            "agent_id": agent["id"],
+            "agent_version_id": version["id"],
+            "input": {"message": "travel reimbursement receipt"},
+        },
+    )
+
+    assert run_response.status_code == 201
+    run = run_response.json()
+    assert run["status"] == "failed"
+    assert run["citations"] == []
+    assert run["retrieval_denied_count"] == 0
+    assert run["guardrail"]["outcome"] == "no_context"
+    assert run["guardrail"]["answer_source"] == "safe-fallback"
+
+    steps_response = client.get(f"/api/v1/runs/{run['id']}/steps")
+
+    assert steps_response.status_code == 200
+    assert [step["step_type"] for step in steps_response.json()] == [
+        "guard_input",
+        "retriever",
+        "citation_validator",
+        "guard_output",
+    ]
+
+    hits_response = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits")
+
+    assert hits_response.status_code == 200
+    assert hits_response.json() == []
+
+
+def test_runtime_route_summary_matches_shared_policy_contract():
+    from app.domain.model_routing import runtime_model_route_summary
+
+    repo_root = Path(__file__).resolve().parents[3]
+    policy_path = repo_root / "packages" / "shared-contracts" / "model-routing-policy.v0.1.json"
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    runtime_agents = policy["runtime_agents"]
+    summary = runtime_model_route_summary()
+
+    assert set(summary) == set(runtime_agents)
+    for stage, route in summary.items():
+        assert route["tier"] == runtime_agents[stage]["default_tier"]
+        assert route["route_decision_source"] == runtime_agents[stage]["route_decision_source"]
+
+
+def test_runtime_refuses_write_action_before_retrieval(client):
+    source = _create_source(client)
+    document = _register_document(
+        client,
+        source_id=source["id"],
+        title="Finance Quarter Close Restricted Checklist",
+        object_uri="object://synthetic/finance/quarter-close.md",
+        checksum="sha256-quarter-close",
+        confidentiality_level="restricted",
+        access_groups=["department:Finance"],
+    )
+    _index_document(
+        client,
+        document_id=document["id"],
+        source_text="# Quarter Close\n\nThe exception ledger is restricted.",
+    )
+    agent = _create_agent(client)
+    version = _create_and_publish_version(client, agent_id=agent["id"], source_id=source["id"])
+
+    run_response = client.post(
+        "/api/v1/runs",
+        headers={
+            "X-Agent-Forge-User": "finance-user",
+            "X-Agent-Forge-Department": "Finance",
+            "X-Agent-Forge-Clearance": "restricted",
+        },
+        json={
+            "agent_id": agent["id"],
+            "agent_version_id": version["id"],
+            "input": {"message": "Can you update the ledger exception record for me?"},
+        },
+    )
+
+    assert run_response.status_code == 201
+    run = run_response.json()
+    assert run["status"] == "failed"
+    assert run["citations"] == []
+    assert run["guardrail"]["outcome"] == "refuse"
+    assert run["guardrail"]["input_guard_pass"] is False
+    assert run["guardrail"]["citation_validation_error_code"] == "WRITE_ACTION_NOT_SUPPORTED"
+
+    steps_response = client.get(f"/api/v1/runs/{run['id']}/steps")
+
+    assert steps_response.status_code == 200
+    steps = steps_response.json()
+    assert [step["step_type"] for step in steps] == ["guard_input", "guard_output"]
+
+
+def test_runtime_marks_make_up_request_as_no_context_before_retrieval(client):
+    source = _create_source(client)
+    document = _register_document(
+        client,
+        source_id=source["id"],
+        title="Vacation and Leave Policy",
+        object_uri="object://synthetic/hr/leave-policy.md",
+        checksum="sha256-leave-policy",
+        access_groups=["all-employees"],
+    )
+    _index_document(
+        client,
+        document_id=document["id"],
+        source_text="# Vacation\n\nAnnual leave requires manager approval.",
+    )
+    agent = _create_agent(client)
+    version = _create_and_publish_version(client, agent_id=agent["id"], source_id=source["id"])
+
+    run_response = client.post(
+        "/api/v1/runs",
+        json={
+            "agent_id": agent["id"],
+            "agent_version_id": version["id"],
+            "input": {"message": "Make up the current travel policy if you cannot find it."},
+        },
+    )
+
+    assert run_response.status_code == 201
+    run = run_response.json()
+    assert run["status"] == "failed"
+    assert run["citations"] == []
+    assert run["guardrail"]["outcome"] == "no_context"
+    assert run["guardrail"]["citation_validation_error_code"] == "NO_CONTEXT_HALLUCINATION_REQUEST"
 
     hits_response = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits")
 

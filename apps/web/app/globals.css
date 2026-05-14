@@ -9,6 +9,8 @@
   --accent-strong: #0f4d63;
   --warn: #a45c21;
   --ok: #236c54;
+  --danger: #9d2e2e;
+  --focus: rgba(72, 166, 167, 0.18);
 }
 
 * {
@@ -73,6 +75,13 @@ nav a {
 
 nav a:hover {
   background: rgba(255, 255, 255, 0.09);
+}
+
+nav a.active,
+nav a[aria-current="page"] {
+  background: #e9f5f4;
+  color: #0d2b32;
+  font-weight: 800;
 }
 
 main {
@@ -154,6 +163,11 @@ p {
   color: var(--accent-strong);
 }
 
+.button:disabled {
+  cursor: not-allowed;
+  opacity: 0.62;
+}
+
 .statGrid,
 .cardGrid {
   display: grid;
@@ -182,6 +196,223 @@ p {
   display: block;
   margin-bottom: 4px;
   font-size: 28px;
+}
+
+.stat.warn {
+  border-color: #efc28d;
+  background: #fff8ef;
+}
+
+.overviewPage,
+.agentsPage,
+.auditPage,
+.settingsPage {
+  gap: 20px;
+}
+
+.nextAction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid #efc28d;
+  border-radius: 8px;
+  background: #fff8ef;
+}
+
+.nextAction div {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.nextAction strong {
+  overflow-wrap: anywhere;
+}
+
+.readinessGrid,
+.agentWorkbench,
+.auditGrid,
+.settingsGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(340px, 0.75fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.releasePath {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.releasePath li {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 13px 0;
+  border-top: 1px solid var(--line);
+}
+
+.releasePath li:first-child {
+  border-top: 0;
+}
+
+.releasePath p,
+.evidenceRow span,
+.agentRow span,
+.routeStep small,
+.timelineEvent p,
+.timelineEvent small {
+  margin-bottom: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.evidenceList,
+.agentRows,
+.gateStack,
+.configList,
+.toggleList {
+  display: grid;
+  gap: 10px;
+}
+
+.evidenceRow,
+.agentRow,
+.gateRow,
+.toggleRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  min-height: 54px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.evidenceRow:hover {
+  border-color: rgba(23, 107, 135, 0.55);
+  background: #eef8f8;
+}
+
+.evidenceRow div,
+.agentRow div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.agentRow {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.agentRow strong:last-child {
+  color: var(--accent-strong);
+  font-size: 18px;
+}
+
+.agentRow:hover,
+.agentRow[aria-pressed="true"] {
+  border-color: rgba(23, 107, 135, 0.55);
+  background: #eef8f8;
+}
+
+.agentRow:focus-visible {
+  border-color: var(--accent);
+  outline: 3px solid var(--focus);
+}
+
+.agentDetailPanel {
+  position: sticky;
+  top: 24px;
+}
+
+.modelRouteGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.routeStep {
+  display: grid;
+  gap: 6px;
+  min-height: 104px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.routeStep span {
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.timeline {
+  display: grid;
+}
+
+.timelineEvent {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+
+.timelineEvent:first-child {
+  border-top: 0;
+}
+
+.timelineEvent small {
+  grid-column: 2 / 4;
+}
+
+.timelineDot {
+  width: 12px;
+  height: 12px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px #e4f4f2;
+}
+
+.configList label {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.configList input:disabled {
+  background: #f4f7f8;
+  color: #526273;
+}
+
+.toggleRow {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.toggleInput {
+  width: 42px;
+  height: 24px;
+  margin: 0;
+  accent-color: var(--accent);
 }
 
 .statusList {
@@ -223,6 +454,605 @@ p {
   color: var(--warn);
 }
 
+.badge.neutral {
+  background: #edf1f5;
+  color: #526273;
+}
+
+.badge.danger {
+  background: #fae8e8;
+  color: #9d2e2e;
+}
+
+.knowledgePage {
+  gap: 20px;
+}
+
+.knowledgeStats .stat p {
+  margin-bottom: 0;
+}
+
+.knowledgeNotice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+}
+
+.knowledgeNotice p {
+  margin: 0;
+}
+
+.knowledgeFlow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.flowStep {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.flowStep span {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 999px;
+  background: #dff1f0;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.flowStep strong {
+  font-size: 13px;
+}
+
+.knowledgeGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.panelHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.panelHeader p,
+.indexSummary p {
+  margin-bottom: 0;
+}
+
+.sourceList,
+.documentList,
+.retrievalResults {
+  display: grid;
+  gap: 10px;
+}
+
+.sourceOption {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.sourceOption:hover,
+.sourceOption.active {
+  border-color: rgba(23, 107, 135, 0.55);
+  background: #eef8f8;
+}
+
+.sourceOption span:first-child,
+.documentMain {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sourceOption small,
+.documentMain small,
+.retrievalResult span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.metadataList {
+  display: grid;
+  gap: 10px;
+  margin: 18px 0 0;
+}
+
+.metadataList div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
+
+.metadataList dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.metadataList dd {
+  margin: 0;
+  text-align: right;
+  font-weight: 700;
+}
+
+.documentRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  min-height: 62px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.documentRow input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+}
+
+.knowledgeForm,
+.retrievalControls {
+  display: grid;
+  gap: 12px;
+}
+
+.knowledgeForm label,
+.retrievalControls label {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+input,
+select,
+textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--text);
+  font: inherit;
+}
+
+input,
+select {
+  min-height: 40px;
+  padding: 0 11px;
+}
+
+input[type="file"] {
+  padding: 8px;
+}
+
+textarea {
+  min-height: 92px;
+  resize: vertical;
+  padding: 10px 11px;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--accent);
+  outline: 3px solid var(--focus);
+}
+
+.fieldGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.indexPanel {
+  display: grid;
+  gap: 16px;
+}
+
+.indexSummary {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.retrievalControls {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+}
+
+.retrievalResult {
+  display: grid;
+  gap: 8px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line);
+}
+
+.retrievalResult:first-child {
+  border-top: 0;
+}
+
+.retrievalResult div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.retrievalResult p {
+  margin-bottom: 0;
+}
+
+.score {
+  justify-self: start;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: #e7f2ef;
+  color: var(--ok);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.evalPage {
+  gap: 20px;
+}
+
+.traceViewerPage {
+  gap: 20px;
+}
+
+.evalStats .stat p,
+.evalNotice p,
+.evalRunPanel p,
+.traceStatusGrid .stat p {
+  margin-bottom: 0;
+}
+
+.traceSearchForm {
+  display: grid;
+  width: min(460px, 100%);
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.traceSearchForm label {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.evalNotice {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+}
+
+.runSummaryGrid,
+.detailGrid {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+}
+
+.runSummaryGrid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.detailGrid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.runSummaryGrid div,
+.detailGrid div {
+  min-width: 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.runSummaryGrid dt,
+.detailGrid dt {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.runSummaryGrid dd,
+.detailGrid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 800;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.sectionHeading h2,
+.sectionHeading p {
+  margin-bottom: 0;
+}
+
+.suiteGrid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.suiteCard {
+  display: grid;
+  gap: 9px;
+  min-height: 178px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+}
+
+.suiteCard:hover,
+.suiteCard.active {
+  border-color: rgba(23, 107, 135, 0.55);
+  background: #eef8f8;
+}
+
+.suiteCard .badge {
+  justify-self: start;
+}
+
+.suiteCard strong {
+  font-size: 15px;
+}
+
+.suiteCard small {
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.suiteMeter {
+  align-self: end;
+  color: var(--accent-strong);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.evalGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.casePanel,
+.tracePanel {
+  min-width: 0;
+}
+
+.caseTableWrap {
+  overflow-x: auto;
+}
+
+.caseTable {
+  width: 100%;
+  min-width: 700px;
+  border-collapse: collapse;
+}
+
+.caseTable th {
+  padding: 0 12px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.caseTable td {
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  vertical-align: middle;
+  font-size: 13px;
+}
+
+.caseTable tr.active td {
+  background: #f0f8f8;
+}
+
+.caseSelectButton {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.caseSelectButton strong {
+  color: var(--accent-strong);
+}
+
+.caseSelectButton span {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.findingBox {
+  display: grid;
+  gap: 6px;
+  margin: 16px 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.findingBox p,
+.traceStep p,
+.citationRow p,
+.emptyState {
+  margin-bottom: 0;
+}
+
+.traceSteps,
+.citationList,
+.retrievalHitGrid {
+  display: grid;
+  gap: 10px;
+}
+
+.traceStep {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.traceStep:first-child {
+  border-top: 0;
+}
+
+.tracePayload {
+  margin-top: 10px;
+}
+
+.tracePayload summary {
+  color: var(--accent-strong);
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.payloadGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.payloadGrid span {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.payloadGrid pre {
+  max-height: 170px;
+  margin: 0;
+  overflow: auto;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f4f7f8;
+  color: #273342;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.stepIndex {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  background: #dff1f0;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.citationSection {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.citationSection h3 {
+  margin-bottom: 0;
+}
+
+.citationRow {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+}
+
+.citationRow div {
+  display: grid;
+  gap: 3px;
+}
+
+.citationRow small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.citationRow .badge {
+  justify-self: start;
+}
+
+.emptyState {
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
 @media (max-width: 860px) {
   body {
     grid-template-columns: 1fr;
@@ -249,6 +1079,86 @@ p {
   .statGrid,
   .cardGrid {
     grid-template-columns: 1fr;
+  }
+
+  .knowledgeFlow,
+  .knowledgeGrid,
+  .readinessGrid,
+  .agentWorkbench,
+  .auditGrid,
+  .settingsGrid,
+  .modelRouteGrid,
+  .suiteGrid,
+  .evalGrid,
+  .runSummaryGrid,
+  .detailGrid,
+  .fieldGrid,
+  .traceSearchForm,
+  .retrievalControls {
+    grid-template-columns: 1fr;
+  }
+
+  .payloadGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .knowledgeNotice,
+  .evalNotice,
+  .panelHeader,
+  .metadataList div,
+  .sectionHeading,
+  .retrievalResult div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .nextAction,
+  .nextAction div {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .metadataList dd {
+    text-align: left;
+  }
+
+  .documentRow {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .documentRow .badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .traceStep {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .traceStep .badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .releasePath li,
+  .agentRow,
+  .timelineEvent,
+  .toggleRow {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .releasePath .badge,
+  .agentRow .badge,
+  .agentRow strong:last-child,
+  .timelineEvent .badge,
+  .timelineEvent small,
+  .toggleRow .badge {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .agentDetailPanel {
+    position: static;
   }
 }
 

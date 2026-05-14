@@ -5,6 +5,7 @@ import pytest
 from app.core.principal import Principal
 from app.domain.vector import (
     FakeVectorStore,
+    QdrantVectorStore,
     VectorQuery,
     VectorUpsertInput,
     build_acl_filter,
@@ -154,3 +155,147 @@ def test_fake_vector_search_respects_knowledge_source_scope_and_delete():
     )
 
     assert deleted.hits == ()
+
+
+def test_fake_vector_search_excludes_zero_score_authorized_chunks():
+    document = _document(
+        document_id="doc-1",
+        title="Remote Work Policy",
+        content="employees may request remote work after manager approval",
+    )
+
+    result = FakeVectorStore().search(
+        query=VectorQuery(query_text="travel reimbursement receipt"),
+        documents=[document],
+        acl_filter=build_acl_filter(_principal()),
+    )
+
+    assert result.hits == ()
+
+
+def test_fake_vector_search_excludes_weak_single_term_overlap():
+    allowed = _document(
+        document_id="fin-public",
+        title="Expense Reimbursement Policy",
+        content="expense exception approval rules",
+    )
+    denied = _document(
+        document_id="fin-close",
+        title="Quarter Close Restricted Checklist",
+        content="quarter close exception ledger restricted workflow",
+        confidentiality_level="restricted",
+        access_groups=["department:Finance"],
+    )
+
+    result = FakeVectorStore().search(
+        query=VectorQuery(query_text="finance quarter close exception ledger", top_k=10),
+        documents=[allowed, denied],
+        acl_filter=build_acl_filter(_principal(department="HR")),
+    )
+
+    assert result.hits == ()
+    assert result.denied_count == 1
+
+
+def test_qdrant_upsert_uses_acl_payload_and_stable_vector_ref():
+    store = QdrantVectorStore(url="http://qdrant.local", collection="chunks", vector_size=8)
+    requests = []
+
+    def fake_request(method, path, payload=None):
+        requests.append((method, path, payload))
+        return {"result": {"status": "green"}}
+
+    store._request = fake_request
+
+    result = store.upsert_chunks(
+        (
+            VectorUpsertInput(
+                chunk_id="doc-1:chunk-001",
+                document_id="doc-1",
+                content_hash="sha256-doc-1",
+                embedding_model="none-smoke",
+                content="Employees may request remote work after manager approval.",
+                title="Remote Work Policy",
+                knowledge_source_id="source-1",
+                confidentiality_level="internal",
+                access_groups=("all-employees", "department:Finance"),
+                citation_locator="Remote Work Policy / lines 1-1",
+            ),
+        )
+    )
+
+    assert result[0].vector_ref.startswith("qdrant:chunks:")
+    assert result == store.upsert_chunks(
+        (
+            VectorUpsertInput(
+                chunk_id="doc-1:chunk-001",
+                document_id="doc-1",
+                content_hash="sha256-doc-1",
+                embedding_model="none-smoke",
+            ),
+        )
+    )
+    upsert_payload = requests[1][2]
+    point = upsert_payload["points"][0]
+    assert len(point["vector"]) == 8
+    assert point["payload"]["chunk_id"] == "doc-1:chunk-001"
+    assert point["payload"]["access_groups"] == ["all-employees", "department:Finance"]
+    assert point["payload"]["confidentiality_rank"] == 1
+    assert point["payload"]["citation_locator"] == "Remote Work Policy / lines 1-1"
+
+
+def test_qdrant_search_pushes_acl_filter_into_vector_query():
+    store = QdrantVectorStore(url="http://qdrant.local", collection="chunks", vector_size=8)
+    allowed = _document(
+        document_id="doc-1",
+        title="Remote Work Policy",
+        content="manager approval remote work",
+    )
+    denied = _document(
+        document_id="doc-2",
+        title="Finance Close Checklist",
+        content="restricted close ledger",
+        confidentiality_level="restricted",
+        access_groups=["department:Finance"],
+    )
+    requests = []
+
+    def fake_request(method, path, payload=None):
+        requests.append((method, path, payload))
+        return {
+            "result": [
+                {
+                    "id": "point-1",
+                    "score": 0.87,
+                    "payload": {
+                        "chunk_id": "doc-1:chunk-001",
+                        "document_id": "doc-1",
+                        "knowledge_source_id": "source-1",
+                        "title": "Remote Work Policy",
+                        "confidentiality_level": "internal",
+                        "access_groups": ["all-employees"],
+                        "content_hash": "sha256-doc-1",
+                        "citation_locator": "Remote Work Policy / lines 1-1",
+                    },
+                }
+            ]
+        }
+
+    store._request = fake_request
+
+    result = store.search(
+        query=VectorQuery(query_text="manager approval", knowledge_source_ids=("source-1",)),
+        documents=[allowed, denied],
+        acl_filter=build_acl_filter(_principal(department="HR")),
+    )
+
+    assert result.adapter_name == "qdrant"
+    assert result.denied_count == 1
+    assert [hit.document_id for hit in result.hits] == ["doc-1"]
+    search_payload = requests[0][2]
+    must_filter = search_payload["filter"]["must"]
+    assert {"key": "access_groups", "match": {"any": ["all-employees", "department:HR", "role:employee", "user:user-1"]}} in must_filter
+    assert {
+        "key": "knowledge_source_id",
+        "match": {"any": ["source-1"]},
+    } in must_filter

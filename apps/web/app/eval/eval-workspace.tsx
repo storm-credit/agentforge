@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import {
   EvalCaseResult,
@@ -857,6 +858,12 @@ function selectSuite(suiteId: string) {
               <p>{selectedCase.id} runtime evidence.</p>
             </div>
             <div className="buttonRow">
+              <Link
+                className="button secondary"
+                href={`/trace?run_id=${encodeURIComponent(selectedCase.runId)}`}
+              >
+                Open trace
+              </Link>
               <button
                 className="button secondary"
                 disabled={pendingAction === "trace" || isPending}

@@ -46,7 +46,7 @@ That is expected at this point. The repository has moved from project definition
 | RAG/Data | synthetic corpus, parser smoke, chunk metadata validation |
 | AI Runtime | Agent Card schema validator and runtime flow state tests |
 | Backend | contract tests for `/agents`, `/knowledge`, migrations, audit events |
-| Frontend | Playwright smoke for navigation, Builder draft path, Trace placeholder |
+| Frontend | Playwright smoke for navigation, Builder draft path, Eval trace sync, and Trace route |
 | DevOps/MLOps | compose boot smoke, DB migration smoke, offline package manifest draft |
 | QA/Eval | eval case JSON/YAML schema, 30 synthetic ACL/citation cases, scorer skeleton |
 | Model Routing | shared routing policy, Agent Card model policy, route trace in eval/runtime logs |
@@ -74,9 +74,9 @@ The orchestrator should now dispatch the next work in this order:
 | Backend + RAG + Security fake vector adapter | Started | `apps/api/app/domain/vector.py` requires ACL-filtered search |
 | AI Runtime + Backend runtime trace API | Hardened | `POST /api/v1/runs` stores model route metadata, skips generation without citations, and maps generator traces to `answer_generator` |
 | Audit Explorer API | Started | `/api/v1/audit/events` lists and filters persisted audit events |
-| Eval Trace Viewer entry point | Hardened | `/eval` can sync selected case runtime evidence, expand step payloads, and compare retrieval hits from `/runs/{run_id}`, `/steps`, and `/retrieval-hits` |
+| Eval Trace Viewer entry point | Hardened | `/eval` can sync selected case runtime evidence and open `/trace?run_id=<run-id>`; both surfaces expand step payloads and compare retrieval hits from `/runs/{run_id}`, `/steps`, and `/retrieval-hits` |
 | DevOps compose smoke | Verified | `tools/smoke/compose-smoke.ps1 -Boot -WebPort 0` passed |
-| Frontend route/workflow smoke | Expanded | `apps/web/tests/smoke.spec.ts` covers 13 route, workflow, semantics, and mobile checks |
+| Frontend route/workflow smoke | Expanded | `apps/web/tests/smoke.spec.ts` covers route, workflow, trace, semantics, and mobile checks |
 | Eval report persistence | Started | `/api/v1/eval/runs`, `/overview`, latest/result reads, baseline approval audit |
 | Agent model routing policy | Hardened | Shared contract, Agent Card config validation, eval route validation, and runtime route summary contract test |
 | PM owner closure | Pending | pilot department and document owner still open |

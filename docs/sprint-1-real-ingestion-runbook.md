@@ -50,7 +50,7 @@ For browser-based Eval/Trace review after the runner, keep the stack running:
 ./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0 -KeepStack
 ```
 
-Then follow [Eval and Trace UI Runbook](eval-trace-ui-runbook.md). In the current Sprint 1 UI, `/eval` can sync the persisted eval report, pull a selected case's runtime trace, expand step payload summaries, and compare retrieval hits; `/audit` can sync audit events; and `/api/v1/runs/<run-id>`, `/steps`, and `/retrieval-hits` remain the authoritative runtime trace drill-down evidence.
+Then follow [Eval and Trace UI Runbook](eval-trace-ui-runbook.md). In the current Sprint 1 UI, `/eval` can sync the persisted eval report, pull a selected case's runtime trace, expand step payload summaries, compare retrieval hits, and open `/trace?run_id=<run-id>`; `/audit` can sync audit events; and `/api/v1/runs/<run-id>`, `/steps`, and `/retrieval-hits` remain the authoritative runtime trace drill-down evidence.
 
 The script checks:
 
@@ -91,10 +91,11 @@ Expected audit events along the path include `knowledge_source.created`, `docume
 After `api-eval-runner-smoke.ps1` passes with `-KeepStack`, open the Web URL printed by compose and review:
 
 - `Eval`: quality-gate landing page for retrieval quality, groundedness, policy refusal, and regression suite status.
+- `Trace`: shareable runtime run drill-down at `/trace?run_id=<run-id>`.
 - `Audit`: governance landing page for trace/audit review.
 - API trace endpoints: use a `run_id` from the runner JSON to inspect run detail, ordered steps, and retrieval hits.
 
-The current API-backed eval report is the release evidence source of truth. Treat `/api/v1/eval/overview` and `/api/v1/eval/runs/latest` as the report entry points, and use the `/runs` endpoints as the detailed trace drill-down behind the Eval trace sync.
+The current API-backed eval report is the release evidence source of truth. Treat `/api/v1/eval/overview` and `/api/v1/eval/runs/latest` as the report entry points, and use `/trace?run_id=<run-id>` plus the `/runs` endpoints as the detailed trace drill-down behind the Eval trace sync.
 
 ## API Notes
 

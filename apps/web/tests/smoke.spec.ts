@@ -1,13 +1,104 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 const routes = [
   { path: "/", heading: "Agent readiness control" },
   { path: "/agents", heading: "Agents" },
   { path: "/knowledge", heading: "Knowledge" },
   { path: "/eval", heading: "Evaluation" },
+  { path: "/trace", heading: "Trace Viewer" },
   { path: "/audit", heading: "Audit" },
   { path: "/admin/settings", heading: "Settings" },
 ];
+
+async function mockRuntimeTrace(page: Page, runId = "runtime-1") {
+  await page.route(`**/api/v1/runs/${runId}`, async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: {
+        id: runId,
+        status: "succeeded",
+        latency_ms: 412,
+        retrieval_denied_count: 1,
+        citations: [
+          {
+            document_id: "FIN-001",
+            title: "Expense Reimbursement Policy",
+            citation_locator: "section:receipt-deadline",
+          },
+        ],
+        guardrail: {
+          outcome: "answer",
+          model_route_summary: {
+            answer_generator: { tier: "standard-rag" },
+          },
+        },
+      },
+    });
+  });
+
+  await page.route(`**/api/v1/runs/${runId}/steps`, async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: [
+        {
+          step_type: "retriever",
+          status: "succeeded",
+          latency_ms: 34,
+          input_summary: { top_k: 5 },
+          output_summary: {
+            route_stage: "retriever",
+            model_tier: "deterministic",
+            hit_count: 2,
+            denied_count: 1,
+          },
+        },
+        {
+          step_type: "generator",
+          status: "succeeded",
+          latency_ms: 118,
+          input_summary: { context_count: 1 },
+          output_summary: {
+            route_stage: "answer_generator",
+            model_tier: "standard-rag",
+            citation_count: 1,
+          },
+        },
+      ],
+    });
+  });
+
+  await page.route(`**/api/v1/runs/${runId}/retrieval-hits`, async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      json: [
+        {
+          id: "hit-1",
+          document_id: "FIN-001",
+          chunk_id: "fin-001-1",
+          title: "Expense Reimbursement Policy",
+          citation_locator: "section:receipt-deadline",
+          rank_original: 1,
+          score_vector: 0.94,
+          used_in_context: true,
+          used_as_citation: true,
+          acl_filter_snapshot: { subjects: ["department:Finance"] },
+        },
+        {
+          id: "hit-2",
+          document_id: "FIN-002",
+          chunk_id: "fin-002-1",
+          title: "Quarter Close Restricted Checklist",
+          citation_locator: "section:exception-ledger",
+          rank_original: 2,
+          score_vector: 0.71,
+          used_in_context: true,
+          used_as_citation: false,
+          acl_filter_snapshot: { subjects: ["department:Finance"] },
+        },
+      ],
+    });
+  });
+}
 
 test.describe("Agent Studio shell", () => {
   for (const route of routes) {
@@ -130,93 +221,7 @@ test.describe("Agent Studio shell", () => {
       });
     });
 
-    await page.route("**/api/v1/runs/runtime-1", async (route) => {
-      await route.fulfill({
-        contentType: "application/json",
-        json: {
-          id: "runtime-1",
-          status: "succeeded",
-          latency_ms: 412,
-          retrieval_denied_count: 1,
-          citations: [
-            {
-              document_id: "FIN-001",
-              title: "Expense Reimbursement Policy",
-              citation_locator: "section:receipt-deadline",
-            },
-          ],
-          guardrail: {
-            outcome: "answer",
-            model_route_summary: {
-              answer_generator: { tier: "standard-rag" },
-            },
-          },
-        },
-      });
-    });
-
-    await page.route("**/api/v1/runs/runtime-1/steps", async (route) => {
-      await route.fulfill({
-        contentType: "application/json",
-        json: [
-          {
-            step_type: "retriever",
-            status: "succeeded",
-            latency_ms: 34,
-            input_summary: { top_k: 5 },
-            output_summary: {
-              route_stage: "retriever",
-              model_tier: "deterministic",
-              hit_count: 2,
-              denied_count: 1,
-            },
-          },
-          {
-            step_type: "generator",
-            status: "succeeded",
-            latency_ms: 118,
-            input_summary: { context_count: 1 },
-            output_summary: {
-              route_stage: "answer_generator",
-              model_tier: "standard-rag",
-              citation_count: 1,
-            },
-          },
-        ],
-      });
-    });
-
-    await page.route("**/api/v1/runs/runtime-1/retrieval-hits", async (route) => {
-      await route.fulfill({
-        contentType: "application/json",
-        json: [
-          {
-            id: "hit-1",
-            document_id: "FIN-001",
-            chunk_id: "fin-001-1",
-            title: "Expense Reimbursement Policy",
-            citation_locator: "section:receipt-deadline",
-            rank_original: 1,
-            score_vector: 0.94,
-            used_in_context: true,
-            used_as_citation: true,
-            acl_filter_snapshot: { subjects: ["department:Finance"] },
-          },
-          {
-            id: "hit-2",
-            document_id: "FIN-002",
-            chunk_id: "fin-002-1",
-            title: "Quarter Close Restricted Checklist",
-            citation_locator: "section:exception-ledger",
-            rank_original: 2,
-            score_vector: 0.71,
-            used_in_context: true,
-            used_as_citation: false,
-            acl_filter_snapshot: { subjects: ["department:Finance"] },
-          },
-        ],
-      });
-    });
+    await mockRuntimeTrace(page);
 
     await page.goto("/eval");
     await page.getByRole("button", { name: "Sync API" }).click();
@@ -224,6 +229,26 @@ test.describe("Agent Studio shell", () => {
 
     await page.getByRole("button", { name: "Sync trace" }).click();
     await expect(page.getByText(/Synced runtime trace for cit_003/)).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open trace" })).toHaveAttribute(
+      "href",
+      "/trace?run_id=runtime-1",
+    );
+    await expect(page.getByText(/route stage answer_generator/)).toBeVisible();
+    await expect(page.getByText("Used as citation")).toBeVisible();
+    await expect(page.getByText("Context only")).toBeVisible();
+
+    await page.locator(".traceStep").filter({ hasText: "generator" }).getByText("Payload").click();
+    await expect(page.getByText("context_count")).toBeVisible();
+  });
+
+  test("trace viewer opens a shareable runtime run URL", async ({ page }) => {
+    await mockRuntimeTrace(page);
+
+    await page.goto("/trace?run_id=runtime-1");
+
+    await expect(page.getByRole("heading", { name: "Trace Viewer", exact: true })).toBeVisible();
+    await expect(page.getByLabel("Run ID")).toHaveValue("runtime-1");
+    await expect(page.getByText(/Loaded runtime trace/)).toBeVisible();
     await expect(page.getByText(/route stage answer_generator/)).toBeVisible();
     await expect(page.getByText("Used as citation")).toBeVisible();
     await expect(page.getByText("Context only")).toBeVisible();

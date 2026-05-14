@@ -730,10 +730,31 @@ textarea:focus {
   gap: 20px;
 }
 
+.traceViewerPage {
+  gap: 20px;
+}
+
 .evalStats .stat p,
 .evalNotice p,
-.evalRunPanel p {
+.evalRunPanel p,
+.traceStatusGrid .stat p {
   margin-bottom: 0;
+}
+
+.traceSearchForm {
+  display: grid;
+  width: min(460px, 100%);
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.traceSearchForm label {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .evalNotice {
@@ -1072,6 +1093,7 @@ textarea:focus {
   .runSummaryGrid,
   .detailGrid,
   .fieldGrid,
+  .traceSearchForm,
   .retrievalControls {
     grid-template-columns: 1fr;
   }

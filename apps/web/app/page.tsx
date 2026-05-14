@@ -11,7 +11,7 @@ const releaseSteps = [
   { label: "Knowledge", status: "Ready", detail: "Upload, index, ACL preview verified" },
   { label: "Runtime trace", status: "Ready", detail: "Runs, steps, retrieval hits stored" },
   { label: "Eval report", status: "Ready", detail: "Persisted through /api/v1/eval" },
-  { label: "Trace viewer", status: "Ready", detail: "Step payloads and retrieval comparison wired" },
+  { label: "Trace viewer", status: "Ready", detail: "Shareable run URLs wired" },
 ];
 
 const evidence = [
@@ -32,6 +32,12 @@ const evidence = [
     owner: "Security",
     state: "Passed",
     target: "/audit",
+  },
+  {
+    name: "Trace drill-down",
+    owner: "Frontend + QA",
+    state: "Passed",
+    target: "/trace",
   },
 ];
 

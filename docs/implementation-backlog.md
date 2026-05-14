@@ -62,7 +62,7 @@ Scope:
 Current implementation:
 
 - `apps/api` contains the FastAPI service, metadata routes, SQLAlchemy models, Alembic base, and audit event writer.
-- `apps/web` contains the Next.js shell for Overview, Agents, Knowledge, Eval, Audit, and Settings.
+- `apps/web` contains the Next.js shell for Overview, Agents, Knowledge, Eval, Trace, Audit, and Settings.
 - `deploy/compose/docker-compose.dev.yaml` defines Postgres, MinIO, Qdrant, API, and Web services.
 - `docs/sprint-0-runbook.md` describes the local run path.
 
@@ -91,7 +91,7 @@ Verification status:
 
 - Full compose boot passed on 2026-05-10 using an auto-selected web port.
 - API HTTP smoke passed for agent create/detail/update/version validate/publish.
-- Playwright route/workflow smoke was expanded from 7 route checks to 13 checks covering active navigation, Agent selection, locked policy switch semantics, and mobile overflow.
+- Playwright route/workflow smoke was expanded to cover active navigation, Agent selection, locked policy switch semantics, trace review, and mobile overflow.
 - Retrieval preview HTTP smoke passed for Finance vs HR ACL filtering.
 
 ### Sprint 1
@@ -126,7 +126,7 @@ Sprint 1 progress:
 - API-backed eval report persistence started with `/api/v1/eval/runs`, `/overview`, latest/result reads, and baseline approval audit events.
 - AF-023 model routing policy is now API-enforced for Agent version config and eval report persistence; runtime traces include stage-complete route metadata aligned to the shared policy contract.
 - Audit read/search API started at `/api/v1/audit/events` with event type, actor, target, and text filters.
-- Agent Studio now has a Trace Viewer entry point: Eval cases can sync the selected `run_id` through `/runs/{run_id}`, `/steps`, and `/retrieval-hits`, then inspect step payloads and retrieval-hit comparison.
+- Agent Studio now has Trace Viewer entry points: Eval cases can sync the selected `run_id` through `/runs/{run_id}`, `/steps`, and `/retrieval-hits`, open `/trace?run_id=<run-id>`, then inspect step payloads and retrieval-hit comparison from a shareable URL.
 
 ### Sprint 2
 
@@ -140,7 +140,7 @@ Scope:
 - Answer-generation mock or local model gateway
 - Citation validator
 - Test Chat UI draft
-- Dedicated Trace Viewer route with shareable `run_id` URL
+- Trace URL links from audit/event detail and richer timing controls
 - Audit Explorer result detail and saved filter presets
 - ACL/citation golden set execution
 

@@ -57,7 +57,8 @@
   "budget_classes": {
     "smoke": {
       "p95_latency_ms": 3000,
-      "deep_review_allowed": false
+      "deep_review_allowed": false,
+      "declared_deep_review_escalation_allowed": true
     },
     "standard": {
       "p95_latency_ms": 8000,
@@ -73,6 +74,49 @@
       "p95_latency_ms": 30000,
       "deep_review_allowed": true,
       "deep_review_required_for": ["acl_leak", "audit_failure", "security_bypass"]
+    }
+  },
+  "validation_lanes": {
+    "local-regression": {
+      "model_target": "local Qwen3 8B or equivalent small local model",
+      "provider": "local",
+      "purpose": "Integration, safety, ACL/citation regression, timeout handling, and trace-shape validation.",
+      "required_evidence": [
+        "contract_tests",
+        "smoke_runs",
+        "deterministic_scorer",
+        "safety_refusal_checks",
+        "runtime_trace"
+      ],
+      "must_not": ["final_quality_approval", "acl_override", "citation_override"]
+    },
+    "company-quality": {
+      "model_target": "company Qwen3.6 35B through vLLM or internal OpenAI-compatible gateway",
+      "provider": "company-vllm",
+      "purpose": "Final quality and operations validation for Korean business answers.",
+      "required_evidence": [
+        "golden_test_report",
+        "human_review",
+        "korean_business_tone_review",
+        "recommendation_rationale_review",
+        "latency_timeout_report",
+        "runtime_trace",
+        "audit_events"
+      ],
+      "must": [
+        "run_after_acl_filter",
+        "use_authorized_context_only",
+        "preserve_citations",
+        "record_provider_model_version_when_available"
+      ],
+      "must_not": [
+        "receive_pre_acl_candidates",
+        "receive_denied_chunks",
+        "receive_raw_storage_uris",
+        "acl_override",
+        "citation_override",
+        "untraced_release_judgement"
+      ]
     }
   },
   "project_specialist_agents": {

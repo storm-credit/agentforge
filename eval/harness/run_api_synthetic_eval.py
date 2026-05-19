@@ -27,8 +27,17 @@ from agentforge_eval.api_eval import (  # noqa: E402
     upload_filename,
 )
 from agentforge_eval.corpus import Corpus, Document, load_corpus  # noqa: E402
+from agentforge_eval.model_probe import (  # noqa: E402
+    ModelProbeConfig,
+    model_probe_skipped,
+    probe_openai_compatible_model,
+)
 
 MODEL_ROUTING_POLICY_REF = "packages/shared-contracts/model-routing-policy.v0.1.json"
+VALIDATION_LANE_BUDGET_CLASS = {
+    "local-regression": "smoke",
+    "company-quality": "release-gate",
+}
 EVAL_MODEL_ROUTE_SUMMARY = {
     "security_precheck": {
         "tier": "fast-small",
@@ -183,15 +192,22 @@ def main(argv: list[str] | None = None) -> int:
             corpus=corpus,
             selected_cases=(),
             setup_findings=[str(exc)],
-            setup={"api_base_url": args.api_base_url},
+            setup={
+                "api_base_url": args.api_base_url,
+                "validation_lane": args.validation_lane,
+            },
             results=(),
         )
         print(json.dumps(report.to_dict(), indent=2, sort_keys=True))
         return 2
 
+    setup_findings: list[str] = []
+    model_probe = _run_model_probe(args)
+    if _model_probe_blocks_lane(args, model_probe):
+        setup_findings.append(_model_probe_finding(model_probe))
+
     client = ApiClient(args.api_base_url, timeout_seconds=args.timeout_seconds)
 
-    setup_findings: list[str] = []
     run_token = time.strftime("%Y%m%d-%H%M%S") + "-" + uuid.uuid4().hex[:8]
     admin_headers = {
         "X-Agent-Forge-User": "eval-api-runner",
@@ -228,6 +244,7 @@ def main(argv: list[str] | None = None) -> int:
             setup={
                 "api_base_url": args.api_base_url,
                 "run_token": run_token,
+                **_model_setup(args, model_probe),
             },
             results=(),
         )
@@ -279,6 +296,7 @@ def main(argv: list[str] | None = None) -> int:
             "agent_id": agent["id"],
             "agent_version_id": version["id"],
             "top_k": args.top_k,
+            **_model_setup(args, model_probe),
             **document_setup,
         },
         results=results,
@@ -304,6 +322,7 @@ def main(argv: list[str] | None = None) -> int:
                 "agent_id": agent["id"],
                 "agent_version_id": version["id"],
                 "top_k": args.top_k,
+                **_model_setup(args, model_probe),
                 **document_setup,
             },
             results=results,
@@ -322,7 +341,7 @@ def _eval_run_payload(report_payload: Mapping[str, Any]) -> dict[str, Any]:
     return {
         **dict(report_payload),
         "model_routing_policy_ref": MODEL_ROUTING_POLICY_REF,
-        "budget_class": "release-gate",
+        "budget_class": _budget_class_for_report(report_payload),
         "model_route_summary": EVAL_MODEL_ROUTE_SUMMARY,
     }
 
@@ -335,6 +354,44 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         "--api-base-url",
         default=os.environ.get("AGENT_FORGE_API_BASE_URL", "http://127.0.0.1:8000/api/v1"),
         help="Base API URL, including /api/v1.",
+    )
+    parser.add_argument(
+        "--validation-lane",
+        choices=tuple(VALIDATION_LANE_BUDGET_CLASS),
+        default=os.environ.get("AGENT_FORGE_VALIDATION_LANE", "local-regression"),
+        help="Model validation lane to record in the eval report.",
+    )
+    parser.add_argument(
+        "--model-base-url",
+        default=os.environ.get("AGENT_FORGE_MODEL_BASE_URL", ""),
+        help="OpenAI-compatible model base URL. Example: http://vllm.local:8000/v1",
+    )
+    parser.add_argument(
+        "--model-id",
+        default=os.environ.get("AGENT_FORGE_MODEL_ID", ""),
+        help="Model ID to send to /v1/chat/completions.",
+    )
+    parser.add_argument(
+        "--model-provider",
+        default=os.environ.get("AGENT_FORGE_MODEL_PROVIDER", ""),
+        help="Provider label for provenance, for example local or company-vllm.",
+    )
+    parser.add_argument(
+        "--model-endpoint-alias",
+        default=os.environ.get("AGENT_FORGE_MODEL_ENDPOINT_ALIAS", ""),
+        help="Non-secret endpoint alias recorded in eval setup.",
+    )
+    parser.add_argument(
+        "--model-timeout-seconds",
+        type=float,
+        default=float(os.environ.get("AGENT_FORGE_MODEL_TIMEOUT_SECONDS", "15")),
+        help="Per-request timeout for the model probe.",
+    )
+    parser.add_argument(
+        "--skip-model-probe",
+        action="store_true",
+        default=_truthy_env("AGENT_FORGE_SKIP_MODEL_PROBE"),
+        help="Record model provenance fields without calling the configured model endpoint.",
     )
     parser.add_argument(
         "--corpus-path",
@@ -367,6 +424,91 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="Per-request HTTP timeout.",
     )
     return parser.parse_args(argv)
+
+
+def _run_model_probe(args: argparse.Namespace) -> dict[str, Any]:
+    provider = _model_provider(args)
+    endpoint_alias = _model_endpoint_alias(args)
+    model_id = args.model_id.strip()
+    base_url = args.model_base_url.strip()
+
+    if args.skip_model_probe:
+        return model_probe_skipped(
+            validation_lane=args.validation_lane,
+            provider=provider,
+            model_id=model_id,
+            endpoint_alias=endpoint_alias,
+            reason="model probe skipped by operator",
+        )
+
+    if not base_url or not model_id:
+        return model_probe_skipped(
+            validation_lane=args.validation_lane,
+            provider=provider,
+            model_id=model_id,
+            endpoint_alias=endpoint_alias,
+            reason="model endpoint or model id not configured",
+        )
+
+    return probe_openai_compatible_model(
+        ModelProbeConfig(
+            validation_lane=args.validation_lane,
+            provider=provider,
+            model_id=model_id,
+            base_url=base_url,
+            endpoint_alias=endpoint_alias,
+            timeout_seconds=args.model_timeout_seconds,
+            api_key=os.environ.get("AGENT_FORGE_MODEL_API_KEY"),
+        )
+    )
+
+
+def _model_setup(args: argparse.Namespace, model_probe: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        "validation_lane": args.validation_lane,
+        "model_provider": _model_provider(args),
+        "model_id": args.model_id.strip(),
+        "model_endpoint_alias": _model_endpoint_alias(args),
+        "model_timeout_seconds": args.model_timeout_seconds,
+        "model_probe": dict(model_probe),
+    }
+
+
+def _model_probe_blocks_lane(args: argparse.Namespace, model_probe: Mapping[str, Any]) -> bool:
+    status = model_probe.get("status")
+    if status == "failed":
+        return True
+    return args.validation_lane == "company-quality" and status != "succeeded"
+
+
+def _model_probe_finding(model_probe: Mapping[str, Any]) -> str:
+    status = model_probe.get("status", "unknown")
+    reason = model_probe.get("reason") or model_probe.get("error") or "model probe did not pass"
+    return f"Model probe {status}: {reason}"
+
+
+def _budget_class_for_report(report_payload: Mapping[str, Any]) -> str:
+    setup = report_payload.get("setup")
+    validation_lane = setup.get("validation_lane") if isinstance(setup, Mapping) else None
+    return VALIDATION_LANE_BUDGET_CLASS.get(str(validation_lane), "smoke")
+
+
+def _model_provider(args: argparse.Namespace) -> str:
+    configured = args.model_provider.strip()
+    if configured:
+        return configured
+    return "company-vllm" if args.validation_lane == "company-quality" else "local"
+
+
+def _model_endpoint_alias(args: argparse.Namespace) -> str:
+    configured = args.model_endpoint_alias.strip()
+    if configured:
+        return configured
+    return "company-qwen35b" if args.validation_lane == "company-quality" else "local-qwen8b"
+
+
+def _truthy_env(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _create_source(

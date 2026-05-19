@@ -22,6 +22,23 @@ python eval/harness/run_api_synthetic_eval.py --case rag_001 --case acl_002
 python eval/harness/run_api_synthetic_eval.py --suite acl
 ```
 
+To record a minimal OpenAI-compatible model probe in the eval report:
+
+```powershell
+python eval/harness/run_api_synthetic_eval.py `
+  --api-base-url http://127.0.0.1:8000/api/v1 `
+  --validation-lane company-quality `
+  --model-base-url $env:AGENT_FORGE_MODEL_BASE_URL `
+  --model-id $env:AGENT_FORGE_MODEL_ID `
+  --model-provider company-vllm `
+  --model-endpoint-alias company-qwen35b
+```
+
+The probe sends one `/v1/chat/completions` request, records provider/model/endpoint alias,
+latency, served model, and a short response preview, and never stores the raw endpoint URL.
+`company-quality` requires a successful model probe; `local-regression` may skip it when the
+local model is unavailable.
+
 The API runner generates Markdown from the synthetic corpus, uploads every document through
 `POST /knowledge/documents/upload`, indexes with object storage by omitting `source_text`,
 publishes an eval agent, runs cases with corpus principal headers, maps API document IDs back

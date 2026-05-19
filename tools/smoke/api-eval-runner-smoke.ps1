@@ -3,6 +3,14 @@ param(
     [switch]$BootStack,
     [int]$ApiPort = 0,
     [int]$WebPort = 0,
+    [ValidateSet("local-regression", "company-quality")]
+    [string]$ValidationLane = $(if ($env:AGENT_FORGE_VALIDATION_LANE) { $env:AGENT_FORGE_VALIDATION_LANE } else { "local-regression" }),
+    [string]$ModelBaseUrl = "",
+    [string]$ModelId = "",
+    [string]$ModelProvider = "",
+    [string]$ModelEndpointAlias = "",
+    [double]$ModelTimeoutSeconds = 15,
+    [switch]$SkipModelProbe,
     [switch]$SkipSyntheticHarness,
     [switch]$SkipApiEval,
     [switch]$KeepStack
@@ -54,7 +62,31 @@ try {
 
     if (-not $SkipApiEval) {
         Write-Step "Running full API-backed synthetic eval"
-        python eval/harness/run_api_synthetic_eval.py --api-base-url $ApiBaseUrl
+        $apiEvalArgs = @(
+            "eval/harness/run_api_synthetic_eval.py",
+            "--api-base-url",
+            $ApiBaseUrl,
+            "--validation-lane",
+            $ValidationLane,
+            "--model-timeout-seconds",
+            $ModelTimeoutSeconds
+        )
+        if ($ModelBaseUrl) {
+            $apiEvalArgs += @("--model-base-url", $ModelBaseUrl)
+        }
+        if ($ModelId) {
+            $apiEvalArgs += @("--model-id", $ModelId)
+        }
+        if ($ModelProvider) {
+            $apiEvalArgs += @("--model-provider", $ModelProvider)
+        }
+        if ($ModelEndpointAlias) {
+            $apiEvalArgs += @("--model-endpoint-alias", $ModelEndpointAlias)
+        }
+        if ($SkipModelProbe) {
+            $apiEvalArgs += "--skip-model-probe"
+        }
+        python @apiEvalArgs
     }
 
     Write-Step "API-backed eval runner smoke passed"

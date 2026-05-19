@@ -65,6 +65,7 @@ $document = Invoke-RestMethod `
 
 Assert-Smoke ($document.object_uri -like "object://*") "Expected uploaded object URI"
 Assert-Smoke ($document.checksum -like "sha256-*") "Expected uploaded SHA-256 checksum"
+Assert-Smoke ($document.mime_type -eq "text/markdown") "Expected uploaded Markdown MIME type"
 Assert-Smoke ($document.access_groups[0] -eq "all-employees") "Expected uploaded ACL group"
 
 $job = Invoke-RestMethod `
@@ -160,6 +161,11 @@ $run = Invoke-RestMethod `
 
 Assert-Smoke ($run.status -eq "succeeded") "Expected runtime run to succeed"
 Assert-Smoke ($run.citations.Count -eq 1) "Expected runtime citation from uploaded document"
+$runtimeCitation = @($run.citations)[0]
+Assert-Smoke ($runtimeCitation.document_id -eq $document.id) "Expected runtime citation to use uploaded document"
+Assert-Smoke ($runtimeCitation.chunk_id -eq $chunks[1].id) "Expected runtime citation to use uploaded chunk"
+Assert-Smoke ($runtimeCitation.citation_locator -like "*Eligibility*") "Expected runtime citation locator to include heading"
+Assert-Smoke ($run.guardrail.acl_filter_applied -eq $true) "Expected runtime ACL filter to be applied"
 Assert-Smoke ($run.guardrail.citation_validation_pass -eq $true) "Expected citation validator pass"
 Assert-Smoke ($run.input.model_routing_policy_ref -eq "packages/shared-contracts/model-routing-policy.v0.1.json") "Expected runtime input model routing policy ref"
 Assert-Smoke ($run.guardrail.budget_class -eq "standard") "Expected runtime standard model budget"
@@ -176,7 +182,46 @@ $hits = Invoke-RestMethod `
     -Headers $headers
 
 Assert-Smoke ($steps.Count -eq 5) "Expected five runtime trace steps"
+$stepTypes = @($steps | ForEach-Object { $_.step_type })
+Assert-Smoke (($stepTypes -join ",") -eq "guard_input,retriever,generator,citation_validator,guard_output") "Expected ordered runtime trace steps"
+Assert-Smoke ([bool]$steps[1].output_summary.vector_adapter) "Expected retriever trace vector adapter"
 Assert-Smoke ($steps[2].output_summary.route_stage -eq "answer_generator") "Expected generator trace route stage"
+Assert-Smoke ($steps[2].output_summary.model_tier -eq "standard-rag") "Expected generator trace model tier"
 Assert-Smoke ($hits.Count -eq 1) "Expected one stored retrieval hit"
+$runtimeHit = @($hits)[0]
+Assert-Smoke ($runtimeHit.document_id -eq $document.id) "Expected stored retrieval hit to use uploaded document"
+Assert-Smoke ($runtimeHit.chunk_id -eq $chunks[1].id) "Expected stored retrieval hit to use uploaded chunk"
+Assert-Smoke ($runtimeHit.used_in_context -eq $true) "Expected stored retrieval hit to be used in context"
+Assert-Smoke ($runtimeHit.used_as_citation -eq $true) "Expected stored retrieval hit to be used as citation"
+Assert-Smoke ($runtimeHit.acl_filter_snapshot.subjects -contains "all-employees") "Expected retrieval hit ACL snapshot to include all-employees"
+Assert-Smoke ([bool]$runtimeHit.acl_filter_snapshot.vector_adapter) "Expected retrieval hit ACL snapshot vector adapter"
+
+$auditEvents = Invoke-RestMethod `
+    -Method Get `
+    -Uri "$ApiBaseUrl/audit/events?limit=100" `
+    -Headers $headers
+
+$eventTypes = @($auditEvents | ForEach-Object { $_.event_type })
+foreach ($expectedEventType in @(
+    "knowledge_source.created",
+    "document.uploaded",
+    "document.indexed",
+    "retrieval.previewed",
+    "agent.created",
+    "agent_version.created",
+    "agent_version.published",
+    "run.created"
+)) {
+    Assert-Smoke ($eventTypes -contains $expectedEventType) "Expected audit event $expectedEventType"
+}
+
+$indexedEvent = @($auditEvents | Where-Object { $_.event_type -eq "document.indexed" -and $_.target_id -eq $document.id })[0]
+$previewEvent = @($auditEvents | Where-Object { $_.event_type -eq "retrieval.previewed" })[0]
+$runEvent = @($auditEvents | Where-Object { $_.event_type -eq "run.created" -and $_.target_id -eq $run.id })[0]
+
+Assert-Smoke ([bool]$indexedEvent.payload.vector_adapter) "Expected indexed audit vector adapter"
+Assert-Smoke ([bool]$previewEvent.payload.vector_adapter) "Expected retrieval preview audit vector adapter"
+Assert-Smoke ([bool]$runEvent.payload.vector_adapter) "Expected run audit vector adapter"
+Assert-Smoke ($runEvent.payload.citation_count -eq 1) "Expected run audit citation count"
 
 Write-Host "[smoke] Real upload ingestion smoke passed"

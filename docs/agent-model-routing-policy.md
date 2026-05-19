@@ -59,14 +59,33 @@ Rules:
 
 | Budget Class | Target Use | p95 Target | Deep Review Use |
 |---|---|---:|---|
-| `smoke` | local tests, contract checks, synthetic runner | 3 sec | disabled except security failure triage |
+| `smoke` | local tests, contract checks, synthetic runner | 3 sec | model calls disabled; deep-review escalation may be declared but is unavailable in smoke execution |
 | `standard` | MVP operator workflow | 8 sec | only for critic/security escalation |
 | `release-gate` | eval, baseline approval, go/no-go review | 15 sec | allowed and expected |
 | `incident` | suspected ACL leak, audit failure, model drift | 30 sec | mandatory |
 
 The default Sprint 1 route is `standard`. Eval baseline approval and failed-case triage use `release-gate`.
 
-## 5. Orchestrator Dispatch Policy
+## 5. Validation Model Lanes
+
+Agent Forge separates engineering validation from final answer-quality validation.
+
+| Lane | Model Target | Purpose | Required Evidence | Not Accepted As |
+|---|---|---|---|---|
+| `local-regression` | Local Qwen3 8B or equivalent small local model | integration, safety, ACL/citation regression, timeout handling, trace shape | contract tests, smoke runs, deterministic scorer, safety/refusal checks | final answer-quality approval |
+| `company-quality` | Company Qwen3.6 35B through vLLM or internal OpenAI-compatible gateway | final quality and operations validation for Korean business answers | Golden Test pass rate, human review, Korean tone review, recommendation rationale, latency/timeout report | ACL override, citation override, untraced judgement |
+
+Rules:
+
+- Local Qwen3 8B is the default smoke lane for fast iteration. It proves that the platform wiring, safety gates, and regression checks still work.
+- Company Qwen3.6 35B/vLLM is the release-quality lane. It proves that the final answer is natural, persuasive, and useful for company work.
+- Both lanes must use the same ACL-first retrieval, citation validator, runtime trace, and audit event requirements.
+- The company-quality model may receive only authorized chunks, answer drafts, citation records, and trace IDs. It must never see denied chunks, pre-ACL candidates, raw storage URIs, or ACL internals beyond the minimum trace summary needed for review.
+- The release report must record lane, provider, endpoint alias, model ID, model version if available, timeout, latency p50/p95, and failed Golden Test cases.
+- The exact internal model ID and vLLM endpoint are deployment configuration, not hardcoded policy text.
+- Current Sprint 1 runtime still uses synthetic answer generation; these lanes become executable model-serving evidence only after the Model Gateway/vLLM client records concrete provider and model provenance.
+
+## 6. Orchestrator Dispatch Policy
 
 For every non-trivial dispatch, the orchestrator records:
 
@@ -85,8 +104,9 @@ Current Sprint 1 dispatch:
 | Upload-to-runtime smoke | Backend + RAG + Security + QA | deterministic retrieval/scoring, `standard-rag` for runtime answer | smoke script and run trace |
 | Agent Studio eval sync | Frontend + QA | `fast-small` UI update, `standard-rag` workflow review | Next build and route smoke |
 | Model policy hardening | Orchestrator + AI Runtime + Security | `deep-review` because it affects runtime routing | this policy and shared contract |
+| Company vLLM quality lane | AI Runtime + QA/Eval + DevOps/MLOps + Security | `local-regression` first, then `company-quality` release gate | Golden Test report, latency/timeout report, human review, trace/audit evidence |
 
-## 6. Agent Card Integration
+## 7. Agent Card Integration
 
 Agent Card `model_policy` should reference this routing policy and declare a budget class:
 
@@ -123,7 +143,7 @@ model_policy:
     on_model_error: "safe_failure"
 ```
 
-## 7. D3 Acceptance
+## 8. D3 Acceptance
 
 Model optimization is accepted only when:
 
@@ -131,4 +151,5 @@ Model optimization is accepted only when:
 - deterministic controls remain outside model judgement
 - high-risk policy decisions can escalate to `deep-review`
 - eval reports include validated model route metadata now, and Model Gateway later replaces tier declarations with provider/model/version evidence
+- validation lane and concrete model/provider evidence are recorded for local-regression and company-quality runs
 - no release gate relies only on a cheap model's unverified judgement

@@ -110,6 +110,9 @@ class FakeVectorStore:
         self._deleted_document_ids: set[str] = set()
 
     def upsert_chunks(self, chunks: Sequence[VectorUpsertInput]) -> tuple[VectorUpsertResult, ...]:
+        for chunk in chunks:
+            self._deleted_document_ids.discard(chunk.document_id)
+
         return tuple(
             VectorUpsertResult(
                 chunk_id=chunk.chunk_id,

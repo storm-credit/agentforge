@@ -440,7 +440,9 @@ def _run_index_job(
         )
         return
 
+    vector_store = get_vector_store()
     if payload.force_reindex:
+        vector_store.delete_document(document.id)
         for chunk in list(document.chunks):
             db.delete(chunk)
         db.flush()
@@ -450,7 +452,6 @@ def _run_index_job(
         "access_groups": document.access_groups,
         "knowledge_source_id": document.knowledge_source_id,
     }
-    vector_store = get_vector_store()
     upsert_results = vector_store.upsert_chunks(
         tuple(
             VectorUpsertInput(

@@ -157,6 +157,250 @@ test.describe("Agent Studio shell", () => {
     ).toBeVisible();
   });
 
+  test("uploaded knowledge evidence can be traced through runtime review", async ({ page }) => {
+    await page.route("**/api/v1/knowledge/sources", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({
+        contentType: "application/json",
+        json: [
+          {
+            id: "source-upload-1",
+            name: "Uploaded policy source",
+            owner_department: "Operations",
+            default_confidentiality_level: "internal",
+            status: "active",
+            updated_at: "2026-05-15T00:00:00Z",
+          },
+        ],
+      });
+    });
+    await page.route("**/api/v1/knowledge/documents", async (route) => {
+      if (route.request().method() !== "GET") {
+        await route.fallback();
+        return;
+      }
+
+      await route.fulfill({ contentType: "application/json", json: [] });
+    });
+    await page.route("**/api/v1/knowledge/documents/upload?**", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          id: "uploaded-doc-1",
+          knowledge_source_id: "source-upload-1",
+          title: "Uploaded remote work policy",
+          object_uri: "object://agent-forge-documents/knowledge/source-upload-1/uploaded-doc-1.md",
+          checksum: "sha256-uploaded",
+          mime_type: "text/markdown",
+          confidentiality_level: "internal",
+          access_groups: ["all-employees"],
+          status: "registered",
+          effective_date: "2026-05-15",
+          created_at: "2026-05-15T00:00:00Z",
+          updated_at: "2026-05-15T00:00:00Z",
+        },
+      });
+    });
+    await page.route("**/api/v1/knowledge/documents/uploaded-doc-1/index-jobs", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          id: "index-job-1",
+          document_id: "uploaded-doc-1",
+          status: "succeeded",
+          stage: "upsert",
+          config: { source: "object_store" },
+          created_by: "operator",
+          chunk_count: 1,
+          error_code: null,
+          error_message: null,
+          artifact_uri: "db://document_chunks/uploaded-doc-1",
+          started_at: "2026-05-15T00:00:00Z",
+          finished_at: "2026-05-15T00:00:01Z",
+          created_at: "2026-05-15T00:00:00Z",
+          updated_at: "2026-05-15T00:00:01Z",
+        },
+      });
+    });
+    await page.route("**/api/v1/knowledge/retrieval/preview", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          query: "manager approval",
+          denied_count: 0,
+          hits: [
+            {
+              document_id: "uploaded-doc-1",
+              knowledge_source_id: "source-upload-1",
+              chunk_id: "uploaded-chunk-1",
+              title: "Uploaded remote work policy",
+              confidentiality_level: "internal",
+              access_groups: ["all-employees"],
+              score: 0.92,
+              citation: "Uploaded remote work policy / Eligibility / lines 7-7",
+              citation_locator: "Uploaded remote work policy / Eligibility / lines 7-7",
+            },
+          ],
+        },
+      });
+    });
+
+    await page.goto("/knowledge");
+    await page.getByRole("button", { name: "Sync API" }).click();
+    await expect(page.getByRole("button", { name: /Uploaded policy source/ })).toBeVisible();
+
+    await page.getByLabel("Document title").fill("Uploaded remote work policy");
+    await page.setInputFiles('input[type="file"]', {
+      name: "remote-work.md",
+      mimeType: "text/markdown",
+      buffer: Buffer.from("# Remote Work\n\n## Eligibility\n\nEmployees may request remote work."),
+    });
+    await page.getByRole("button", { name: "Upload document" }).click();
+    await expect(page.getByText("Uploaded remote work policy", { exact: true })).toBeVisible();
+    await expect(page.getByText(/Registered Uploaded remote work policy through/)).toBeVisible();
+
+    await page.getByRole("button", { name: "Queue index" }).click();
+    await expect(page.getByText(/Indexed uploaded object storage document/)).toBeVisible();
+
+    await page.getByLabel("Question").fill("manager approval");
+    await page.getByRole("button", { name: "Preview retrieval" }).click();
+    await expect(
+      page.locator(".retrievalResults").getByText("Uploaded remote work policy", { exact: true }),
+    ).toBeVisible();
+
+    await page.route("**/api/v1/eval/overview", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          run: {
+            id: "eval-upload-1",
+            corpus_id: "upload-to-runtime-smoke",
+            mode: "api",
+            status: "passed",
+            total_cases: 1,
+            passed_cases: 1,
+            failed_cases: 0,
+            summary: {
+              citation_coverage: 1,
+              trace_completeness: 1,
+              acl_violation_count: 0,
+            },
+          },
+          suite_counts: { citation: 1 },
+          results: [
+            {
+              case_id: "upload_trace_001",
+              suite: "citation",
+              expected_behavior: "answer",
+              passed: true,
+              run_id: "runtime-upload-1",
+              status: "succeeded",
+              citation_document_ids: ["uploaded-doc-1"],
+              retrieval_document_ids: ["uploaded-doc-1"],
+              retrieval_denied_count: 0,
+              findings: [],
+            },
+          ],
+        },
+      });
+    });
+    await page.route("**/api/v1/runs/runtime-upload-1", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          id: "runtime-upload-1",
+          status: "succeeded",
+          latency_ms: 331,
+          retrieval_denied_count: 0,
+          citations: [
+            {
+              document_id: "uploaded-doc-1",
+              chunk_id: "uploaded-chunk-1",
+              title: "Uploaded remote work policy",
+              citation_locator: "Uploaded remote work policy / Eligibility / lines 7-7",
+              score: 0.92,
+            },
+          ],
+          guardrail: {
+            outcome: "answer",
+            model_route_summary: {
+              answer_generator: { tier: "standard-rag" },
+            },
+          },
+        },
+      });
+    });
+    await page.route("**/api/v1/runs/runtime-upload-1/steps", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: [
+          {
+            step_type: "retriever",
+            status: "succeeded",
+            latency_ms: 28,
+            input_summary: { top_k: 1 },
+            output_summary: {
+              route_stage: "retriever",
+              model_tier: "deterministic",
+              hit_count: 1,
+              denied_count: 0,
+            },
+          },
+          {
+            step_type: "generator",
+            status: "succeeded",
+            latency_ms: 104,
+            input_summary: { context_count: 1 },
+            output_summary: {
+              route_stage: "answer_generator",
+              model_tier: "standard-rag",
+              citation_count: 1,
+            },
+          },
+        ],
+      });
+    });
+    await page.route("**/api/v1/runs/runtime-upload-1/retrieval-hits", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: [
+          {
+            id: "hit-upload-1",
+            document_id: "uploaded-doc-1",
+            chunk_id: "uploaded-chunk-1",
+            title: "Uploaded remote work policy",
+            citation_locator: "Uploaded remote work policy / Eligibility / lines 7-7",
+            rank_original: 1,
+            score_vector: 0.92,
+            used_in_context: true,
+            used_as_citation: true,
+            acl_filter_snapshot: { subjects: ["all-employees"] },
+          },
+        ],
+      });
+    });
+
+    await page.goto("/eval");
+    await page.getByRole("button", { name: "Sync API" }).click();
+    await expect(page.getByText(/Synced latest eval run/)).toBeVisible();
+    await page.getByRole("button", { name: "Sync trace" }).click();
+    await expect(page.getByText(/Synced runtime trace for upload_trace_001/)).toBeVisible();
+    await expect(page.locator(".citationSection").getByText("Uploaded remote work policy").first()).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open trace" })).toHaveAttribute(
+      "href",
+      "/trace?run_id=runtime-upload-1",
+    );
+
+    await page.goto("/trace?run_id=runtime-upload-1");
+    await expect(page.getByText(/Loaded runtime trace/)).toBeVisible();
+    await expect(page.getByText("Uploaded remote work policy").first()).toBeVisible();
+    await expect(page.getByText("Used as citation")).toBeVisible();
+  });
+
   test("eval workflow supports suite filtering and trace citation review", async ({ page }) => {
     await page.route("**/api/**", async (route) => {
       await route.fulfill({ status: 404, body: "Not found" });

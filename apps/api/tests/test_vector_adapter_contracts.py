@@ -157,6 +157,34 @@ def test_fake_vector_search_respects_knowledge_source_scope_and_delete():
     assert deleted.hits == ()
 
 
+def test_fake_vector_upsert_reactivates_document_after_delete():
+    document = _document(
+        document_id="doc-1",
+        title="Remote Work Policy",
+        content="manager approval remote work",
+    )
+    store = FakeVectorStore()
+
+    store.delete_document("doc-1")
+    store.upsert_chunks(
+        (
+            VectorUpsertInput(
+                chunk_id="doc-1:chunk-002",
+                document_id="doc-1",
+                content_hash="sha256-doc-1-new",
+                embedding_model="none-smoke",
+            ),
+        )
+    )
+    result = store.search(
+        query=VectorQuery(query_text="manager approval", top_k=10),
+        documents=[document],
+        acl_filter=build_acl_filter(_principal()),
+    )
+
+    assert [hit.document_id for hit in result.hits] == ["doc-1"]
+
+
 def test_fake_vector_search_excludes_zero_score_authorized_chunks():
     document = _document(
         document_id="doc-1",
@@ -299,3 +327,30 @@ def test_qdrant_search_pushes_acl_filter_into_vector_query():
         "key": "knowledge_source_id",
         "match": {"any": ["source-1"]},
     } in must_filter
+
+
+def test_qdrant_delete_document_removes_points_by_document_id():
+    store = QdrantVectorStore(url="http://qdrant.local", collection="chunks", vector_size=8)
+    requests = []
+
+    def fake_request(method, path, payload=None):
+        requests.append((method, path, payload))
+        return {"result": {"operation_id": 1}}
+
+    store._request = fake_request
+
+    store.delete_document("doc-1")
+
+    assert requests == [
+        (
+            "POST",
+            "/collections/chunks/points/delete?wait=true",
+            {
+                "filter": {
+                    "must": [
+                        {"key": "document_id", "match": {"value": "doc-1"}},
+                    ],
+                },
+            },
+        )
+    ]

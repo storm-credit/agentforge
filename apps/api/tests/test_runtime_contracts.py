@@ -318,6 +318,21 @@ def test_runtime_route_summary_matches_shared_policy_contract():
         assert route["route_decision_source"] == runtime_agents[stage]["route_decision_source"]
 
 
+def test_shared_policy_defines_model_validation_lanes():
+    repo_root = Path(__file__).resolve().parents[3]
+    policy_path = repo_root / "packages" / "shared-contracts" / "model-routing-policy.v0.1.json"
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    validation_lanes = policy["validation_lanes"]
+
+    assert set(validation_lanes) == {"local-regression", "company-quality"}
+    assert validation_lanes["local-regression"]["provider"] == "local"
+    assert "final_quality_approval" in validation_lanes["local-regression"]["must_not"]
+    assert validation_lanes["company-quality"]["provider"] == "company-vllm"
+    assert "run_after_acl_filter" in validation_lanes["company-quality"]["must"]
+    assert "receive_pre_acl_candidates" in validation_lanes["company-quality"]["must_not"]
+    assert "receive_denied_chunks" in validation_lanes["company-quality"]["must_not"]
+
+
 def test_runtime_refuses_write_action_before_retrieval(client):
     source = _create_source(client)
     document = _register_document(

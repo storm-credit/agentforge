@@ -42,6 +42,7 @@ This backlog translates the Agent Forge MVP design into development-ready epics 
 | AF-021 | Add compose boot smoke | Fresh stack boot and health checks are repeatable |
 | AF-022 | Add Agent Studio smoke workflow | Navigation and first operator workflow pass Playwright smoke |
 | AF-023 | Add model routing policy | Agent Card config, eval reports, and runtime traces validate model tier/budget route |
+| AF-024 | Add model validation lanes | Local Qwen3 8B regression and company Qwen3.6 35B/vLLM quality lanes are recorded with model provenance |
 
 ## 3. Sprint Plan
 
@@ -121,13 +122,19 @@ Sprint 1 progress:
 - `tools/smoke/indexing-smoke.ps1` verifies job creation, chunk metadata, chunk retrieval preview, and fail-closed no-ACL indexing.
 - AF-012 vector adapter interface started with a deterministic fake adapter and ACL-required search contract.
 - Qdrant adapter wiring started behind `AGENT_FORGE_VECTOR_STORE_BACKEND=qdrant`, with ACL filters pushed into the vector query and adapter metadata captured in trace/audit payloads.
+- Force reindex now deletes existing vector points before replacing DB chunks, with fake and Qdrant adapter contract coverage for stale-vector prevention.
 - AF-015 runtime run API skeleton started with `runs`, `run_steps`, `retrieval_hits`, and `POST /api/v1/runs`.
 - Runtime contract coverage verifies published-version gating, ACL-filtered retrieval hits, step trace ordering, and citation trace storage.
 - AF-016 citation validator started with required-citation pass/fail contracts and runtime no-citation failure trace coverage.
 - API-backed eval report persistence started with `/api/v1/eval/runs`, `/overview`, latest/result reads, and baseline approval audit events.
 - AF-023 model routing policy is now API-enforced for Agent version config and eval report persistence; runtime traces include stage-complete route metadata aligned to the shared policy contract.
+- Model validation lanes are now defined: `local-regression` for local Qwen3 8B integration/safety/regression checks, and `company-quality` for company Qwen3.6 35B/vLLM final Korean business quality and ops validation.
+- API-backed eval runner now supports a caveman OpenAI-compatible model probe for validation-lane evidence: endpoint/model come from env or CLI, one `/v1/chat/completions` call records safe provenance and latency, and `company-quality` fails setup without a successful probe.
+- Local Docker model evidence is confirmed for `local-regression`: `wset-ollama` exposes `http://127.0.0.1:11434/v1`, `/v1/models` returns `qwen3:8b`, the OpenAI-compatible probe succeeds with provider `local-ollama` and alias `docker-wset-ollama`, and the API-backed eval runner passes 30/30 cases.
 - Audit read/search API started at `/api/v1/audit/events` with event type, actor, target, and text filters.
 - Agent Studio now has Trace Viewer entry points: Eval cases can sync the selected `run_id` through `/runs/{run_id}`, `/steps`, and `/retrieval-hits`, open `/trace?run_id=<run-id>`, then inspect step payloads and retrieval-hit comparison from a shareable URL.
+- Agent Studio Playwright smoke now verifies one uploaded document identity across Knowledge upload, index completion, retrieval preview, Eval trace sync, and `/trace?run_id=<run-id>`.
+- `tools/smoke/real-ingestion-smoke.ps1` now asserts uploaded MIME type, exact runtime citation document/chunk IDs, ordered runtime steps, retrieval-hit ACL/vector metadata, and audit event chain payloads.
 
 ### Sprint 2
 
@@ -144,6 +151,8 @@ Scope:
 - Trace URL links from audit/event detail and richer timing controls
 - Audit Explorer result detail and saved filter presets
 - ACL/citation golden set execution
+- Model Gateway or OpenAI-compatible vLLM client with provider/model/version/endpoint provenance in run and eval traces
+- vLLM health, timeout, concurrency, and model-quality Golden Test lane for company Qwen3.6 35B
 
 ## 4. Release Gate
 

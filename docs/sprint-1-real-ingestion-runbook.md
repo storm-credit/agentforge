@@ -44,6 +44,20 @@ For a single eval-oriented command that also checks the synthetic corpus, determ
 ./tools/smoke/api-eval-runner-smoke.ps1 -ApiBaseUrl "http://127.0.0.1:8000/api/v1"
 ```
 
+To attach the company Qwen3.6 35B/vLLM quality-lane proof, provide the OpenAI-compatible endpoint as deployment configuration:
+
+```powershell
+./tools/smoke/api-eval-runner-smoke.ps1 `
+  -ApiBaseUrl "http://127.0.0.1:8000/api/v1" `
+  -ValidationLane company-quality `
+  -ModelBaseUrl $env:AGENT_FORGE_MODEL_BASE_URL `
+  -ModelId $env:AGENT_FORGE_MODEL_ID `
+  -ModelProvider company-vllm `
+  -ModelEndpointAlias company-qwen35b
+```
+
+The runner sends one `/v1/chat/completions` probe, records safe model provenance in the eval report, and treats a missing or failed probe as a company-quality lane setup failure.
+
 To boot the compose stack and then run the eval smoke:
 
 ```powershell
@@ -72,6 +86,7 @@ The script checks:
 - `python eval/harness/run_api_synthetic_eval.py` uploads the 10 synthetic corpus documents, indexes them from object storage, runs all 30 cases, compares `answer`, `policy_denied`, `no_context`, and `refuse` outcomes, and stores the report in `/api/v1/eval/runs`.
 - Runtime run records and persisted eval reports include `model_routing_policy_ref`, `budget_class`, and a stage-complete `model_route_summary` using `answer_generator`, `critic`, `formatter`, and `cost_latency_controller` policy keys.
 - Runtime trace and audit payloads include the selected vector adapter, currently `fake` by default or `qdrant` when explicitly enabled.
+- The smoke now also checks that runtime citations and retrieval hits reference the exact uploaded document/chunk IDs, trace steps are ordered, and the audit event chain includes vector-adapter payloads for indexing, retrieval preview, and run creation.
 
 ## Runtime Trace Evidence
 

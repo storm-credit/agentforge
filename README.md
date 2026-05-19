@@ -30,6 +30,7 @@ Sprint 0 실행 골격은 `apps/`와 `deploy/compose/` 아래에 있습니다.
 - API: `apps/api` FastAPI, SQLAlchemy, Alembic
 - Web: `apps/web` Next.js App Router shell
 - Local stack: `deploy/compose/docker-compose.dev.yaml`
+- 처음 보는 사람용 사용/테스트 가이드: [docs/orchestrator-usage-and-test-guide.md](docs/orchestrator-usage-and-test-guide.md)
 - Sprint 0 runbook: [docs/sprint-0-runbook.md](docs/sprint-0-runbook.md)
 - Sprint 1 real ingestion runbook: [docs/sprint-1-real-ingestion-runbook.md](docs/sprint-1-real-ingestion-runbook.md)
 - Eval/Trace UI workflow: [docs/eval-trace-ui-runbook.md](docs/eval-trace-ui-runbook.md)
@@ -40,6 +41,7 @@ Sprint 0 실행 골격은 `apps/`와 `deploy/compose/` 아래에 있습니다.
 | 문서 | 목적 |
 |---|---|
 | [docs/index.md](docs/index.md) | 공식 문서 목차 |
+| [docs/orchestrator-usage-and-test-guide.md](docs/orchestrator-usage-and-test-guide.md) | 처음 보는 사람용 사용법과 테스트 절차 |
 | [docs/project-proposal.md](docs/project-proposal.md) | 회의/상신용 프로젝트 제안서 |
 | [docs/use-case-definition.md](docs/use-case-definition.md) | 1차 MVP 유스케이스 정의 |
 | [docs/pilot-readiness.md](docs/pilot-readiness.md) | 파일럿 부서/문서/권한 준비 체크리스트 |

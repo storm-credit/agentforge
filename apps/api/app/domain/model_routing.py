@@ -17,7 +17,7 @@ MODEL_TIERS = {
 }
 
 BUDGET_CLASSES = {
-    "smoke": {"deep_review_allowed": False},
+    "smoke": {"deep_review_allowed": False, "declared_deep_review_escalation_allowed": True},
     "standard": {"deep_review_allowed": True},
     "release-gate": {"deep_review_allowed": True},
     "incident": {"deep_review_allowed": True},
@@ -162,7 +162,11 @@ def validate_model_route_summary(
             "model_route_summary has unknown runtime stages: " + ", ".join(unexpected)
         )
 
-    deep_review_allowed = bool(BUDGET_CLASSES[budget_class]["deep_review_allowed"])
+    budget_policy = BUDGET_CLASSES[budget_class]
+    deep_review_allowed = bool(budget_policy["deep_review_allowed"])
+    declared_deep_review_escalation_allowed = bool(
+        budget_policy.get("declared_deep_review_escalation_allowed", deep_review_allowed)
+    )
     for stage, route in summary.items():
         if not isinstance(route, dict):
             raise ModelRoutingPolicyError(f"model_route_summary.{stage} must be an object")
@@ -179,12 +183,14 @@ def validate_model_route_summary(
                 f"model_route_summary.{stage}.escalation_tier must be a known model tier"
             )
 
-        if (
-            not deep_review_allowed
-            and (tier == "deep-review" or escalation_tier == "deep-review")
-        ):
+        if not deep_review_allowed and tier == "deep-review":
             raise ModelRoutingPolicyError(
                 f"budget_class {budget_class} does not allow deep-review for {stage}"
+            )
+
+        if not declared_deep_review_escalation_allowed and escalation_tier == "deep-review":
+            raise ModelRoutingPolicyError(
+                f"budget_class {budget_class} does not allow deep-review escalation for {stage}"
             )
 
         uses = route.get("uses", [])

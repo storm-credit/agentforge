@@ -144,10 +144,13 @@ MVP 검증은 모델을 두 갈래로 분리한다.
 
 | 점수 | 정의 |
 |---:|---|
-| 2 | 정확하고 citation이 적절하며 바로 사용 가능 |
-| 1 | 대체로 맞지만 누락/표현 문제가 있음 |
-| 0 | 부정확하거나 근거가 약함 |
-| -1 | 권한/보안/민감정보 문제 |
+| 5 | 자연스럽고 정확하며 citation과 추천 이유가 바로 업무에 사용 가능 |
+| 4 | 운영 가능 수준. 작은 표현 수정만 필요 |
+| 3 | 대체로 맞지만 누락, 장황함, 톤 문제가 있어 수정 필요 |
+| 2 | 근거 연결이나 설명 품질이 약해 재작성 필요 |
+| 1 | 부정확하거나 권한/보안/민감정보 문제가 있어 blocker |
+
+`company-quality` eval report는 `summary.quality_review`에 `quality-rubric-v0.1`을 기록한다. 이 rubric은 `answer_naturalness`, `korean_business_tone`, `recommendation_rationale`, `groundedness`를 1~5점으로 보고, 각 항목 4점 이상을 통과 기준으로 둔다. 자동 blocker gate는 final answer의 `<think>`/`</think>` 노출 금지, citation ACL 재확인, raw endpoint/secret 미기록이다.
 
 ### LLM-as-Judge
 
@@ -254,10 +257,11 @@ docker start wset-ollama
   -ModelBaseUrl "http://127.0.0.1:11434/v1" `
   -ModelId "qwen3:8b" `
   -ModelProvider local-ollama `
-  -ModelEndpointAlias docker-wset-ollama
+  -ModelEndpointAlias docker-wset-ollama `
+  -ModelTimeoutSeconds 120
 ```
 
-Current Docker evidence: `wset-ollama` exposes Ollama's OpenAI-compatible endpoint on `11434`, `/v1/models` returns `qwen3:8b`, the model probe succeeds, and the API-backed local-regression eval passes 30/30 cases. Qwen3 may emit thinking text in a generic health prompt, so Golden Test scoring must separately check final-answer cleanliness and Korean business tone.
+Current Docker evidence: `wset-ollama` exposes Ollama's OpenAI-compatible endpoint on `11434`, `/v1/models` returns `qwen3:8b`, the model probe succeeds with the local 120-second timeout profile, and the API-backed local-regression eval passes 30/30 cases. Qwen3 may emit thinking text in a generic health prompt, so Golden Test scoring must separately check final-answer cleanliness and Korean business tone.
 
 Company-quality lane command shape:
 

@@ -78,7 +78,27 @@ export type EvalRunSummary = {
   citationCoverage: number;
   aclViolations: number;
   traceCompleteness: number;
+  qualityReview?: EvalQualityReview;
   endpoint?: string;
+};
+
+export type EvalQualityReview = {
+  rubricVersion: string;
+  validationLane: string;
+  status: string;
+  humanReviewRequired: boolean;
+  releaseBlocked: boolean;
+  notes: string;
+  dimensions: {
+    id: string;
+    label: string;
+    passingScore: number;
+  }[];
+  blockerGates: {
+    id: string;
+    label: string;
+    severity: string;
+  }[];
 };
 
 export type EvalOverview = {
@@ -389,6 +409,9 @@ function mapRunSummary(
   const rawStatus = stringField(payload, "status");
   const status = normalizeRunStatus(rawStatus, failedCases);
   const summary = asRecord(payload.summary) ?? payload;
+  const qualityReview = mapQualityReview(
+    asRecord(summary.quality_review) ?? asRecord(summary.qualityReview),
+  );
 
   return {
     id: stringField(payload, "id") ?? stringField(payload, "eval_run_id") ?? "eval-run-latest",
@@ -417,6 +440,7 @@ function mapRunSummary(
     traceCompleteness: ratioField(summary, "trace_completeness")
       ?? ratioField(summary, "traceCompleteness")
       ?? computeTraceCompleteness(cases),
+    qualityReview,
     endpoint,
   };
 }
@@ -605,6 +629,69 @@ function buildRunFromCases(cases: EvalCaseResult[], endpoint?: string): EvalRunS
     traceCompleteness: computeTraceCompleteness(cases),
     endpoint,
   };
+}
+
+function mapQualityReview(payload: Record<string, unknown> | null): EvalQualityReview | undefined {
+  if (!payload) {
+    return undefined;
+  }
+
+  const dimensionsRecord = asRecord(payload.dimensions);
+  const dimensions = dimensionsRecord
+    ? Object.entries(dimensionsRecord).map(([id, value]) => {
+        const record = asRecord(value);
+        return {
+          id,
+          label: stringField(record ?? {}, "label") ?? id,
+          passingScore: numericField(record ?? {}, "passing_score")
+            ?? numericField(record ?? {}, "passingScore")
+            ?? 4,
+        };
+      })
+    : [];
+
+  const gatesRecord = asRecord(payload.automatic_gates) ?? asRecord(payload.automaticGates);
+  const blockerGates = gatesRecord
+    ? Object.entries(gatesRecord).map(([id, value]) => {
+        const record = asRecord(value);
+        return {
+          id,
+          label: qualityGateLabel(id, record),
+          severity: stringField(record ?? {}, "severity") ?? "gate",
+        };
+      })
+    : [];
+
+  return {
+    rubricVersion: stringField(payload, "rubric_version")
+      ?? stringField(payload, "rubricVersion")
+      ?? "quality-rubric",
+    validationLane: stringField(payload, "validation_lane")
+      ?? stringField(payload, "validationLane")
+      ?? "unknown",
+    status: stringField(payload, "status") ?? "pending",
+    humanReviewRequired: booleanField(payload, "human_review_required")
+      ?? booleanField(payload, "humanReviewRequired")
+      ?? false,
+    releaseBlocked: booleanField(payload, "release_approval_blocked_until_review")
+      ?? booleanField(payload, "releaseApprovalBlockedUntilReview")
+      ?? false,
+    notes: stringField(payload, "notes") ?? "",
+    dimensions,
+    blockerGates,
+  };
+}
+
+function qualityGateLabel(id: string, record: Record<string, unknown> | null) {
+  const mustNotInclude = arrayField(record ?? {}, "must_not_include")
+    ?.filter((item): item is string => typeof item === "string");
+  if (mustNotInclude?.length) {
+    return `${id}: must not include ${mustNotInclude.join(", ")}`;
+  }
+  if (booleanField(record ?? {}, "required")) {
+    return `${id}: required`;
+  }
+  return id;
 }
 
 function pickLatestRun(payload: unknown): Record<string, unknown> | null {

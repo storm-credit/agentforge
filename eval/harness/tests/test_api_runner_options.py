@@ -32,6 +32,32 @@ class ApiRunnerOptionsTest(unittest.TestCase):
         )
 
         self.assertEqual(payload["budget_class"], "release-gate")
+        quality_review = payload["summary"]["quality_review"]
+        self.assertEqual(quality_review["rubric_version"], "quality-rubric-v0.1")
+        self.assertEqual(quality_review["status"], "pending_human_review")
+        self.assertTrue(quality_review["human_review_required"])
+        self.assertTrue(quality_review["release_approval_blocked_until_review"])
+        self.assertEqual(
+            quality_review["automatic_gates"]["final_answer_cleanliness"]["must_not_include"],
+            ["<think>", "</think>"],
+        )
+
+    def test_local_regression_quality_review_is_advisory_only(self):
+        payload = runner._eval_run_payload(
+            {
+                "corpus_id": "synthetic-corpus-v0.1",
+                "mode": "api",
+                "setup": {"validation_lane": "local-regression"},
+                "summary": {"existing": "kept"},
+                "results": [],
+            }
+        )
+
+        self.assertEqual(payload["summary"]["existing"], "kept")
+        quality_review = payload["summary"]["quality_review"]
+        self.assertEqual(quality_review["status"], "advisory_only")
+        self.assertFalse(quality_review["human_review_required"])
+        self.assertFalse(quality_review["release_approval_blocked_until_review"])
 
     def test_company_quality_requires_successful_model_probe(self):
         args = runner.parse_args(

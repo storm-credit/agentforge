@@ -38,6 +38,43 @@ VALIDATION_LANE_BUDGET_CLASS = {
     "local-regression": "smoke",
     "company-quality": "release-gate",
 }
+QUALITY_REVIEW_RUBRIC_VERSION = "quality-rubric-v0.1"
+QUALITY_REVIEW_RUBRIC = {
+    "rubric_version": QUALITY_REVIEW_RUBRIC_VERSION,
+    "score_scale": {"min": 1, "max": 5, "passing_score": 4},
+    "dimensions": {
+        "answer_naturalness": {
+            "label": "Answer naturalness",
+            "passing_score": 4,
+        },
+        "korean_business_tone": {
+            "label": "Korean business tone",
+            "passing_score": 4,
+        },
+        "recommendation_rationale": {
+            "label": "Recommendation rationale",
+            "passing_score": 4,
+        },
+        "groundedness": {
+            "label": "Groundedness to authorized citations",
+            "passing_score": 4,
+        },
+    },
+    "automatic_gates": {
+        "final_answer_cleanliness": {
+            "severity": "blocker",
+            "must_not_include": ["<think>", "</think>"],
+        },
+        "citation_acl_recheck": {
+            "severity": "blocker",
+            "required": True,
+        },
+        "raw_endpoint_secret_absent": {
+            "severity": "blocker",
+            "required": True,
+        },
+    },
+}
 EVAL_MODEL_ROUTE_SUMMARY = {
     "security_precheck": {
         "tier": "fast-small",
@@ -338,11 +375,35 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _eval_run_payload(report_payload: Mapping[str, Any]) -> dict[str, Any]:
+    summary = report_payload.get("summary")
+    merged_summary = dict(summary) if isinstance(summary, Mapping) else {}
+    merged_summary.setdefault("quality_review", _quality_review_for_report(report_payload))
     return {
         **dict(report_payload),
+        "summary": merged_summary,
         "model_routing_policy_ref": MODEL_ROUTING_POLICY_REF,
         "budget_class": _budget_class_for_report(report_payload),
         "model_route_summary": EVAL_MODEL_ROUTE_SUMMARY,
+    }
+
+
+def _quality_review_for_report(report_payload: Mapping[str, Any]) -> dict[str, Any]:
+    setup = report_payload.get("setup")
+    validation_lane = setup.get("validation_lane") if isinstance(setup, Mapping) else ""
+    is_company_quality = validation_lane == "company-quality"
+    return {
+        **QUALITY_REVIEW_RUBRIC,
+        "validation_lane": validation_lane or "unknown",
+        "human_review_required": is_company_quality,
+        "release_approval_blocked_until_review": is_company_quality,
+        "status": "pending_human_review" if is_company_quality else "advisory_only",
+        "notes": (
+            "Company-quality runs require human review for tone, usefulness, rationale, "
+            "and final-answer cleanliness before release approval."
+            if is_company_quality
+            else "Local-regression runs prove integration and safety regression only; "
+            "they are not final answer-quality approval."
+        ),
     }
 
 

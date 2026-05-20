@@ -42,6 +42,33 @@ Rules:
 - The orchestrator records the chosen tier when a decision changes scope, gates, or release readiness.
 - PM and Frontend should not consume deep-review capacity for routine wording, list cleanup, or UI copy unless it affects acceptance criteria.
 
+### Current Sprint Model Selection
+
+The orchestrator maps tiers to concrete model profiles for the current Sprint 1/2 work. This is a deployment choice, not a permanent product claim.
+
+| Profile | Backing Model | Provider | Used For | Must Not Be Used For |
+|---|---|---|---|---|
+| `none-deterministic` | no generative model | local code | ACL filters, schema checks, formatting, scorer gates | judgement or answer generation |
+| `local-qwen8b` | `qwen3:8b` via Docker `wset-ollama` | local Ollama OpenAI-compatible endpoint | fast specialist drafts, local-regression smoke, bounded critique | final quality approval |
+| `company-qwen35b` | company Qwen3.6 35B via vLLM | company OpenAI-compatible endpoint | release-quality review, Korean business tone, recommendation rationale, deep-review decisions | pre-ACL retrieval, ACL override, raw secret handling |
+| `embedding-profile-tbd` | deployment-pinned embedding model | local or company | chunk/query embeddings | user-visible generation |
+| `reranker-profile-tbd` | deployment-pinned reranker | local or company | post-ACL reranking | pre-ACL candidate review |
+
+| Specialist Agent | Routine Profile | Escalation Profile | Orchestrator Decision |
+|---|---|---|---|
+| Orchestrator | `local-qwen8b` | `company-qwen35b` | use 35B for release, contradiction, and go/no-go calls |
+| PM Agent | `local-qwen8b` | `company-qwen35b` | use 35B only when pilot acceptance or stakeholder risk changes |
+| Chief Architect | `local-qwen8b` for draft analysis, `company-qwen35b` for boundary review | `company-qwen35b` | architecture fitness decisions need deep review |
+| Security Architect | `company-qwen35b` | `company-qwen35b` | security defaults to deep-review; no downgrade for ACL/PII/audit |
+| AI Runtime Architect | `local-qwen8b` | `company-qwen35b` | runtime/model-policy changes escalate |
+| RAG/Data Specialist | `local-qwen8b` | `company-qwen35b` | chunking/retrieval failures escalate |
+| Backend Specialist | `local-qwen8b` | `company-qwen35b` | migrations/auth/audit persistence escalate |
+| Frontend Specialist | `local-qwen8b` | `local-qwen8b` or `company-qwen35b` for release-gate UI | 35B only when UI affects operator approval or trace interpretation |
+| DevOps/MLOps | `local-qwen8b` | `company-qwen35b` | model serving and closed-net release escalate |
+| QA/Eval | `local-qwen8b` | `company-qwen35b` | failed-case triage and baseline approval escalate |
+
+Until the company vLLM endpoint is configured, escalation decisions are recorded as pending `company-qwen35b` evidence rather than silently accepted from the local model.
+
 ## 3. Runtime Agent Routing
 
 | Runtime Agent | Default Tier | Inputs | Output | Efficiency Rule |

@@ -76,6 +76,47 @@
       "deep_review_required_for": ["acl_leak", "audit_failure", "security_bypass"]
     }
   },
+  "model_profiles": {
+    "none-deterministic": {
+      "provider": "local-code",
+      "model_id": null,
+      "endpoint_alias": null,
+      "generative": false,
+      "allowed_for": ["acl_filter", "schema_validation", "formatting", "scoring"]
+    },
+    "local-qwen8b": {
+      "provider": "local-ollama",
+      "model_id": "qwen3:8b",
+      "endpoint_alias": "docker-wset-ollama",
+      "validation_lane": "local-regression",
+      "generative": true,
+      "allowed_for": ["specialist_draft", "local_regression", "bounded_critique"],
+      "must_not": ["final_quality_approval", "acl_override", "citation_override"]
+    },
+    "company-qwen35b": {
+      "provider": "company-vllm",
+      "model_id": "deployment-configured",
+      "endpoint_alias": "company-qwen35b",
+      "validation_lane": "company-quality",
+      "generative": true,
+      "allowed_for": ["deep_review", "release_gate", "korean_business_quality", "recommendation_rationale_review"],
+      "must": ["run_after_acl_filter", "use_authorized_context_only", "record_provider_model_version_when_available"],
+      "must_not": ["receive_pre_acl_candidates", "receive_denied_chunks", "receive_raw_storage_uris", "acl_override", "citation_override"]
+    },
+    "embedding-profile-tbd": {
+      "provider": "deployment-configured",
+      "model_id": "deployment-configured",
+      "generative": false,
+      "allowed_for": ["indexing", "query_embedding"]
+    },
+    "reranker-profile-tbd": {
+      "provider": "deployment-configured",
+      "model_id": "deployment-configured",
+      "generative": false,
+      "allowed_for": ["post_acl_rerank"],
+      "must_not": ["receive_pre_acl_candidates"]
+    }
+  },
   "validation_lanes": {
     "local-regression": {
       "model_target": "local Qwen3 8B or equivalent small local model",
@@ -123,60 +164,80 @@
     "orchestrator": {
       "default_tier": "fast-small",
       "escalation_tier": "deep-review",
+      "routine_profile": "local-qwen8b",
+      "escalation_profile": "company-qwen35b",
       "escalate_when": ["scope_conflict", "release_decision", "cross_workstream_conflict"],
       "d3_evidence": ["decision_log", "dispatch_board", "release_gate_status"]
     },
     "pm_agent": {
       "default_tier": "fast-small",
       "escalation_tier": "standard-rag",
+      "routine_profile": "local-qwen8b",
+      "escalation_profile": "company-qwen35b",
       "escalate_when": ["pilot_risk", "stakeholder_tradeoff", "acceptance_change"],
       "d3_evidence": ["owner_matrix", "risk_log", "decision_calendar"]
     },
     "chief_architect": {
       "default_tier": "standard-rag",
       "escalation_tier": "deep-review",
+      "routine_profile": "local-qwen8b",
+      "escalation_profile": "company-qwen35b",
       "escalate_when": ["service_boundary_change", "data_ownership_change", "deployment_topology_change"],
       "d3_evidence": ["architecture_fitness_test", "compose_or_release_validation"]
     },
     "security_architect": {
       "default_tier": "deep-review",
       "escalation_tier": "deep-review",
+      "routine_profile": "company-qwen35b",
+      "escalation_profile": "company-qwen35b",
       "escalate_when": ["acl_policy", "audit_policy", "pii_policy", "prompt_injection_policy"],
       "d3_evidence": ["policy_test", "threat_model_update", "audit_event_validation"]
     },
     "ai_runtime_architect": {
       "default_tier": "standard-rag",
       "escalation_tier": "deep-review",
+      "routine_profile": "local-qwen8b",
+      "escalation_profile": "company-qwen35b",
       "escalate_when": ["agent_contract_change", "runtime_flow_change", "model_policy_change"],
       "d3_evidence": ["agent_card_schema", "runtime_state_test", "model_route_trace"]
     },
     "rag_data_specialist": {
       "default_tier": "standard-rag",
       "escalation_tier": "deep-review",
+      "routine_profile": "local-qwen8b",
+      "escalation_profile": "company-qwen35b",
       "escalate_when": ["chunking_change", "acl_retrieval_change", "citation_failure"],
       "d3_evidence": ["parser_smoke", "retrieval_contract", "eval_case"]
     },
     "backend_specialist": {
       "default_tier": "standard-rag",
       "escalation_tier": "deep-review",
+      "routine_profile": "local-qwen8b",
+      "escalation_profile": "company-qwen35b",
       "escalate_when": ["migration", "auth_boundary", "audit_persistence"],
       "d3_evidence": ["contract_test", "integration_test", "migration_smoke"]
     },
     "frontend_specialist": {
       "default_tier": "fast-small",
       "escalation_tier": "standard-rag",
+      "routine_profile": "local-qwen8b",
+      "escalation_profile": "company-qwen35b",
       "escalate_when": ["operator_workflow", "error_state", "release_gate_ui"],
       "d3_evidence": ["playwright_smoke", "ui_runbook"]
     },
     "devops_mlops": {
       "default_tier": "standard-rag",
       "escalation_tier": "deep-review",
+      "routine_profile": "local-qwen8b",
+      "escalation_profile": "company-qwen35b",
       "escalate_when": ["closed_net_release", "model_serving", "backup_restore"],
       "d3_evidence": ["compose_smoke", "offline_manifest", "install_runbook"]
     },
     "qa_eval": {
       "default_tier": "standard-rag",
       "escalation_tier": "deep-review",
+      "routine_profile": "local-qwen8b",
+      "escalation_profile": "company-qwen35b",
       "escalate_when": ["release_gate", "failed_case_triage", "scorer_policy"],
       "d3_evidence": ["eval_report", "failure_taxonomy", "baseline_approval"]
     }

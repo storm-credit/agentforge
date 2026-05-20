@@ -72,7 +72,8 @@ docker start wset-ollama
   -ModelBaseUrl "http://127.0.0.1:11434/v1" `
   -ModelId "qwen3:8b" `
   -ModelProvider local-ollama `
-  -ModelEndpointAlias docker-wset-ollama
+  -ModelEndpointAlias docker-wset-ollama `
+  -ModelTimeoutSeconds 120
 ```
 
 성공하면 다음이 통과해야 한다.
@@ -111,7 +112,7 @@ Agent Studio에서 보는 순서:
 | Eval harness unit | `python -m unittest discover eval/harness/tests` | scorer와 model probe 로직 검증 |
 | Web E2E | `cd apps/web; npm run test:e2e` | Agent Studio 화면 흐름 검증 |
 | Real ingestion smoke | `./tools/smoke/real-ingestion-smoke.ps1 -ApiBaseUrl "http://127.0.0.1:8000/api/v1"` | 실제 업로드부터 runtime citation까지 검증 |
-| Full local regression | `./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0 ...` | 로컬 스택, 실제 업로드, 30-case eval, 모델 probe를 한 번에 검증 |
+| Full local regression | `./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0 -ModelTimeoutSeconds 120 ...` | 로컬 스택, 실제 업로드, 30-case eval, 모델 probe를 한 번에 검증 |
 | Company quality | `./tools/smoke/api-eval-runner-smoke.ps1 -ValidationLane company-quality ...` | 회사 vLLM 품질 gate 검증 |
 
 ## 6. 로컬 LLM과 회사 vLLM 차이
@@ -123,6 +124,15 @@ Agent Studio에서 보는 순서:
 
 로컬 8B가 통과해도 최종 품질 승인은 아니다. 회사 35B/vLLM과 human review까지 통과해야 release candidate로 본다.
 
+전문가별 모델 선택:
+
+| 전문가 | 루틴/초안 | 승격/릴리스 |
+|---|---|---|
+| 오케스트라, PM, 아키텍처, AI Runtime, RAG, Backend, Frontend, DevOps, QA/Eval | `local-qwen8b` | `company-qwen35b` |
+| 보안 아키텍트 | `company-qwen35b` | `company-qwen35b` |
+
+보안은 처음부터 deep-review다. 다른 전문가는 로컬 8B로 초안/회귀를 빠르게 돌리고, 릴리스 판단이나 정책 충돌이 생기면 회사 35B/vLLM 증거가 필요하다.
+
 ## 7. 현재 확인된 최신 증거
 
 최근 local-regression 실행 결과:
@@ -130,13 +140,14 @@ Agent Studio에서 보는 순서:
 - Docker model: `wset-ollama`
 - model endpoint: `http://127.0.0.1:11434/v1`
 - model id: `qwen3:8b`
-- model probe: succeeded
+- model probe: succeeded with `-ModelTimeoutSeconds 120`
 - API-backed eval: 30/30 passed
 - real upload-to-runtime smoke: passed
 
 주의할 점:
 
-- Qwen3는 health probe에서 `<think>` 텍스트를 낼 수 있다. 그래서 Golden Test에는 final answer cleanliness와 Korean business tone 검사가 필요하다.
+- Qwen3는 health probe에서 `<think>` 텍스트를 낼 수 있다. 그래서 eval report의 `summary.quality_review`에는 final answer cleanliness gate가 들어간다. 최종 답변에는 `<think>`/`</think>`가 나오면 blocker다.
+- `company-quality` lane은 `answer_naturalness`, `korean_business_tone`, `recommendation_rationale`, `groundedness`를 1~5점으로 보고, 각 항목 4점 이상과 human review가 필요하다.
 - 회사 vLLM endpoint는 아직 실제 값이 필요하다.
 
 ## 8. 잘 만들어졌는지 판단하는 기준

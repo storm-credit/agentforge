@@ -288,6 +288,27 @@ test.describe("Agent Studio shell", () => {
               citation_coverage: 1,
               trace_completeness: 1,
               acl_violation_count: 0,
+              quality_review: {
+                rubric_version: "quality-rubric-v0.1",
+                validation_lane: "company-quality",
+                status: "pending_human_review",
+                human_review_required: true,
+                release_approval_blocked_until_review: true,
+                notes: "Company-quality runs require human review before release approval.",
+                dimensions: {
+                  answer_naturalness: { label: "Answer naturalness", passing_score: 4 },
+                  korean_business_tone: { label: "Korean business tone", passing_score: 4 },
+                  recommendation_rationale: { label: "Recommendation rationale", passing_score: 4 },
+                  groundedness: { label: "Groundedness to authorized citations", passing_score: 4 },
+                },
+                automatic_gates: {
+                  final_answer_cleanliness: {
+                    severity: "blocker",
+                    must_not_include: ["<think>", "</think>"],
+                  },
+                  citation_acl_recheck: { severity: "blocker", required: true },
+                },
+              },
             },
           },
           suite_counts: { citation: 1 },
@@ -444,6 +465,27 @@ test.describe("Agent Studio shell", () => {
               citation_coverage: 1,
               trace_completeness: 1,
               acl_violation_count: 0,
+              quality_review: {
+                rubric_version: "quality-rubric-v0.1",
+                validation_lane: "company-quality",
+                status: "pending_human_review",
+                human_review_required: true,
+                release_approval_blocked_until_review: true,
+                notes: "Company-quality runs require human review before release approval.",
+                dimensions: {
+                  answer_naturalness: { label: "Answer naturalness", passing_score: 4 },
+                  korean_business_tone: { label: "Korean business tone", passing_score: 4 },
+                  recommendation_rationale: { label: "Recommendation rationale", passing_score: 4 },
+                  groundedness: { label: "Groundedness to authorized citations", passing_score: 4 },
+                },
+                automatic_gates: {
+                  final_answer_cleanliness: {
+                    severity: "blocker",
+                    must_not_include: ["<think>", "</think>"],
+                  },
+                  citation_acl_recheck: { severity: "blocker", required: true },
+                },
+              },
             },
           },
           suite_counts: { citation: 1 },
@@ -470,6 +512,12 @@ test.describe("Agent Studio shell", () => {
     await page.goto("/eval");
     await page.getByRole("button", { name: "Sync API" }).click();
     await expect(page.getByText(/Synced latest eval run/)).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quality review gate" })).toBeVisible();
+    await expect(page.getByText("pending_human_review")).toBeVisible();
+    await expect(page.getByText("Korean business tone")).toBeVisible();
+    await expect(
+      page.getByText("final_answer_cleanliness: must not include <think>, </think>"),
+    ).toBeVisible();
 
     await page.getByRole("button", { name: "Sync trace" }).click();
     await expect(page.getByText(/Synced runtime trace for cit_003/)).toBeVisible();

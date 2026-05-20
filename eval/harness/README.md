@@ -39,6 +39,13 @@ latency, served model, and a short response preview, and never stores the raw en
 `company-quality` requires a successful model probe; `local-regression` may skip it when the
 local model is unavailable.
 
+API-backed reports also include `summary.quality_review`. For `company-quality`, this records
+`quality-rubric-v0.1`, marks human review as required before release approval, and fixes the
+automatic blocker gates for final answer cleanliness (`<think>` markers must not appear),
+citation ACL recheck, and endpoint secret redaction. For `local-regression`, the same rubric is
+recorded as advisory only because the local 8B lane proves integration and safety regression, not
+final answer quality.
+
 The API runner generates Markdown from the synthetic corpus, uploads every document through
 `POST /knowledge/documents/upload`, indexes with object storage by omitting `source_text`,
 publishes an eval agent, runs cases with corpus principal headers, maps API document IDs back

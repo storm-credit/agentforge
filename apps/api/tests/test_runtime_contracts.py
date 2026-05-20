@@ -333,6 +333,43 @@ def test_shared_policy_defines_model_validation_lanes():
     assert "receive_denied_chunks" in validation_lanes["company-quality"]["must_not"]
 
 
+def test_shared_policy_assigns_concrete_specialist_model_profiles():
+    repo_root = Path(__file__).resolve().parents[3]
+    policy_path = repo_root / "packages" / "shared-contracts" / "model-routing-policy.v0.1.json"
+    policy = json.loads(policy_path.read_text(encoding="utf-8"))
+    profiles = policy["model_profiles"]
+    specialists = policy["project_specialist_agents"]
+
+    assert profiles["local-qwen8b"]["provider"] == "local-ollama"
+    assert profiles["local-qwen8b"]["model_id"] == "qwen3:8b"
+    assert profiles["local-qwen8b"]["validation_lane"] == "local-regression"
+    assert "final_quality_approval" in profiles["local-qwen8b"]["must_not"]
+
+    assert profiles["company-qwen35b"]["provider"] == "company-vllm"
+    assert profiles["company-qwen35b"]["validation_lane"] == "company-quality"
+    assert "receive_denied_chunks" in profiles["company-qwen35b"]["must_not"]
+
+    required_specialists = {
+        "orchestrator",
+        "pm_agent",
+        "chief_architect",
+        "security_architect",
+        "ai_runtime_architect",
+        "rag_data_specialist",
+        "backend_specialist",
+        "frontend_specialist",
+        "devops_mlops",
+        "qa_eval",
+    }
+    assert set(specialists) == required_specialists
+    for specialist in specialists.values():
+        assert specialist["routine_profile"] in profiles
+        assert specialist["escalation_profile"] in profiles
+
+    assert specialists["security_architect"]["routine_profile"] == "company-qwen35b"
+    assert specialists["qa_eval"]["escalation_profile"] == "company-qwen35b"
+
+
 def test_runtime_refuses_write_action_before_retrieval(client):
     source = _create_source(client)
     document = _register_document(

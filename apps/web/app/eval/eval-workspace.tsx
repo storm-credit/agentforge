@@ -6,6 +6,7 @@ import {
   EvalCaseResult,
   EvalCitation,
   EvalOutcome,
+  EvalQualityReview,
   EvalRetrievalHit,
   EvalOverview,
   EvalRunSummary,
@@ -78,6 +79,25 @@ const seedRunSummary: EvalRunSummary = {
   citationCoverage: 1,
   aclViolations: 0,
   traceCompleteness: 1,
+  qualityReview: {
+    rubricVersion: "quality-rubric-v0.1",
+    validationLane: "local-regression",
+    status: "advisory_only",
+    humanReviewRequired: false,
+    releaseBlocked: false,
+    notes: "Local-regression proves integration and safety regression only.",
+    dimensions: [
+      { id: "answer_naturalness", label: "Answer naturalness", passingScore: 4 },
+      { id: "korean_business_tone", label: "Korean business tone", passingScore: 4 },
+      { id: "recommendation_rationale", label: "Recommendation rationale", passingScore: 4 },
+      { id: "groundedness", label: "Groundedness to authorized citations", passingScore: 4 },
+    ],
+    blockerGates: [
+      { id: "final_answer_cleanliness", label: "final_answer_cleanliness: must not include <think>, </think>", severity: "blocker" },
+      { id: "citation_acl_recheck", label: "citation_acl_recheck: required", severity: "blocker" },
+      { id: "raw_endpoint_secret_absent", label: "raw_endpoint_secret_absent: required", severity: "blocker" },
+    ],
+  },
 };
 
 type SeedCaseDefinition = {
@@ -570,6 +590,16 @@ function formatLatency(value: number) {
   return `${(value / 1000).toFixed(1)} sec`;
 }
 
+function reviewStatusTone(review?: EvalQualityReview) {
+  if (!review) {
+    return "neutral";
+  }
+  if (review.releaseBlocked || review.humanReviewRequired) {
+    return "warn";
+  }
+  return "ok";
+}
+
 export function EvalWorkspace() {
   const [runSummary, setRunSummary] = useState(seedRunSummary);
   const [suites, setSuites] = useState(seedSuites);
@@ -770,6 +800,49 @@ function selectSuite(suiteId: string) {
           </div>
         </dl>
       </section>
+
+      {runSummary.qualityReview ? (
+        <section className="panel qualityReviewPanel">
+          <div className="panelHeader">
+            <div>
+              <h2>Quality review gate</h2>
+              <p>
+                {runSummary.qualityReview.rubricVersion} for{" "}
+                {runSummary.qualityReview.validationLane}
+              </p>
+            </div>
+            <span className={`badge ${reviewStatusTone(runSummary.qualityReview)}`}>
+              {runSummary.qualityReview.status}
+            </span>
+          </div>
+          <dl className="runSummaryGrid compact">
+            <div>
+              <dt>Human review</dt>
+              <dd>{runSummary.qualityReview.humanReviewRequired ? "Required" : "Advisory"}</dd>
+            </div>
+            <div>
+              <dt>Release approval</dt>
+              <dd>{runSummary.qualityReview.releaseBlocked ? "Blocked" : "Not blocked"}</dd>
+            </div>
+          </dl>
+          <div className="qualityGrid">
+            {runSummary.qualityReview.dimensions.map((dimension) => (
+              <div className="qualityItem" key={dimension.id}>
+                <strong>{dimension.label}</strong>
+                <span>Pass {dimension.passingScore}/5</span>
+              </div>
+            ))}
+          </div>
+          <div className="qualityGateList">
+            {runSummary.qualityReview.blockerGates.map((gate) => (
+              <span className="badge warn" key={gate.id}>
+                {gate.label}
+              </span>
+            ))}
+          </div>
+          {runSummary.qualityReview.notes ? <p>{runSummary.qualityReview.notes}</p> : null}
+        </section>
+      ) : null}
 
       <section aria-label="Synthetic corpus suites">
         <div className="sectionHeading">

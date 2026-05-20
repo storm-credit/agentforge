@@ -936,8 +936,60 @@ textarea:focus {
 .findingBox p,
 .traceStep p,
 .citationRow p,
+.qualityReviewPanel p,
 .emptyState {
   margin-bottom: 0;
+}
+
+.qualityReviewPanel {
+  display: grid;
+  gap: 16px;
+}
+
+.runSummaryGrid.compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.qualityGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.qualityItem {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.qualityItem strong {
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.3;
+}
+
+.qualityItem span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.qualityGateList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.qualityGateList .badge {
+  height: auto;
+  min-height: 28px;
+  max-width: 100%;
+  padding: 6px 9px;
+  white-space: normal;
 }
 
 .traceSteps,
@@ -1055,6 +1107,11 @@ textarea:focus {
 
 @media (max-width: 860px) {
   body {
+    grid-template-columns: 1fr;
+  }
+
+  .qualityGrid,
+  .runSummaryGrid.compact {
     grid-template-columns: 1fr;
   }
 

@@ -17,6 +17,13 @@ export type AuditApiResult = {
   error?: string;
 };
 
+export type AuditEventResult = {
+  ok: boolean;
+  data?: AuditEvent;
+  endpoint?: string;
+  error?: string;
+};
+
 const requestTimeoutMs = 2500;
 const endpointRoots = buildEndpointRoots();
 
@@ -77,6 +84,38 @@ export async function fetchAuditEvents(params: {
       };
     } catch (error) {
       lastError = error instanceof Error ? error.message : "Audit API request failed.";
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
+  return { ok: false, error: lastError };
+}
+
+export async function fetchAuditEvent(id: string): Promise<AuditEventResult> {
+  let lastError = "Audit event detail API is not available yet.";
+
+  for (const root of endpointRoots) {
+    const endpoint = joinEndpoint(root, `events/${encodeURIComponent(id)}`);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), requestTimeoutMs);
+
+    try {
+      const response = await fetch(endpoint, { signal: controller.signal });
+      if (!response.ok) {
+        lastError = `${response.status} ${response.statusText}`.trim();
+        continue;
+      }
+
+      const data = mapAuditEvent(await response.json());
+      if (!data) {
+        lastError = "Audit event detail payload was not recognized.";
+        continue;
+      }
+
+      return { ok: true, data, endpoint };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "Audit event detail request failed.";
     } finally {
       window.clearTimeout(timeout);
     }

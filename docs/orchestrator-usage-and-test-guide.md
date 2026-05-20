@@ -73,7 +73,8 @@ docker start wset-ollama
   -ModelId "qwen3:8b" `
   -ModelProvider local-ollama `
   -ModelEndpointAlias docker-wset-ollama `
-  -ModelTimeoutSeconds 120
+  -ModelTimeoutSeconds 120 `
+  -TraceLatencyThresholdMs 5000
 ```
 
 성공하면 다음이 통과해야 한다.
@@ -84,6 +85,7 @@ docker start wset-ollama
 - real upload-to-runtime smoke
 - API-backed eval 30 cases
 - local Qwen3 model probe
+- local trace/latency gate
 
 `-KeepStack`을 붙였으면 Web URL과 API URL이 살아 있다. 출력에 나온 Web URL을 열고 `Knowledge`, `Eval`, `Audit`, `Trace` 화면을 확인한다.
 
@@ -112,7 +114,7 @@ Agent Studio에서 보는 순서:
 | Eval harness unit | `python -m unittest discover eval/harness/tests` | scorer와 model probe 로직 검증 |
 | Web E2E | `cd apps/web; npm run test:e2e` | Agent Studio 화면 흐름 검증 |
 | Real ingestion smoke | `./tools/smoke/real-ingestion-smoke.ps1 -ApiBaseUrl "http://127.0.0.1:8000/api/v1"` | 실제 업로드부터 runtime citation까지 검증 |
-| Full local regression | `./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0 -ModelTimeoutSeconds 120 ...` | 로컬 스택, 실제 업로드, 30-case eval, 모델 probe를 한 번에 검증 |
+| Full local regression | `./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0 -ModelTimeoutSeconds 120 -TraceLatencyThresholdMs 5000 ...` | 로컬 스택, 실제 업로드, 30-case eval, 모델 probe, trace gate를 한 번에 검증 |
 | Company quality | `./tools/smoke/api-eval-runner-smoke.ps1 -ValidationLane company-quality ...` | 회사 vLLM 품질 gate 검증 |
 
 ## 6. 로컬 LLM과 회사 vLLM 차이
@@ -143,6 +145,7 @@ Agent Studio에서 보는 순서:
 - model probe: succeeded with `-ModelTimeoutSeconds 120`
 - API-backed eval: 30/30 passed
 - real upload-to-runtime smoke: passed
+- trace gate: run ID, ordered steps, retrieval hits, p50/p95 latency summary required
 
 주의할 점:
 

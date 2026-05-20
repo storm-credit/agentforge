@@ -258,10 +258,13 @@ docker start wset-ollama
   -ModelId "qwen3:8b" `
   -ModelProvider local-ollama `
   -ModelEndpointAlias docker-wset-ollama `
-  -ModelTimeoutSeconds 120
+  -ModelTimeoutSeconds 120 `
+  -TraceLatencyThresholdMs 5000
 ```
 
 Current Docker evidence: `wset-ollama` exposes Ollama's OpenAI-compatible endpoint on `11434`, `/v1/models` returns `qwen3:8b`, the model probe succeeds with the local 120-second timeout profile, and the API-backed local-regression eval passes 30/30 cases. Qwen3 may emit thinking text in a generic health prompt, so Golden Test scoring must separately check final-answer cleanliness and Korean business tone.
+
+The API-backed local-regression report must include `summary.trace_gate`. This gate records p50/p95 runtime latency, the latency threshold, cases with persisted run IDs, cases with runtime steps, and failed trace case IDs. It fails a case when the run ID is missing, steps are missing or unordered, required route-stage/model-tier evidence is absent, answer cases lack retrieval-hit records, or `latency_ms` exceeds the configured local threshold.
 
 Company-quality lane command shape:
 

@@ -370,12 +370,30 @@ p {
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 12px;
   align-items: start;
+  width: 100%;
   padding: 14px 0;
   border-top: 1px solid var(--line);
+  border-right: 0;
+  border-bottom: 0;
+  border-left: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
 }
 
 .timelineEvent:first-child {
   border-top: 0;
+}
+
+.timelineEvent:hover,
+.timelineEvent[aria-pressed="true"] {
+  background: #eef8f8;
+}
+
+.timelineEvent:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
 }
 
 .timelineEvent small {
@@ -397,6 +415,25 @@ p {
   color: var(--text);
   font-size: 13px;
   font-weight: 700;
+}
+
+.presetList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.auditDetail {
+  display: grid;
+  gap: 14px;
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.auditReason {
+  margin-bottom: 0;
+  color: var(--muted);
 }
 
 .configList input:disabled {
@@ -777,6 +814,11 @@ textarea:focus {
 
 .detailGrid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.detailGrid.compact {
+  grid-template-columns: 1fr;
+  gap: 8px;
 }
 
 .runSummaryGrid div,

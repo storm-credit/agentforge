@@ -550,6 +550,41 @@ test.describe("Agent Studio shell", () => {
   });
 
   test("audit page exposes queryable audit explorer shell", async ({ page }) => {
+    await page.route("**/api/v1/audit/events?**", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: [
+          {
+            id: "audit-run-1",
+            event_type: "run.created",
+            actor_id: "eval-api-runner",
+            actor_department: "QA",
+            target_type: "run",
+            target_id: "runtime-audit-1",
+            reason: "runtime evidence",
+            payload: { citation_validation_pass: true, step_count: 5 },
+            created_at: "2026-05-20T00:00:00Z",
+          },
+        ],
+      });
+    });
+    await page.route("**/api/v1/audit/events/audit-run-1", async (route) => {
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          id: "audit-run-1",
+          event_type: "run.created",
+          actor_id: "eval-api-runner",
+          actor_department: "QA",
+          target_type: "run",
+          target_id: "runtime-audit-1",
+          reason: "runtime evidence",
+          payload: { citation_validation_pass: true, step_count: 5 },
+          created_at: "2026-05-20T00:00:00Z",
+        },
+      });
+    });
+
     await page.goto("/audit");
 
     await expect(page.getByRole("heading", { name: "Audit", exact: true })).toBeVisible();
@@ -557,6 +592,23 @@ test.describe("Agent Studio shell", () => {
     await expect(page.locator(".timeline").getByText("eval_run.created", { exact: true })).toBeVisible();
     await expect(page.getByLabel("Event type")).toBeVisible();
     await expect(page.getByRole("button", { name: "Sync audit" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Runtime traces" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Event detail" })).toBeVisible();
+
+    await page.getByRole("button", { name: "Runtime traces" }).click();
+    await expect(page.getByLabel("Event type")).toHaveValue("run.created");
+    await expect(page.getByLabel("Target type")).toHaveValue("run");
+
+    await page.getByRole("button", { name: "Sync audit" }).click();
+    await page.locator(".timelineEvent").filter({ hasText: /^run\.created/ }).click();
+
+    await expect(page.getByText(/Loaded audit event detail/)).toBeVisible();
+    await expect(page.getByText("run:runtime-audit-1", { exact: true })).toBeVisible();
+    await expect(page.getByText("citation_validation_pass")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open trace" })).toHaveAttribute(
+      "href",
+      "/trace?run_id=runtime-audit-1",
+    );
   });
 
   test("agent rows drive the selected governance detail panel", async ({ page }) => {

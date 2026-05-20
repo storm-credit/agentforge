@@ -117,3 +117,32 @@ def test_audit_events_support_target_filter(client):
     events = response.json()
     assert len(events) == 1
     assert events[0]["target_id"] == first_agent["id"]
+
+
+def test_audit_event_detail_can_be_loaded_by_id(client):
+    agent_response = client.post(
+        "/api/v1/agents",
+        json={
+            "name": "Detail Audit Target",
+            "purpose": "Detail target.",
+            "owner_department": "Risk",
+        },
+    )
+
+    assert agent_response.status_code == 201
+    event = client.get("/api/v1/audit/events?limit=1").json()[0]
+
+    detail_response = client.get(f"/api/v1/audit/events/{event['id']}")
+
+    assert detail_response.status_code == 200
+    detail = detail_response.json()
+    assert detail["id"] == event["id"]
+    assert detail["event_type"] == "agent.created"
+    assert detail["payload"]["name"] == "Detail Audit Target"
+
+
+def test_audit_event_detail_returns_404_for_unknown_id(client):
+    response = client.get("/api/v1/audit/events/missing-audit-event")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Audit event not found"

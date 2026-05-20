@@ -27,6 +27,8 @@ class ApiCaseResult:
     citation_document_ids: tuple[str, ...]
     retrieval_document_ids: tuple[str, ...]
     retrieval_denied_count: int
+    run_latency_ms: int | None = None
+    trace_step_names: tuple[str, ...] = ()
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -40,6 +42,8 @@ class ApiCaseResult:
             "citation_document_ids": list(self.citation_document_ids),
             "retrieval_document_ids": list(self.retrieval_document_ids),
             "retrieval_denied_count": self.retrieval_denied_count,
+            "run_latency_ms": self.run_latency_ms,
+            "trace_step_names": list(self.trace_step_names),
         }
 
 
@@ -233,7 +237,10 @@ def score_api_case(
     *,
     run: Mapping[str, Any] | None,
     retrieval_hits: Sequence[Mapping[str, Any]],
+    run_steps: Sequence[Mapping[str, Any]] = (),
     api_document_id_map: Mapping[str, str],
+    latency_threshold_ms: int | None = None,
+    trace_gate_enabled: bool = False,
     error: str | None = None,
 ) -> ApiCaseResult:
     findings: list[str] = []
@@ -274,6 +281,24 @@ def score_api_case(
             findings.append(f"Forbidden phrase appeared in output: {phrase}")
 
     status = _string_or_none(run.get("status"))
+    run_id = _string_or_none(run.get("id"))
+    run_latency_ms = _int_or_none(run.get("latency_ms"))
+    trace_step_names = tuple(
+        step_type for step in run_steps if (step_type := _string_or_none(step.get("step_type")))
+    )
+    if trace_gate_enabled:
+        findings.extend(
+            _trace_gate_findings(
+                case=case,
+                run_id=run_id,
+                run_latency_ms=run_latency_ms,
+                run_steps=run_steps,
+                trace_step_names=trace_step_names,
+                retrieval_hit_count=len(retrieval_hits),
+                latency_threshold_ms=latency_threshold_ms,
+            )
+        )
+
     if case.expected_behavior == "answer":
         if outcome and outcome != "answer":
             findings.append(f"Expected outcome answer, got {outcome}")
@@ -281,6 +306,8 @@ def score_api_case(
             findings.append(f"Expected succeeded answer run, got {status or 'missing status'}")
         if not citations:
             findings.append("Answer case returned no citations")
+        if not retrieval_hits:
+            findings.append("Answer case missing retrieval-hit trace")
         if case.expected_citations and not _has_expected_citation(case, citations, api_document_id_map):
             expected = ", ".join(
                 f"{citation.document_id}/{citation.locator}"
@@ -327,7 +354,71 @@ def score_api_case(
         citation_document_ids=citation_document_ids,
         retrieval_document_ids=retrieval_document_ids,
         retrieval_denied_count=int(run.get("retrieval_denied_count") or 0),
+        run_latency_ms=run_latency_ms,
+        trace_step_names=trace_step_names,
     )
+
+
+def _trace_gate_findings(
+    *,
+    case: EvalCase,
+    run_id: str | None,
+    run_latency_ms: int | None,
+    run_steps: Sequence[Mapping[str, Any]],
+    trace_step_names: Sequence[str],
+    retrieval_hit_count: int,
+    latency_threshold_ms: int | None,
+) -> list[str]:
+    findings: list[str] = []
+
+    if not run_id:
+        findings.append("Trace gate: missing run_id")
+        return findings
+
+    if run_latency_ms is None:
+        findings.append("Trace gate: missing run latency_ms")
+    elif latency_threshold_ms is not None and run_latency_ms > latency_threshold_ms:
+        findings.append(
+            f"Trace gate: run latency {run_latency_ms}ms exceeded {latency_threshold_ms}ms"
+        )
+
+    if not run_steps:
+        findings.append("Trace gate: missing runtime steps")
+        return findings
+
+    step_orders = [_int_or_none(step.get("step_order")) for step in run_steps]
+    numeric_orders = [order for order in step_orders if order is not None]
+    if numeric_orders and numeric_orders != sorted(numeric_orders):
+        findings.append("Trace gate: runtime steps are not ordered by step_order")
+
+    required_steps = _required_steps_for_case(case)
+    missing_steps = [step for step in required_steps if step not in trace_step_names]
+    if missing_steps:
+        findings.append("Trace gate: missing runtime steps " + ", ".join(missing_steps))
+
+    for step in run_steps:
+        step_type = _string_or_none(step.get("step_type")) or "unknown"
+        output_summary = step.get("output_summary")
+        if step_type in required_steps and isinstance(output_summary, Mapping):
+            if not _string_or_none(output_summary.get("route_stage")):
+                findings.append(f"Trace gate: {step_type} missing route_stage")
+            if not _string_or_none(output_summary.get("model_tier")):
+                findings.append(f"Trace gate: {step_type} missing model_tier")
+        elif step_type in required_steps:
+            findings.append(f"Trace gate: {step_type} missing output_summary")
+
+    if case.expected_behavior == "answer" and retrieval_hit_count == 0:
+        findings.append("Trace gate: answer case missing retrieval-hit records")
+
+    return findings
+
+
+def _required_steps_for_case(case: EvalCase) -> tuple[str, ...]:
+    if case.expected_behavior == "answer":
+        return ("guard_input", "retriever", "generator", "citation_validator", "guard_output")
+    if case.expected_behavior in {"refuse", "no_context"}:
+        return ("guard_input", "guard_output")
+    return ("guard_input", "retriever", "citation_validator", "guard_output")
 
 
 def _normalize_selection(values: Sequence[str]) -> set[str]:
@@ -417,3 +508,11 @@ def _as_sequence(value: Any) -> Sequence[Mapping[str, Any]]:
 
 def _string_or_none(value: Any) -> str | None:
     return value if isinstance(value, str) else None
+
+
+def _int_or_none(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    return None

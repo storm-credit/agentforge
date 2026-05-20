@@ -14,12 +14,56 @@ class ApiRunnerOptionsTest(unittest.TestCase):
             {
                 "corpus_id": "synthetic-corpus-v0.1",
                 "mode": "api",
-                "setup": {"validation_lane": "local-regression"},
-                "results": [],
+                "setup": {
+                    "validation_lane": "local-regression",
+                    "trace_latency_threshold_ms": 5000,
+                },
+                "results": [
+                    {
+                        "case_id": "rag_001",
+                        "run_id": "run-1",
+                        "run_latency_ms": 42,
+                        "trace_step_names": ["guard_input", "retriever"],
+                        "findings": [],
+                    }
+                ],
             }
         )
 
         self.assertEqual(payload["budget_class"], "smoke")
+        trace_gate = payload["summary"]["trace_gate"]
+        self.assertEqual(trace_gate["status"], "passed")
+        self.assertEqual(trace_gate["latency_threshold_ms"], 5000)
+        self.assertEqual(trace_gate["p50_latency_ms"], 42)
+        self.assertEqual(trace_gate["p95_latency_ms"], 42)
+        self.assertEqual(trace_gate["failed_case_ids"], [])
+
+    def test_trace_gate_summary_records_failed_case_ids(self):
+        payload = runner._eval_run_payload(
+            {
+                "corpus_id": "synthetic-corpus-v0.1",
+                "mode": "api",
+                "setup": {
+                    "validation_lane": "local-regression",
+                    "trace_latency_threshold_ms": 5000,
+                },
+                "results": [
+                    {
+                        "case_id": "rag_001",
+                        "run_id": "run-1",
+                        "run_latency_ms": 6001,
+                        "trace_step_names": [],
+                        "findings": ["Trace gate: missing runtime steps"],
+                    }
+                ],
+            }
+        )
+
+        trace_gate = payload["summary"]["trace_gate"]
+        self.assertEqual(trace_gate["status"], "failed")
+        self.assertEqual(trace_gate["failed_case_ids"], ["rag_001"])
+        self.assertEqual(trace_gate["cases_with_run_id"], 1)
+        self.assertEqual(trace_gate["cases_with_steps"], 0)
 
     def test_company_quality_payload_uses_release_gate_budget(self):
         payload = runner._eval_run_payload(

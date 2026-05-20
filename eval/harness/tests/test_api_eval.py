@@ -180,6 +180,151 @@ class ApiEvalHelperTest(unittest.TestCase):
         self.assertFalse(result.passed)
         self.assertIn("no_context case used retrieval hits", result.findings)
 
+    def test_trace_gate_accepts_ordered_answer_steps(self):
+        case = next(case for case in self.corpus.cases if case.case_id == "rag_001")
+
+        result = score_api_case(
+            case,
+            run={
+                "id": "run-trace-1",
+                "status": "succeeded",
+                "latency_ms": 123,
+                "answer": "Synthetic runtime response based on 1 authorized citation(s).",
+                "citations": [
+                    {
+                        "document_id": "api-hr-001",
+                        "title": "Vacation and Leave Policy",
+                        "citation_locator": (
+                            "Vacation and Leave Policy / "
+                            "Vacation and Leave Policy > section:annual-leave / lines 7-12"
+                        ),
+                    }
+                ],
+                "guardrail": {"citation_validation_pass": True, "outcome": "answer"},
+                "retrieval_denied_count": 1,
+            },
+            retrieval_hits=[
+                {
+                    "document_id": "api-hr-001",
+                    "title": "Vacation and Leave Policy",
+                    "citation_locator": (
+                        "Vacation and Leave Policy / "
+                        "Vacation and Leave Policy > section:annual-leave / lines 7-12"
+                    ),
+                }
+            ],
+            run_steps=[
+                _step(1, "guard_input", "security_precheck", "fast-small"),
+                _step(2, "retriever", "retriever", "deterministic"),
+                _step(3, "generator", "answer_generator", "standard-rag"),
+                _step(4, "citation_validator", "critic", "fast-small"),
+                _step(5, "guard_output", "security_finalcheck", "fast-small"),
+            ],
+            api_document_id_map={"api-hr-001": "HR-001"},
+            latency_threshold_ms=5000,
+            trace_gate_enabled=True,
+        )
+
+        self.assertTrue(result.passed, result.findings)
+        self.assertEqual(result.run_latency_ms, 123)
+        self.assertEqual(
+            result.trace_step_names,
+            ("guard_input", "retriever", "generator", "citation_validator", "guard_output"),
+        )
+
+    def test_trace_gate_rejects_missing_route_unordered_steps_and_latency_breach(self):
+        case = next(case for case in self.corpus.cases if case.case_id == "rag_001")
+
+        result = score_api_case(
+            case,
+            run={
+                "id": "run-trace-2",
+                "status": "succeeded",
+                "latency_ms": 6001,
+                "answer": "Synthetic runtime response based on 1 authorized citation(s).",
+                "citations": [
+                    {
+                        "document_id": "api-hr-001",
+                        "title": "Vacation and Leave Policy",
+                        "citation_locator": (
+                            "Vacation and Leave Policy / "
+                            "Vacation and Leave Policy > section:annual-leave / lines 7-12"
+                        ),
+                    }
+                ],
+                "guardrail": {"citation_validation_pass": True, "outcome": "answer"},
+                "retrieval_denied_count": 1,
+            },
+            retrieval_hits=[],
+            run_steps=[
+                {
+                    "step_order": 2,
+                    "step_type": "retriever",
+                    "status": "succeeded",
+                    "output_summary": {"model_tier": "deterministic"},
+                },
+                _step(1, "guard_input", "security_precheck", "fast-small"),
+            ],
+            api_document_id_map={"api-hr-001": "HR-001"},
+            latency_threshold_ms=5000,
+            trace_gate_enabled=True,
+        )
+
+        self.assertFalse(result.passed)
+        self.assertIn("Trace gate: run latency 6001ms exceeded 5000ms", result.findings)
+        self.assertIn("Trace gate: runtime steps are not ordered by step_order", result.findings)
+        self.assertIn(
+            "Trace gate: missing runtime steps generator, citation_validator, guard_output",
+            result.findings,
+        )
+        self.assertIn("Trace gate: retriever missing route_stage", result.findings)
+        self.assertIn("Trace gate: answer case missing retrieval-hit records", result.findings)
+
+    def test_trace_gate_accepts_guard_only_refusal_steps(self):
+        case = next(case for case in self.corpus.cases if case.case_id == "ref_004")
+
+        result = score_api_case(
+            case,
+            run={
+                "id": "run-trace-3",
+                "status": "failed",
+                "latency_ms": 42,
+                "answer": "Write actions are not supported by this document RAG runtime.",
+                "citations": [],
+                "guardrail": {"outcome": "refuse", "citation_validation_pass": False},
+                "retrieval_denied_count": 0,
+            },
+            retrieval_hits=[],
+            run_steps=[
+                _step(1, "guard_input", "security_precheck", "fast-small", status="failed"),
+                _step(2, "guard_output", "security_finalcheck", "fast-small", status="failed"),
+            ],
+            api_document_id_map={},
+            latency_threshold_ms=5000,
+            trace_gate_enabled=True,
+        )
+
+        self.assertTrue(result.passed, result.findings)
+
+
+def _step(
+    step_order: int,
+    step_type: str,
+    route_stage: str,
+    model_tier: str,
+    *,
+    status: str = "succeeded",
+) -> dict:
+    return {
+        "step_order": step_order,
+        "step_type": step_type,
+        "status": status,
+        "output_summary": {
+            "route_stage": route_stage,
+            "model_tier": model_tier,
+        },
+    }
+
 
 if __name__ == "__main__":
     unittest.main()

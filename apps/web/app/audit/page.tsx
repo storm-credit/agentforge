@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
-import { AuditEvent, fetchAuditEvents } from "./api";
+import { AuditEvent, fetchAuditEvent, fetchAuditEvents } from "./api";
 
 const seedEvents: AuditEvent[] = [
   {
@@ -41,12 +42,33 @@ const seedEvents: AuditEvent[] = [
 
 const eventTypes = ["", "eval_run.created", "run.created", "document.indexed", "agent_version.published"];
 const targetTypes = ["", "eval_run", "run", "document", "agent_version"];
+const filterPresets = [
+  {
+    name: "Release evidence",
+    eventType: "eval_run.created",
+    targetType: "eval_run",
+    query: "",
+  },
+  {
+    name: "Runtime traces",
+    eventType: "run.created",
+    targetType: "run",
+    query: "",
+  },
+  {
+    name: "Ingestion",
+    eventType: "",
+    targetType: "document",
+    query: "",
+  },
+];
 
 export default function AuditPage() {
   const [events, setEvents] = useState(seedEvents);
   const [eventType, setEventType] = useState("");
   const [targetType, setTargetType] = useState("");
   const [query, setQuery] = useState("");
+  const [selectedEvent, setSelectedEvent] = useState<AuditEvent>(seedEvents[0]);
   const [notice, setNotice] = useState(
     "Seed evidence is loaded until the audit API is synced from a running stack.",
   );
@@ -61,6 +83,7 @@ export default function AuditPage() {
     const result = await fetchAuditEvents({ eventType, targetType, query });
     if (result.ok && result.data) {
       setEvents(result.data.length ? result.data : []);
+      setSelectedEvent(result.data[0] ?? selectedEvent);
       setNotice(`Synced ${result.data.length} audit event(s) from ${result.endpoint ?? "audit API"}.`);
       return;
     }
@@ -68,6 +91,31 @@ export default function AuditPage() {
     setNotice(
       `Audit events unavailable (${result.error ?? "request failed"}). Showing seed evidence.`,
     );
+  }
+
+  async function selectAuditEvent(event: AuditEvent) {
+    setSelectedEvent(event);
+
+    if (event.id.startsWith("seed-")) {
+      setNotice(`Selected seed audit event ${event.eventType}.`);
+      return;
+    }
+
+    const result = await fetchAuditEvent(event.id);
+    if (result.ok && result.data) {
+      setSelectedEvent(result.data);
+      setNotice(`Loaded audit event detail from ${result.endpoint ?? "audit API"}.`);
+      return;
+    }
+
+    setNotice(`Audit event detail unavailable (${result.error ?? "request failed"}).`);
+  }
+
+  function applyPreset(preset: (typeof filterPresets)[number]) {
+    setEventType(preset.eventType);
+    setTargetType(preset.targetType);
+    setQuery(preset.query);
+    setNotice(`Applied ${preset.name} audit filter preset.`);
   }
 
   return (
@@ -116,7 +164,13 @@ export default function AuditPage() {
           <div className="timeline">
             {events.length ? (
               events.map((item) => (
-                <article className="timelineEvent" key={item.id}>
+                <button
+                  aria-pressed={selectedEvent.id === item.id}
+                  className="timelineEvent"
+                  key={item.id}
+                  onClick={() => startTransition(() => void selectAuditEvent(item))}
+                  type="button"
+                >
                   <span className="timelineDot" />
                   <div>
                     <strong>{item.eventType}</strong>
@@ -126,7 +180,7 @@ export default function AuditPage() {
                   </div>
                   <span className="badge">{item.actorDepartment}</span>
                   <small>{formatDateLabel(item.createdAt)}</small>
-                </article>
+                </button>
               ))
             ) : (
               <p className="emptyState">No audit events matched this filter.</p>
@@ -142,6 +196,18 @@ export default function AuditPage() {
             </div>
           </div>
           <div className="configList">
+            <div className="presetList" aria-label="Saved filter presets">
+              {filterPresets.map((preset) => (
+                <button
+                  className="button secondary"
+                  key={preset.name}
+                  onClick={() => applyPreset(preset)}
+                  type="button"
+                >
+                  {preset.name}
+                </button>
+              ))}
+            </div>
             <label>
               <span>Event type</span>
               <select value={eventType} onChange={(event) => setEventType(event.target.value)}>
@@ -167,10 +233,61 @@ export default function AuditPage() {
               <input value={query} onChange={(event) => setQuery(event.target.value)} />
             </label>
           </div>
+
+          <div className="auditDetail">
+            <div className="panelHeader">
+              <div>
+                <h2>Event detail</h2>
+                <p>{selectedEvent.eventType}</p>
+              </div>
+              {selectedEvent.targetType === "run" ? (
+                <Link className="button secondary" href={`/trace?run_id=${encodeURIComponent(selectedEvent.targetId)}`}>
+                  Open trace
+                </Link>
+              ) : selectedEvent.targetType === "eval_run" ? (
+                <Link className="button secondary" href="/eval">
+                  Open eval
+                </Link>
+              ) : null}
+            </div>
+            <dl className="detailGrid compact">
+              <div>
+                <dt>Actor</dt>
+                <dd>{selectedEvent.actorId}</dd>
+              </div>
+              <div>
+                <dt>Target</dt>
+                <dd>
+                  {selectedEvent.targetType}:{selectedEvent.targetId}
+                </dd>
+              </div>
+              <div>
+                <dt>Department</dt>
+                <dd>{selectedEvent.actorDepartment}</dd>
+              </div>
+              <div>
+                <dt>Created</dt>
+                <dd>{formatDateLabel(selectedEvent.createdAt)}</dd>
+              </div>
+            </dl>
+            {selectedEvent.reason ? <p className="auditReason">{selectedEvent.reason}</p> : null}
+            <details className="tracePayload" open>
+              <summary>Payload</summary>
+              <pre>{formatPayload(selectedEvent.payload)}</pre>
+            </details>
+          </div>
         </aside>
       </div>
     </section>
   );
+}
+
+function formatPayload(payload: Record<string, unknown>) {
+  if (!Object.keys(payload).length) {
+    return "none";
+  }
+
+  return JSON.stringify(payload, null, 2);
 }
 
 function formatDateLabel(value: string) {

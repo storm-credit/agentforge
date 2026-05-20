@@ -46,6 +46,10 @@ citation ACL recheck, and endpoint secret redaction. For `local-regression`, the
 recorded as advisory only because the local 8B lane proves integration and safety regression, not
 final answer quality.
 
+API-backed reports also include `summary.trace_gate`. The runner fetches each run's
+`/steps` and `/retrieval-hits`, then blocks local regression when run IDs, ordered runtime
+steps, route-stage/model-tier evidence, retrieval-hit traces, or latency thresholds are missing.
+
 The API runner generates Markdown from the synthetic corpus, uploads every document through
 `POST /knowledge/documents/upload`, indexes with object storage by omitting `source_text`,
 publishes an eval agent, runs cases with corpus principal headers, maps API document IDs back

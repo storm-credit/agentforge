@@ -10,6 +10,7 @@ param(
     [string]$ModelProvider = "",
     [string]$ModelEndpointAlias = "",
     [double]$ModelTimeoutSeconds = 15,
+    [int]$TraceLatencyThresholdMs = 5000,
     [switch]$SkipModelProbe,
     [switch]$SkipSyntheticHarness,
     [switch]$SkipApiEval,
@@ -69,7 +70,9 @@ try {
             "--validation-lane",
             $ValidationLane,
             "--model-timeout-seconds",
-            $ModelTimeoutSeconds
+            $ModelTimeoutSeconds,
+            "--trace-latency-threshold-ms",
+            $TraceLatencyThresholdMs
         )
         if ($ModelBaseUrl) {
             $apiEvalArgs += @("--model-base-url", $ModelBaseUrl)

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -45,3 +45,18 @@ def list_audit_events(
         )
 
     return list(db.scalars(statement.order_by(AuditEvent.created_at.desc()).limit(limit)))
+
+
+@router.get("/events/{audit_event_id}", response_model=AuditEventRead)
+def get_audit_event(
+    audit_event_id: str,
+    db: Session = Depends(get_db),
+) -> AuditEvent:
+    audit_event = db.get(AuditEvent, audit_event_id)
+    if audit_event is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Audit event not found",
+        )
+
+    return audit_event

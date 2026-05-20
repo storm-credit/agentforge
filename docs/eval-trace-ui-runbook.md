@@ -10,7 +10,7 @@ The Agent Studio UI currently provides the operator entry points for eval and tr
 
 - `/eval` is the evaluation gate landing page and can sync the latest persisted eval report.
 - `/trace?run_id=<run-id>` opens a shareable runtime trace drill-down for a persisted run.
-- `/audit` is the governance and trace review landing page.
+- `/audit` is the governance and trace review landing page, with saved filter presets and event detail drill-down.
 - `/knowledge` can be used to re-check upload, indexing, and retrieval preview behavior.
 
 Use `/api/v1/eval/overview` or `/api/v1/eval/runs/latest` for the persisted report. The Eval screen can now sync an individual case trace from `/runs/{run_id}`, `/steps`, and `/retrieval-hits`, including step payload summaries and retrieval-hit comparison. The selected case can also open `/trace?run_id=<run-id>` for the same evidence in a shareable route, while the API endpoints remain the authoritative drill-down source.
@@ -41,6 +41,7 @@ The runner output includes:
 - `setup.agent_id`
 - `setup.agent_version_id`
 - `model_routing_policy_ref`, `budget_class`, and `model_route_summary` with every runtime policy stage
+- `summary.trace_gate` with run ID coverage, step coverage, p50/p95 latency, latency threshold, and failed trace case IDs
 - per-case `case_id`, `suite`, `expected_behavior`, `passed`, `findings`, `run_id`, `status`, citation document IDs, retrieval document IDs, and denied retrieval count
 
 ## Eval UI Review
@@ -82,7 +83,7 @@ Trace evidence to confirm:
 - No-context and policy-denied traces do not record a `generator` step because the runtime must not generate without authorized citations.
 - Retrieval hits include ACL filter snapshots and do not include unauthorized chunks.
 
-Open `Trace` in Agent Studio with `/trace?run_id=<run-id>` for a shareable review URL. Open `Audit` while reviewing governance evidence; the page can sync `/api/v1/audit/events` and filter by event type, target type, and text query.
+Open `Trace` in Agent Studio with `/trace?run_id=<run-id>` for a shareable review URL. Open `Audit` while reviewing governance evidence; the page can sync `/api/v1/audit/events`, apply saved filter presets, load `/api/v1/audit/events/<event-id>` detail, and open a run event directly in Trace.
 
 ## Pass Criteria
 
@@ -92,10 +93,11 @@ The workflow passes when:
 - The API-backed eval report has `passed=true`.
 - `/api/v1/eval/overview` returns the persisted latest report.
 - The persisted eval report and at least one runtime run expose `model_routing_policy_ref`, `budget_class`, and stage-complete `model_route_summary`.
+- `summary.trace_gate.status` is `passed`, with p50/p95 latency and no failed trace case IDs.
 - `/eval`, `/trace`, and `/audit` render in Agent Studio.
 - At least one passing answer case has inspectable run detail, ordered steps, and retrieval hits.
 - Failed or denied cases have trace evidence explaining refusal, no-context, or policy-denied behavior without forbidden citations.
 
 ## Follow-Up
 
-Next follow-up is linking trace URLs from audit event detail and adding richer step timing controls.
+Next follow-up is the Test Chat UI and local model gateway provenance path.

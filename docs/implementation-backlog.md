@@ -132,8 +132,9 @@ Sprint 1 progress:
 - Project specialist model profiles are now selected in the shared policy: routine specialist work uses `local-qwen8b`, security and escalation/release judgement use `company-qwen35b`, and tests verify every specialist has a routine and escalation profile.
 - API-backed eval runner now supports a caveman OpenAI-compatible model probe for validation-lane evidence: endpoint/model come from env or CLI, one `/v1/chat/completions` call records safe provenance and latency, and `company-quality` fails setup without a successful probe.
 - API-backed eval reports now include `summary.quality_review` with `quality-rubric-v0.1`, company-quality human review gating, final-answer cleanliness blockers, citation ACL recheck, and endpoint secret redaction criteria.
+- API-backed local-regression now includes an automated `summary.trace_gate`: the runner fetches `/runs/{run_id}/steps` and `/retrieval-hits`, blocks missing/unordered trace evidence, records p50/p95 latency, and reports failed trace case IDs.
 - Local Docker model evidence is confirmed for `local-regression`: `wset-ollama` exposes `http://127.0.0.1:11434/v1`, `/v1/models` returns `qwen3:8b`, the OpenAI-compatible probe succeeds with provider `local-ollama`, alias `docker-wset-ollama`, and the local 120-second timeout profile, and the API-backed eval runner passes 30/30 cases.
-- Audit read/search API started at `/api/v1/audit/events` with event type, actor, target, and text filters.
+- Audit read/search API started at `/api/v1/audit/events` with event type, actor, target, and text filters; event detail is available at `/api/v1/audit/events/{id}` and Agent Studio now exposes saved filter presets plus trace/eval links from event detail.
 - Agent Studio now has Trace Viewer entry points: Eval cases can sync the selected `run_id` through `/runs/{run_id}`, `/steps`, and `/retrieval-hits`, open `/trace?run_id=<run-id>`, then inspect step payloads and retrieval-hit comparison from a shareable URL.
 - Agent Studio Playwright smoke now verifies one uploaded document identity across Knowledge upload, index completion, retrieval preview, Eval trace sync, and `/trace?run_id=<run-id>`.
 - `tools/smoke/real-ingestion-smoke.ps1` now asserts uploaded MIME type, exact runtime citation document/chunk IDs, ordered runtime steps, retrieval-hit ACL/vector metadata, and audit event chain payloads.
@@ -150,8 +151,7 @@ Scope:
 - Answer-generation mock or local model gateway
 - Citation validator
 - Test Chat UI draft
-- Trace URL links from audit/event detail and richer timing controls
-- Audit Explorer result detail and saved filter presets
+- Local model gateway provenance in runtime runs
 - ACL/citation golden set execution
 - Model Gateway or OpenAI-compatible vLLM client with provider/model/version/endpoint provenance in run and eval traces
 - vLLM health, timeout, concurrency, and model-quality Golden Test lane for company Qwen3.6 35B

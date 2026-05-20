@@ -38,6 +38,7 @@ VALIDATION_LANE_BUDGET_CLASS = {
     "local-regression": "smoke",
     "company-quality": "release-gate",
 }
+DEFAULT_TRACE_LATENCY_THRESHOLD_MS = 5000
 QUALITY_REVIEW_RUBRIC_VERSION = "quality-rubric-v0.1"
 QUALITY_REVIEW_RUBRIC = {
     "rubric_version": QUALITY_REVIEW_RUBRIC_VERSION,
@@ -292,7 +293,8 @@ def main(argv: list[str] | None = None) -> int:
     for case in selected_cases:
         run = None
         retrieval_hits = []
-        error = None
+        run_steps = []
+        errors: list[str] = []
         try:
             run = client.post_json(
                 "/runs",
@@ -305,20 +307,36 @@ def main(argv: list[str] | None = None) -> int:
                 },
                 headers=principal_headers(case, corpus),
             )
-            retrieval_hits = client.get(
-                f"/runs/{run['id']}/retrieval-hits",
-                headers=principal_headers(case, corpus),
-            )
         except ApiError as exc:
-            error = str(exc)
+            errors.append(str(exc))
+
+        run_id = run.get("id") if isinstance(run, Mapping) else None
+        if isinstance(run_id, str):
+            try:
+                retrieval_hits = client.get(
+                    f"/runs/{run_id}/retrieval-hits",
+                    headers=principal_headers(case, corpus),
+                )
+            except ApiError as exc:
+                errors.append(f"Retrieval-hit trace fetch failed: {exc}")
+            try:
+                run_steps = client.get(
+                    f"/runs/{run_id}/steps",
+                    headers=principal_headers(case, corpus),
+                )
+            except ApiError as exc:
+                errors.append(f"Runtime step trace fetch failed: {exc}")
 
         results.append(
             score_api_case(
                 case,
                 run=run,
                 retrieval_hits=retrieval_hits,
+                run_steps=run_steps,
                 api_document_id_map=document_setup["api_to_corpus_document_ids"],
-                error=error,
+                latency_threshold_ms=args.trace_latency_threshold_ms,
+                trace_gate_enabled=True,
+                error="; ".join(errors) if errors else None,
             )
         )
 
@@ -378,6 +396,7 @@ def _eval_run_payload(report_payload: Mapping[str, Any]) -> dict[str, Any]:
     summary = report_payload.get("summary")
     merged_summary = dict(summary) if isinstance(summary, Mapping) else {}
     merged_summary.setdefault("quality_review", _quality_review_for_report(report_payload))
+    merged_summary.setdefault("trace_gate", _trace_gate_for_report(report_payload))
     return {
         **dict(report_payload),
         "summary": merged_summary,
@@ -404,6 +423,36 @@ def _quality_review_for_report(report_payload: Mapping[str, Any]) -> dict[str, A
             else "Local-regression runs prove integration and safety regression only; "
             "they are not final answer-quality approval."
         ),
+    }
+
+
+def _trace_gate_for_report(report_payload: Mapping[str, Any]) -> dict[str, Any]:
+    setup = report_payload.get("setup")
+    threshold = (
+        setup.get("trace_latency_threshold_ms") if isinstance(setup, Mapping) else None
+    )
+    results = report_payload.get("results")
+    result_items = [item for item in results if isinstance(item, Mapping)] if isinstance(results, list) else []
+    failed_case_ids = [
+        str(item.get("case_id"))
+        for item in result_items
+        if any("Trace gate:" in str(finding) for finding in item.get("findings", []))
+    ]
+    latencies = sorted(
+        latency
+        for item in result_items
+        if isinstance((latency := item.get("run_latency_ms")), int)
+    )
+    return {
+        "status": "passed" if not failed_case_ids else "failed",
+        "required": True,
+        "latency_threshold_ms": threshold if isinstance(threshold, int) else None,
+        "case_count": len(result_items),
+        "cases_with_run_id": sum(1 for item in result_items if item.get("run_id")),
+        "cases_with_steps": sum(1 for item in result_items if item.get("trace_step_names")),
+        "p50_latency_ms": _percentile(latencies, 50),
+        "p95_latency_ms": _percentile(latencies, 95),
+        "failed_case_ids": failed_case_ids,
     }
 
 
@@ -484,6 +533,17 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         default=30.0,
         help="Per-request HTTP timeout.",
     )
+    parser.add_argument(
+        "--trace-latency-threshold-ms",
+        type=int,
+        default=int(
+            os.environ.get(
+                "AGENT_FORGE_TRACE_LATENCY_THRESHOLD_MS",
+                str(DEFAULT_TRACE_LATENCY_THRESHOLD_MS),
+            )
+        ),
+        help="Local regression trace gate max run latency in milliseconds.",
+    )
     return parser.parse_args(argv)
 
 
@@ -531,8 +591,18 @@ def _model_setup(args: argparse.Namespace, model_probe: Mapping[str, Any]) -> di
         "model_id": args.model_id.strip(),
         "model_endpoint_alias": _model_endpoint_alias(args),
         "model_timeout_seconds": args.model_timeout_seconds,
+        "trace_latency_threshold_ms": args.trace_latency_threshold_ms,
         "model_probe": dict(model_probe),
     }
+
+
+def _percentile(values: list[int], percentile: int) -> int | None:
+    if not values:
+        return None
+    if len(values) == 1:
+        return values[0]
+    index = round((percentile / 100) * (len(values) - 1))
+    return values[min(max(index, 0), len(values) - 1)]
 
 
 def _model_probe_blocks_lane(args: argparse.Namespace, model_probe: Mapping[str, Any]) -> bool:

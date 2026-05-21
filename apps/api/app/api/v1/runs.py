@@ -24,6 +24,7 @@ from app.domain.schemas import (
 )
 from app.domain.vector import VectorQuery, VectorSearchResult, build_acl_filter
 from app.infra.audit import write_audit_event
+from app.infra.model_gateway import generate_runtime_answer
 from app.infra.vector_store import get_vector_store
 
 router = APIRouter()
@@ -236,7 +237,13 @@ def create_run(
                 }
             )
 
-    run.answer = _build_synthetic_answer(len(citations))
+    gateway_provenance = None
+    if citations:
+        gateway_result = generate_runtime_answer(citation_count=len(citations))
+        run.answer = gateway_result.answer
+        gateway_provenance = gateway_result.provenance
+    else:
+        run.answer = _build_synthetic_answer(len(citations))
     run.citations = citations
     run.retrieval_denied_count = vector_result.denied_count
     outcome = _runtime_outcome(
@@ -262,6 +269,8 @@ def create_run(
         "model_routing_policy_ref": MODEL_ROUTING_POLICY_REF,
         "model_route_summary": model_route,
     }
+    if gateway_provenance is not None:
+        run.guardrail["model_gateway"] = gateway_provenance
 
     next_step_order = 3
     if citations:
@@ -274,9 +283,10 @@ def create_run(
             output_summary={
                 "answer_length": len(run.answer),
                 "citation_count": len(citations),
-                "mode": "synthetic",
+                "mode": gateway_provenance["mode"] if gateway_provenance else "synthetic",
                 "route_stage": "answer_generator",
                 "model_tier": model_route["answer_generator"]["tier"],
+                "model_gateway": gateway_provenance,
             },
         )
         next_step_order += 1
@@ -343,6 +353,7 @@ def create_run(
             "budget_class": budget_class,
             "model_routing_policy_ref": MODEL_ROUTING_POLICY_REF,
             "vector_adapter": vector_result.adapter_name,
+            **({"model_gateway": gateway_provenance} if gateway_provenance is not None else {}),
         },
     )
     db.commit()

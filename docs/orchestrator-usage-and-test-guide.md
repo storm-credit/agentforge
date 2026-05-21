@@ -37,6 +37,8 @@
 - run steps, retrieval hits, audit events 저장
 - Eval report 저장
 - Agent Studio 주요 화면과 Trace Viewer
+- Agent Studio Test Chat draft
+- local deterministic model gateway provenance
 - 로컬 Docker Qwen3 8B `local-regression` lane
 - 회사 Qwen3.6 35B/vLLM `company-quality` lane 연결 준비
 

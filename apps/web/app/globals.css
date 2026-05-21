@@ -345,6 +345,91 @@ p {
   gap: 12px;
 }
 
+.testChatPanel {
+  display: grid;
+  gap: 14px;
+}
+
+.testChatGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(360px, 1.15fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.testChatForm,
+.testChatResult {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.testChatForm label {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.formNotice {
+  margin-bottom: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.formNotice.danger {
+  border-color: #f0bbbb;
+  background: #fff5f5;
+  color: var(--danger);
+}
+
+.answerBox {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.answerBox p {
+  margin-bottom: 0;
+}
+
+.citationChipList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.citationChip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid #c9dee3;
+  border-radius: 999px;
+  background: #f4fbfb;
+  color: var(--accent-strong);
+  font-size: 12px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.traceLink {
+  justify-self: start;
+}
+
+.traceLink.disabled {
+  pointer-events: none;
+  opacity: 0.55;
+}
+
 .routeStep {
   display: grid;
   gap: 6px;
@@ -1182,6 +1267,7 @@ textarea:focus {
 
   .knowledgeFlow,
   .knowledgeGrid,
+  .testChatGrid,
   .readinessGrid,
   .agentWorkbench,
   .auditGrid,

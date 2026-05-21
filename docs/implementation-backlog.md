@@ -135,6 +135,8 @@ Sprint 1 progress:
 - API-backed local-regression now includes an automated `summary.trace_gate`: the runner fetches `/runs/{run_id}/steps` and `/retrieval-hits`, blocks missing/unordered trace evidence, records p50/p95 latency, and reports failed trace case IDs.
 - Local Docker model evidence is confirmed for `local-regression`: `wset-ollama` exposes `http://127.0.0.1:11434/v1`, `/v1/models` returns `qwen3:8b`, the OpenAI-compatible probe succeeds with provider `local-ollama`, alias `docker-wset-ollama`, and the local 120-second timeout profile, and the API-backed eval runner passes 30/30 cases.
 - Audit read/search API started at `/api/v1/audit/events` with event type, actor, target, and text filters; event detail is available at `/api/v1/audit/events/{id}` and Agent Studio now exposes saved filter presets plus trace/eval links from event detail.
+- Runtime answer generation now goes through a local deterministic model gateway path for authorized-citation answer runs, recording safe provider/model/endpoint alias/validation lane/latency/token usage provenance in the generator step, run guardrail, and audit payload without storing endpoint URLs, API keys, or prompts.
+- Agent Studio now includes a Test Chat draft on `/agents` for published/validated seed agents, with `POST /api/v1/runs` integration, local fallback, citation chips, guardrail/citation status, no-context refusal state, and Trace links.
 - Agent Studio now has Trace Viewer entry points: Eval cases can sync the selected `run_id` through `/runs/{run_id}`, `/steps`, and `/retrieval-hits`, open `/trace?run_id=<run-id>`, then inspect step payloads and retrieval-hit comparison from a shareable URL.
 - Agent Studio Playwright smoke now verifies one uploaded document identity across Knowledge upload, index completion, retrieval preview, Eval trace sync, and `/trace?run_id=<run-id>`.
 - `tools/smoke/real-ingestion-smoke.ps1` now asserts uploaded MIME type, exact runtime citation document/chunk IDs, ordered runtime steps, retrieval-hit ACL/vector metadata, and audit event chain payloads.
@@ -148,10 +150,10 @@ Scope:
 - One embedding adapter
 - One vector store adapter, Qdrant or pgvector - Qdrant wiring started
 - ACL-aware vector search - Qdrant adapter pushes access group, clearance, status, and knowledge source filters into the query
-- Answer-generation mock or local model gateway
+- Answer-generation mock or local model gateway - local deterministic gateway provenance path started
 - Citation validator
-- Test Chat UI draft
-- Local model gateway provenance in runtime runs
+- Test Chat UI draft - Agent Studio draft panel started
+- Local model gateway provenance in runtime runs - safe JSON provenance recorded for answer cases
 - ACL/citation golden set execution
 - Model Gateway or OpenAI-compatible vLLM client with provider/model/version/endpoint provenance in run and eval traces
 - vLLM health, timeout, concurrency, and model-quality Golden Test lane for company Qwen3.6 35B

@@ -117,6 +117,7 @@ def test_runtime_run_records_steps_hits_and_acl_trace(client):
     assert run["citations"][0]["document_id"] == public_document["id"]
     assert run["citations"][0]["chunk_id"]
     assert run["answer"] == "Synthetic runtime response based on 1 authorized citation(s)."
+    _assert_safe_model_gateway_provenance(run["guardrail"]["model_gateway"])
 
     detail_response = client.get(f"/api/v1/runs/{run['id']}")
 
@@ -140,6 +141,7 @@ def test_runtime_run_records_steps_hits_and_acl_trace(client):
     assert steps[1]["output_summary"]["model_tier"] == "deterministic"
     assert steps[2]["output_summary"]["route_stage"] == "answer_generator"
     assert steps[2]["output_summary"]["model_tier"] == "standard-rag"
+    _assert_safe_model_gateway_provenance(steps[2]["output_summary"]["model_gateway"])
     assert steps[3]["status"] == "succeeded"
     assert steps[3]["output_summary"]["passed"] is True
 
@@ -153,6 +155,13 @@ def test_runtime_run_records_steps_hits_and_acl_trace(client):
     assert hits[0]["used_as_citation"] is True
     assert "department:Finance" in hits[0]["acl_filter_snapshot"]["subjects"]
     assert restricted_document["id"] not in [hit["document_id"] for hit in hits]
+
+    audit_response = client.get(f"/api/v1/audit/events?event_type=run.created&target_id={run['id']}")
+
+    assert audit_response.status_code == 200
+    audit_events = audit_response.json()
+    assert len(audit_events) == 1
+    _assert_safe_model_gateway_provenance(audit_events[0]["payload"]["model_gateway"])
 
 
 def test_runtime_run_requires_published_version(client):
@@ -224,6 +233,7 @@ def test_runtime_run_fails_citation_validation_without_authorized_context(client
     assert run["guardrail"]["security_finalcheck_pass"] is False
     assert run["guardrail"]["outcome"] == "policy_denied"
     assert run["answer"] == "No authorized context was available for this runtime run."
+    assert "model_gateway" not in run["guardrail"]
 
     steps_response = client.get(f"/api/v1/runs/{run['id']}/steps")
 
@@ -240,11 +250,17 @@ def test_runtime_run_fails_citation_validation_without_authorized_context(client
     assert citation_step["status"] == "failed"
     assert citation_step["error_code"] == "NO_CITATION"
     assert citation_step["output_summary"]["passed"] is False
+    assert all("model_gateway" not in step["output_summary"] for step in steps)
 
     hits_response = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits")
 
     assert hits_response.status_code == 200
     assert hits_response.json() == []
+
+    audit_response = client.get(f"/api/v1/audit/events?event_type=run.created&target_id={run['id']}")
+
+    assert audit_response.status_code == 200
+    assert "model_gateway" not in audit_response.json()[0]["payload"]
 
 
 def test_runtime_run_marks_no_context_without_zero_score_citations(client):
@@ -286,6 +302,7 @@ def test_runtime_run_marks_no_context_without_zero_score_citations(client):
     assert run["retrieval_denied_count"] == 0
     assert run["guardrail"]["outcome"] == "no_context"
     assert run["guardrail"]["answer_source"] == "safe-fallback"
+    assert "model_gateway" not in run["guardrail"]
 
     steps_response = client.get(f"/api/v1/runs/{run['id']}/steps")
 
@@ -296,11 +313,17 @@ def test_runtime_run_marks_no_context_without_zero_score_citations(client):
         "citation_validator",
         "guard_output",
     ]
+    assert all("model_gateway" not in step["output_summary"] for step in steps_response.json())
 
     hits_response = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits")
 
     assert hits_response.status_code == 200
     assert hits_response.json() == []
+
+    audit_response = client.get(f"/api/v1/audit/events?event_type=run.created&target_id={run['id']}")
+
+    assert audit_response.status_code == 200
+    assert "model_gateway" not in audit_response.json()[0]["payload"]
 
 
 def test_runtime_route_summary_matches_shared_policy_contract():
@@ -410,12 +433,14 @@ def test_runtime_refuses_write_action_before_retrieval(client):
     assert run["guardrail"]["outcome"] == "refuse"
     assert run["guardrail"]["input_guard_pass"] is False
     assert run["guardrail"]["citation_validation_error_code"] == "WRITE_ACTION_NOT_SUPPORTED"
+    assert "model_gateway" not in run["guardrail"]
 
     steps_response = client.get(f"/api/v1/runs/{run['id']}/steps")
 
     assert steps_response.status_code == 200
     steps = steps_response.json()
     assert [step["step_type"] for step in steps] == ["guard_input", "guard_output"]
+    assert all("model_gateway" not in step["output_summary"] for step in steps)
 
 
 def test_runtime_marks_make_up_request_as_no_context_before_retrieval(client):
@@ -451,11 +476,41 @@ def test_runtime_marks_make_up_request_as_no_context_before_retrieval(client):
     assert run["citations"] == []
     assert run["guardrail"]["outcome"] == "no_context"
     assert run["guardrail"]["citation_validation_error_code"] == "NO_CONTEXT_HALLUCINATION_REQUEST"
+    assert "model_gateway" not in run["guardrail"]
 
     hits_response = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits")
 
     assert hits_response.status_code == 200
     assert hits_response.json() == []
+
+
+def _assert_safe_model_gateway_provenance(provenance: dict) -> None:
+    assert set(provenance) == {
+        "status",
+        "provider",
+        "model_id",
+        "endpoint_alias",
+        "validation_lane",
+        "latency_ms",
+        "served_model",
+        "token_usage",
+        "answer_source",
+        "mode",
+    }
+    assert provenance["status"] == "succeeded"
+    assert provenance["provider"] == "local-fake"
+    assert provenance["model_id"] == "synthetic-runtime-answerer"
+    assert provenance["endpoint_alias"] == "local-fake"
+    assert provenance["validation_lane"] == "local-regression"
+    assert provenance["latency_ms"] == 1
+    assert provenance["served_model"] == "synthetic-runtime-answerer"
+    assert provenance["token_usage"]["prompt_tokens"] == 0
+    assert provenance["token_usage"]["total_tokens"] == provenance["token_usage"]["completion_tokens"]
+    assert provenance["answer_source"] == "local-model-gateway"
+    assert provenance["mode"] == "fake"
+    assert "base_url" not in provenance
+    assert "api_key" not in provenance
+    assert "prompt" not in provenance
 
 
 def _create_source(client) -> dict:

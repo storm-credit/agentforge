@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     qdrant_collection: str = "agentforge_chunks"
     qdrant_vector_size: int = 64
     qdrant_timeout_seconds: float = 2.0
+    model_gateway_provider: str = "local-fake"
+    model_gateway_model_id: str = "synthetic-runtime-answerer"
+    model_gateway_endpoint_alias: str = "local-fake"
+    model_gateway_validation_lane: str = "local-regression"
+    model_gateway_timeout_seconds: float = 2.0
+    model_gateway_mode: str = "fake"
 
     model_config = SettingsConfigDict(
         env_file=".env",

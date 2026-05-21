@@ -626,6 +626,67 @@ test.describe("Agent Studio shell", () => {
     );
   });
 
+  test("agent test chat submits a mocked run and renders runtime evidence", async ({ page }) => {
+    await page.route("**/api/v1/runs", async (route) => {
+      expect(route.request().method()).toBe("POST");
+
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          id: "runtime-agent-chat-1",
+          status: "succeeded",
+          answer: "Employees should cite the receipt deadline before answering reimbursement questions.",
+          citations: [
+            {
+              document_id: "FIN-001",
+              title: "Expense Reimbursement Policy",
+              citation_locator: "section:receipt-deadline",
+            },
+          ],
+          guardrail: {
+            outcome: "answer",
+          },
+          citation_validation: {
+            status: "passed",
+          },
+        },
+      });
+    });
+
+    await page.goto("/agents");
+    await expect(page.getByRole("heading", { name: "Test chat" })).toBeVisible();
+
+    await page.getByLabel("Message").fill("When should expense receipts be submitted?");
+    await page.getByRole("button", { name: "Send test" }).click();
+
+    await expect(page.getByText("Employees should cite the receipt deadline")).toBeVisible();
+    await expect(page.getByText("Expense Reimbursement Policy / section:receipt-deadline")).toBeVisible();
+    await expect(page.getByText("runtime-agent-chat-1")).toBeVisible();
+    await expect(page.getByText("answer", { exact: true })).toBeVisible();
+    await expect(page.getByText("passed", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open trace" })).toHaveAttribute(
+      "href",
+      "/trace?run_id=runtime-agent-chat-1",
+    );
+  });
+
+  test("agent test chat falls back to no-context refusal without fake citations", async ({ page }) => {
+    await page.route("**/api/v1/runs", async (route) => {
+      await route.fulfill({ status: 404, body: "Not found" });
+    });
+
+    await page.goto("/agents");
+    await page.getByRole("button", { name: "No-context probe" }).click();
+    await page.getByRole("button", { name: "Send test" }).click();
+
+    await expect(page.getByText(/I cannot answer from the selected agent knowledge source/)).toBeVisible();
+    await expect(page.getByText("local-policy-rag-refusal")).toBeVisible();
+    await expect(page.getByText("refusal_no_context")).toBeVisible();
+    await expect(page.getByText("not_applicable_no_citations")).toBeVisible();
+    await expect(page.getByText("No citations", { exact: true })).toBeVisible();
+    await expect(page.locator(".citationChip")).toHaveCount(0);
+  });
+
   test("locked release policies expose real switch semantics", async ({ page }) => {
     await page.goto("/admin/settings");
 

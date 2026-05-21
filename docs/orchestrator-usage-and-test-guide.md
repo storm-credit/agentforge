@@ -41,6 +41,7 @@
 - local deterministic model gateway provenance
 - optional OpenAI-compatible local model gateway for authorized runtime answers
 - Agent Studio API-backed agent catalog sync and versioned Test Chat runs
+- Agent Studio draft creation, v1 version creation, validate, and publish workflow
 - 로컬 Docker Qwen3 8B `local-regression` lane
 - 회사 Qwen3.6 35B/vLLM `company-quality` lane 연결 준비
 
@@ -108,7 +109,7 @@ $env:AGENT_FORGE_MODEL_GATEWAY_TIMEOUT_SECONDS="120"
 
 Agent Studio에서 보는 순서:
 
-1. `Agents`: `Sync API`로 published/validated agent version을 불러오고 Test Chat을 보낸다.
+1. `Agents`: draft agent와 v1 version을 만들고, validate/publish gate를 통과시킨 뒤 `Sync API`로 published/validated agent version을 불러온다.
 2. `Knowledge`: 문서 업로드, 인덱싱, retrieval preview가 되는지 확인
 3. `Eval`: 최근 eval run이 저장되어 있는지 확인
 4. `Trace`: run ID로 단계별 실행 흐름을 확인
@@ -116,7 +117,8 @@ Agent Studio에서 보는 순서:
 
 좋은 상태:
 
-- Test Chat이 `agent_version_id`, `knowledge_source_ids`, citation, guardrail status, Trace link를 보여준다.
+- Published version에서만 Test Chat이 열리고, `agent_version_id`, `knowledge_source_ids`, citation, guardrail status, Trace link를 보여준다.
+- Validated version은 Test Chat 전 단계이며, publish gate를 먼저 통과해야 한다.
 - 업로드한 문서 ID가 retrieval hit와 citation까지 이어진다.
 - 권한 없는 문서는 retrieval result에 나오지 않는다.
 - 답변이 citation 없이 성공 처리되지 않는다.

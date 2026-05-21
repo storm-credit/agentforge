@@ -626,6 +626,166 @@ test.describe("Agent Studio shell", () => {
     );
   });
 
+  test("agent lifecycle creates publishes syncs and runs versioned test chat", async ({ page }) => {
+    let agentPayload: Record<string, unknown> | null = null;
+    let versionPayload: Record<string, unknown> | null = null;
+    let validatePayload: Record<string, unknown> | null = null;
+    let publishPayload: Record<string, unknown> | null = null;
+    let runPayload: Record<string, unknown> | null = null;
+    let created = false;
+    let versionStatus = "draft";
+
+    const agentRecord = {
+      id: "agent-lifecycle-1",
+      name: "Lifecycle Policy Assistant",
+      purpose: "Answer policy questions with cited evidence.",
+      owner_department: "Operations",
+      status: "published",
+      created_at: "2026-05-21T00:00:00Z",
+      updated_at: "2026-05-21T00:00:00Z",
+    };
+    const versionRecord = () => ({
+      id: "version-lifecycle-1",
+      agent_id: "agent-lifecycle-1",
+      version: 1,
+      status: versionStatus,
+      config: {
+        citation_required: true,
+        knowledge_source_ids: ["source-hr-policy", "source-ops-policy"],
+        model_policy: {
+          routing_profile_ref: "packages/shared-contracts/model-routing-policy.v0.1.json",
+          budget_class: "standard",
+          stages: {
+            answer_generator: { tier: "standard-rag" },
+          },
+        },
+      },
+      created_by: "agent-owner",
+      created_at: "2026-05-21T00:00:00Z",
+      published_at: versionStatus === "published" ? "2026-05-21T00:00:00Z" : null,
+    });
+
+    await page.route("**/api/v1/agents", async (route) => {
+      if (route.request().method() === "POST") {
+        agentPayload = route.request().postDataJSON() as Record<string, unknown>;
+        created = true;
+        await route.fulfill({ contentType: "application/json", json: { ...agentRecord, status: "draft" } });
+        return;
+      }
+
+      expect(route.request().method()).toBe("GET");
+      await route.fulfill({ contentType: "application/json", json: created ? [agentRecord] : [] });
+    });
+    await page.route("**/api/v1/agents/versions", async (route) => {
+      expect(route.request().method()).toBe("POST");
+      versionPayload = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({ contentType: "application/json", json: versionRecord() });
+    });
+    await page.route("**/api/v1/agents/versions/version-lifecycle-1/validate", async (route) => {
+      expect(route.request().method()).toBe("POST");
+      validatePayload = route.request().postDataJSON() as Record<string, unknown>;
+      versionStatus = "validated";
+      await route.fulfill({ contentType: "application/json", json: versionRecord() });
+    });
+    await page.route("**/api/v1/agents/versions/version-lifecycle-1/publish", async (route) => {
+      expect(route.request().method()).toBe("POST");
+      publishPayload = route.request().postDataJSON() as Record<string, unknown>;
+      versionStatus = "published";
+      await route.fulfill({ contentType: "application/json", json: versionRecord() });
+    });
+    await page.route("**/api/v1/agents/agent-lifecycle-1/versions", async (route) => {
+      expect(route.request().method()).toBe("GET");
+      await route.fulfill({ contentType: "application/json", json: [versionRecord()] });
+    });
+    await page.route("**/api/v1/runs", async (route) => {
+      expect(route.request().method()).toBe("POST");
+      runPayload = route.request().postDataJSON() as Record<string, unknown>;
+
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          id: "runtime-lifecycle-chat-1",
+          status: "succeeded",
+          answer: "Manager approval is required before the policy exception can be released.",
+          citations: [
+            {
+              document_id: "HR-REMOTE-001",
+              title: "Remote Work Policy",
+              citation_locator: "section:manager-approval",
+            },
+          ],
+          guardrail: { outcome: "answer" },
+          citation_validation: { status: "passed" },
+        },
+      });
+    });
+
+    await page.goto("/agents");
+    await expect(page.getByText(/Using seed fallback catalog/)).toBeVisible();
+
+    await page.getByLabel("Agent name").fill("Lifecycle Policy Assistant");
+    await page.getByLabel("Purpose").fill("Answer policy questions with cited evidence.");
+    await page.getByLabel("Owner department").fill("Operations");
+    await page.getByLabel("Knowledge source IDs").fill("source-hr-policy, source-ops-policy");
+    await page.getByRole("button", { name: "Create draft + v1" }).click();
+    await expect(page.getByText(/Created Lifecycle Policy Assistant v1/)).toBeVisible();
+
+    expect(agentPayload).toMatchObject({
+      name: "Lifecycle Policy Assistant",
+      purpose: "Answer policy questions with cited evidence.",
+      owner_department: "Operations",
+      status: "draft",
+    });
+    expect(versionPayload).toMatchObject({
+      agent_id: "agent-lifecycle-1",
+      version: 1,
+      status: "draft",
+      config: {
+        citation_required: true,
+        knowledge_source_ids: ["source-hr-policy", "source-ops-policy"],
+        model_policy: {
+          routing_profile_ref: "packages/shared-contracts/model-routing-policy.v0.1.json",
+          budget_class: "standard",
+        },
+      },
+    });
+
+    await page.getByLabel("Validation reason").fill("Lifecycle smoke validation");
+    await page.getByRole("button", { name: "Confirm validate" }).click();
+    expect(validatePayload).toMatchObject({ reason: "Lifecycle smoke validation" });
+    await expect(page.getByText(/is now validated/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send test" })).toBeDisabled();
+
+    await page.getByLabel("Publish reason").fill("Lifecycle smoke publish");
+    await page.getByRole("button", { name: "Confirm publish" }).click();
+    expect(publishPayload).toMatchObject({ reason: "Lifecycle smoke publish" });
+    await expect(page.getByText(/is now published/)).toBeVisible();
+
+    await page.getByRole("button", { name: "Sync API" }).click();
+    await expect(page.getByText(/Loaded 1 API-ready agent version/)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Lifecycle Policy Assistant/ })).toBeVisible();
+    await expect(page.getByText("source-hr-policy, source-ops-policy", { exact: true })).toBeVisible();
+
+    await page.getByLabel("Message").fill("When is manager approval required?");
+    await page.getByRole("button", { name: "Send test" }).click();
+
+    expect(runPayload).toMatchObject({
+      agent_id: "agent-lifecycle-1",
+      agent_name: "Lifecycle Policy Assistant",
+      agent_version_id: "version-lifecycle-1",
+      knowledge_source_ids: ["source-hr-policy", "source-ops-policy"],
+      input: { message: "When is manager approval required?" },
+      metadata: { source: "agent-studio-test-chat" },
+    });
+    await expect(page.getByText("Manager approval is required")).toBeVisible();
+    await expect(page.getByText("Remote Work Policy / section:manager-approval")).toBeVisible();
+    await expect(page.getByText("runtime-lifecycle-chat-1")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open trace" })).toHaveAttribute(
+      "href",
+      "/trace?run_id=runtime-lifecycle-chat-1",
+    );
+  });
+
   test("agent test chat hydrates API catalog and submits a versioned run", async ({ page }) => {
     let runPayload: Record<string, unknown> | null = null;
 

@@ -38,6 +38,7 @@ export type AgentOption = {
   tone: "warn" | "neutral" | "danger";
   canTest: boolean;
   source: "api" | "seed";
+  lifecycleStatus: string;
   agentVersionId?: string;
   knowledgeSourceIds: string[];
 };
@@ -49,9 +50,25 @@ export type AgentApiResult<T> = {
   error?: string;
 };
 
+export type AgentDraftRequest = {
+  name: string;
+  purpose: string;
+  ownerDepartment: string;
+  knowledgeSourceIds: string[];
+};
+
+export type AgentLifecycleTarget = {
+  agentId: string;
+  agentName: string;
+  owner: string;
+  agentVersionId: string;
+  reason: string;
+};
+
 const agentEndpointRoots = buildEndpointRoots("agents");
 const runEndpointRoots = buildEndpointRoots("runs");
 const requestTimeoutMs = 2500;
+const modelRoutingPolicyRef = "packages/shared-contracts/model-routing-policy.v0.1.json";
 
 export async function fetchAgentCatalog(): Promise<AgentApiResult<AgentOption[]>> {
   const agentsResult = await requestAgentApi<unknown>(agentEndpointRoots, [""]);
@@ -108,6 +125,70 @@ export async function fetchAgentCatalog(): Promise<AgentApiResult<AgentOption[]>
     data: options,
     endpoint: versionResults.find(({ result }) => result.endpoint)?.result.endpoint ?? agentsResult.endpoint,
   };
+}
+
+export async function createDraftAgentWithVersion(
+  request: AgentDraftRequest,
+): Promise<AgentApiResult<AgentOption>> {
+  const agentResult = await requestAgentApi<unknown>(agentEndpointRoots, [""], {
+    method: "POST",
+    body: JSON.stringify({
+      name: request.name,
+      purpose: request.purpose,
+      owner_department: request.ownerDepartment,
+      status: "draft",
+    }),
+  });
+
+  if (!agentResult.ok || !agentResult.data) {
+    return withoutData(agentResult);
+  }
+
+  const agent = asRecord(agentResult.data);
+  const agentId = agent ? stringField(agent, "id") : undefined;
+
+  if (!agent || !agentId) {
+    return {
+      ok: false,
+      endpoint: agentResult.endpoint,
+      error: "Agent API created a draft without an id.",
+    };
+  }
+
+  const versionResult = await requestAgentApi<unknown>(agentEndpointRoots, ["versions"], {
+    method: "POST",
+    body: JSON.stringify({
+      agent_id: agentId,
+      version: 1,
+      status: "draft",
+      config: {
+        citation_required: true,
+        knowledge_source_ids: request.knowledgeSourceIds,
+        model_policy: {
+          routing_profile_ref: modelRoutingPolicyRef,
+          budget_class: "standard",
+        },
+      },
+    }),
+  });
+
+  if (!versionResult.ok || !versionResult.data) {
+    return withoutData(versionResult);
+  }
+
+  return mapLifecycleVersion(agent, versionResult.data, versionResult.endpoint);
+}
+
+export async function validateAgentVersion(
+  target: AgentLifecycleTarget,
+): Promise<AgentApiResult<AgentOption>> {
+  return submitAgentLifecycleAction(target, "validate");
+}
+
+export async function publishAgentVersion(
+  target: AgentLifecycleTarget,
+): Promise<AgentApiResult<AgentOption>> {
+  return submitAgentLifecycleAction(target, "publish");
 }
 
 export async function submitAgentRun(request: AgentRunRequest): Promise<AgentRunResult> {
@@ -303,7 +384,60 @@ async function requestAgentApi<T>(
   return { ok: false, error: lastError };
 }
 
-function mapAgentVersion(agentPayload: unknown, versionPayload: unknown): AgentOption | null {
+async function submitAgentLifecycleAction(
+  target: AgentLifecycleTarget,
+  action: "validate" | "publish",
+): Promise<AgentApiResult<AgentOption>> {
+  const result = await requestAgentApi<unknown>(
+    agentEndpointRoots,
+    [`versions/${encodeURIComponent(target.agentVersionId)}/${action}`],
+    {
+      method: "POST",
+      body: JSON.stringify({ reason: target.reason }),
+    },
+  );
+
+  if (!result.ok || !result.data) {
+    return withoutData(result);
+  }
+
+  const agentPayload = {
+    id: target.agentId,
+    name: target.agentName,
+    owner_department: target.owner,
+    status: action === "publish" ? "published" : "draft",
+  };
+
+  return mapLifecycleVersion(agentPayload, result.data, result.endpoint);
+}
+
+function mapLifecycleVersion(
+  agentPayload: unknown,
+  versionPayload: unknown,
+  endpoint?: string,
+): AgentApiResult<AgentOption> {
+  const option = mapAgentVersion(agentPayload, versionPayload, { includeDrafts: true });
+
+  if (!option) {
+    return {
+      ok: false,
+      endpoint,
+      error: "Agent API returned an unsupported agent version payload.",
+    };
+  }
+
+  return {
+    ok: true,
+    data: option,
+    endpoint,
+  };
+}
+
+function mapAgentVersion(
+  agentPayload: unknown,
+  versionPayload: unknown,
+  options: { includeDrafts?: boolean } = {},
+): AgentOption | null {
   const agent = asRecord(agentPayload);
   const version = asRecord(versionPayload);
 
@@ -317,7 +451,7 @@ function mapAgentVersion(agentPayload: unknown, versionPayload: unknown): AgentO
   const rawStatus = stringField(version, "status") ?? stringField(agent, "status") ?? "draft";
   const normalizedStatus = rawStatus.toLowerCase();
 
-  if (!agentId || !agentName || !isTestableVersionStatus(normalizedStatus)) {
+  if (!agentId || !agentName || !isVisibleVersionStatus(normalizedStatus, options.includeDrafts)) {
     return null;
   }
 
@@ -349,17 +483,62 @@ function mapAgentVersion(agentPayload: unknown, versionPayload: unknown): AgentO
       stringField(modelPolicy ?? {}, "budgetClass") ??
       stringField(answerGenerator ?? {}, "tier") ??
       "standard",
-    next: normalizedStatus === "published" ? "Trace Viewer link" : "Publish version",
-    tone: normalizedStatus === "published" ? "neutral" : "warn",
-    canTest: true,
+    next: nextActionLabel(normalizedStatus),
+    tone: statusTone(normalizedStatus),
+    canTest: isTestableVersionStatus(normalizedStatus),
     source: "api",
+    lifecycleStatus: normalizedStatus,
     agentVersionId: versionId,
     knowledgeSourceIds,
   };
 }
 
-function isTestableVersionStatus(status: string) {
+function isVisibleVersionStatus(status: string, includeDrafts = false) {
+  return isCatalogVersionStatus(status) || (includeDrafts && isLifecycleVersionStatus(status));
+}
+
+function isCatalogVersionStatus(status: string) {
   return status === "published" || status === "validated";
+}
+
+function isTestableVersionStatus(status: string) {
+  return status === "published";
+}
+
+function isLifecycleVersionStatus(status: string) {
+  return ["draft", "validated", "published", "superseded", "rejected"].includes(status);
+}
+
+function nextActionLabel(status: string) {
+  if (status === "published") {
+    return "Trace Viewer link";
+  }
+
+  if (status === "validated") {
+    return "Publish version";
+  }
+
+  if (status === "draft") {
+    return "Validate version";
+  }
+
+  if (status === "superseded") {
+    return "Create replacement";
+  }
+
+  return "Review version";
+}
+
+function statusTone(status: string): "warn" | "neutral" | "danger" {
+  if (status === "published" || status === "validated") {
+    return "neutral";
+  }
+
+  if (status === "rejected") {
+    return "danger";
+  }
+
+  return "warn";
 }
 
 function formatVersionLabel(version: Record<string, unknown>) {
@@ -386,7 +565,15 @@ function gateLabel(
     return `${Math.round(score * 100)}%`;
   }
 
-  return normalizedStatus === "published" ? "Live" : "Ready";
+  if (normalizedStatus === "published") {
+    return "Live";
+  }
+
+  if (normalizedStatus === "validated") {
+    return "Ready";
+  }
+
+  return titleCase(normalizedStatus);
 }
 
 function knowledgeLabel(knowledgeSourceIds: string[]) {

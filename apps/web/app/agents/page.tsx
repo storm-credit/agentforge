@@ -2,7 +2,15 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState, useTransition } from "react";
-import { AgentOption, AgentRunResult, fetchAgentCatalog, submitAgentRun } from "./api";
+import {
+  AgentOption,
+  AgentRunResult,
+  createDraftAgentWithVersion,
+  fetchAgentCatalog,
+  publishAgentVersion,
+  submitAgentRun,
+  validateAgentVersion,
+} from "./api";
 
 const seedAgents: AgentOption[] = [
   {
@@ -19,6 +27,7 @@ const seedAgents: AgentOption[] = [
     tone: "warn",
     canTest: true,
     source: "seed",
+    lifecycleStatus: "published",
     knowledgeSourceIds: [],
   },
   {
@@ -35,6 +44,7 @@ const seedAgents: AgentOption[] = [
     tone: "neutral",
     canTest: false,
     source: "seed",
+    lifecycleStatus: "draft",
     knowledgeSourceIds: [],
   },
   {
@@ -49,8 +59,9 @@ const seedAgents: AgentOption[] = [
     modelRoute: "release-gate",
     next: "Run ACL suite",
     tone: "warn",
-    canTest: true,
+    canTest: false,
     source: "seed",
+    lifecycleStatus: "validated",
     knowledgeSourceIds: [],
   },
 ];
@@ -78,11 +89,32 @@ export default function AgentsPage() {
   );
   const [runResult, setRunResult] = useState<AgentRunResult | null>(null);
   const [chatError, setChatError] = useState("");
+  const [draftName, setDraftName] = useState("Policy Intake Assistant");
+  const [draftPurpose, setDraftPurpose] = useState(
+    "Answer internal policy intake questions with traceable citations.",
+  );
+  const [draftOwner, setDraftOwner] = useState("Risk Operations");
+  const [draftKnowledgeSourceIds, setDraftKnowledgeSourceIds] = useState("");
+  const [lifecycleNotice, setLifecycleNotice] = useState(
+    "Create a v1 draft or select an API version to advance its lifecycle.",
+  );
+  const [lifecycleError, setLifecycleError] = useState("");
+  const [validationReason, setValidationReason] = useState("Lifecycle smoke validation");
+  const [publishReason, setPublishReason] = useState("Lifecycle smoke publish");
   const [catalogNotice, setCatalogNotice] = useState("Checking Agent API catalog...");
   const [isCatalogPending, setIsCatalogPending] = useState(true);
-  const [isPending, startTransition] = useTransition();
+  const [isChatPending, startChatTransition] = useTransition();
+  const [isLifecyclePending, startLifecycleTransition] = useTransition();
   const selectedAgent = agents.find((agent) => agent.key === selectedAgentKey) ?? agents[0];
   const canTestSelectedAgent = selectedAgent.canTest;
+  const canValidateSelectedAgent =
+    selectedAgent.source === "api" &&
+    Boolean(selectedAgent.agentVersionId) &&
+    selectedAgent.lifecycleStatus === "draft";
+  const canPublishSelectedAgent =
+    selectedAgent.source === "api" &&
+    Boolean(selectedAgent.agentVersionId) &&
+    selectedAgent.lifecycleStatus === "validated";
   const traceHref = runResult ? `/trace?run_id=${encodeURIComponent(runResult.runId)}` : "/trace";
   const citationSummary = useMemo(() => {
     if (!runResult) {
@@ -93,6 +125,16 @@ export default function AgentsPage() {
       ? `${runResult.citations.length} citation(s)`
       : "No citations";
   }, [runResult]);
+
+  const upsertAgentOption = useCallback((option: AgentOption) => {
+    setAgents((currentAgents) => [
+      option,
+      ...currentAgents.filter((agent) => agent.key !== option.key),
+    ]);
+    setSelectedAgentKey(option.key);
+    setRunResult(null);
+    setChatError("");
+  }, []);
 
   const applyCatalogResult = useCallback((result: Awaited<ReturnType<typeof fetchAgentCatalog>>) => {
     if (result.ok && result.data?.length) {
@@ -146,13 +188,93 @@ export default function AgentsPage() {
     setSelectedAgentKey(agentKey);
     setRunResult(null);
     setChatError("");
+    setLifecycleError("");
+  }
+
+  function handleCreateDraft(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const name = draftName.trim();
+    const purpose = draftPurpose.trim();
+    const ownerDepartment = draftOwner.trim();
+    const knowledgeSourceIds = parseKnowledgeSourceIds(draftKnowledgeSourceIds);
+
+    if (!name || !purpose || !ownerDepartment) {
+      setLifecycleError("Enter a draft name, purpose, and owner department before creating v1.");
+      return;
+    }
+
+    setLifecycleError("");
+    setLifecycleNotice("Creating draft agent and v1 version...");
+    startLifecycleTransition(async () => {
+      const result = await createDraftAgentWithVersion({
+        name,
+        purpose,
+        ownerDepartment,
+        knowledgeSourceIds,
+      });
+
+      if (result.ok && result.data) {
+        upsertAgentOption(result.data);
+        setLifecycleNotice(
+          `Created ${result.data.name} ${result.data.version} with ${result.data.knowledge}.`,
+        );
+        return;
+      }
+
+      setLifecycleError(`Draft creation failed: ${result.error ?? "Agent API request failed."}`);
+    });
+  }
+
+  function handleLifecycleAction(action: "validate" | "publish") {
+    const agentVersionId = selectedAgent.agentVersionId;
+
+    if (selectedAgent.source !== "api" || !agentVersionId) {
+      setLifecycleError("Select an API-backed version before changing lifecycle state.");
+      return;
+    }
+
+    setLifecycleError("");
+    setLifecycleNotice(`${action === "validate" ? "Validating" : "Publishing"} ${selectedAgent.name}...`);
+    startLifecycleTransition(async () => {
+      const result =
+        action === "validate"
+          ? await validateAgentVersion({
+              agentId: selectedAgent.id,
+              agentName: selectedAgent.name,
+              owner: selectedAgent.owner,
+              agentVersionId,
+              reason: validationReason.trim() || "Agent Studio validation",
+            })
+          : await publishAgentVersion({
+              agentId: selectedAgent.id,
+              agentName: selectedAgent.name,
+              owner: selectedAgent.owner,
+              agentVersionId,
+              reason: publishReason.trim() || "Agent Studio publish",
+            });
+
+      if (result.ok && result.data) {
+        upsertAgentOption(result.data);
+        setLifecycleNotice(
+          `${result.data.name} ${result.data.version} is now ${result.data.status.toLowerCase()}.`,
+        );
+        return;
+      }
+
+      setLifecycleError(
+        `${action === "validate" ? "Validation" : "Publish"} failed: ${
+          result.error ?? "Agent API request failed."
+        }`,
+      );
+    });
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
     if (!canTestSelectedAgent) {
-      setChatError("Only published or validated agents can be tested from this draft surface.");
+      setChatError("Only published agent versions can be tested from this surface.");
       return;
     }
 
@@ -163,7 +285,7 @@ export default function AgentsPage() {
     }
 
     setChatError("");
-    startTransition(async () => {
+    startChatTransition(async () => {
       const result = await submitAgentRun({
         agentId: selectedAgent.id,
         agentName: selectedAgent.name,
@@ -189,12 +311,7 @@ export default function AgentsPage() {
           </p>
         </div>
         <div className="buttonRow">
-          <button className="button" disabled title="Agent draft API is pending" type="button">
-            New draft
-          </button>
-          <button className="button secondary" disabled title="Validation API is pending" type="button">
-            Validate
-          </button>
+          <span className="badge neutral">Draft to publish</span>
         </div>
       </div>
 
@@ -204,6 +321,130 @@ export default function AgentsPage() {
           <strong>{selectedAgent.next} is required before the pilot version is release-ready.</strong>
         </div>
         <span className="badge neutral">Budget: {selectedAgent.modelRoute}</span>
+      </section>
+
+      <section className="panel testChatPanel" aria-labelledby="lifecycle-heading">
+        <div className="panelHeader">
+          <div>
+            <h2 id="lifecycle-heading">Lifecycle workflow</h2>
+            <p>Draft creation and release gates for API-backed agent versions.</p>
+          </div>
+          <span className={`badge ${selectedAgent.source === "api" ? selectedAgent.tone : "warn"}`}>
+            {selectedAgent.source === "api" ? selectedAgent.status : "Seed selected"}
+          </span>
+        </div>
+
+        <div className="testChatGrid">
+          <form className="testChatForm" onSubmit={handleCreateDraft}>
+            <div className="fieldGrid">
+              <label>
+                Agent name
+                <input
+                  disabled={isLifecyclePending}
+                  onChange={(event) => setDraftName(event.target.value)}
+                  value={draftName}
+                />
+              </label>
+              <label>
+                Owner department
+                <input
+                  disabled={isLifecyclePending}
+                  onChange={(event) => setDraftOwner(event.target.value)}
+                  value={draftOwner}
+                />
+              </label>
+            </div>
+            <label>
+              Purpose
+              <textarea
+                disabled={isLifecyclePending}
+                onChange={(event) => setDraftPurpose(event.target.value)}
+                value={draftPurpose}
+              />
+            </label>
+            <label>
+              Knowledge source IDs
+              <input
+                disabled={isLifecyclePending}
+                onChange={(event) => setDraftKnowledgeSourceIds(event.target.value)}
+                placeholder="ks_policy, ks_security"
+                value={draftKnowledgeSourceIds}
+              />
+            </label>
+            <button className="button" disabled={isLifecyclePending} type="submit">
+              {isLifecyclePending ? "Working..." : "Create draft + v1"}
+            </button>
+          </form>
+
+          <div className="testChatResult" aria-live="polite">
+            <dl className="detailGrid compact">
+              <div>
+                <dt>Selected version</dt>
+                <dd>
+                  {selectedAgent.name} / {selectedAgent.version}
+                </dd>
+              </div>
+              <div>
+                <dt>API version ID</dt>
+                <dd>{selectedAgent.agentVersionId ?? "Seed fallback"}</dd>
+              </div>
+              <div>
+                <dt>Lifecycle</dt>
+                <dd>{selectedAgent.status}</dd>
+              </div>
+            </dl>
+
+            <div className="buttonRow">
+              {canValidateSelectedAgent ? (
+                <label>
+                  Validation reason
+                  <input
+                    disabled={isLifecyclePending}
+                    onChange={(event) => setValidationReason(event.target.value)}
+                    value={validationReason}
+                  />
+                </label>
+              ) : null}
+              {canPublishSelectedAgent ? (
+                <label>
+                  Publish reason
+                  <input
+                    disabled={isLifecyclePending}
+                    onChange={(event) => setPublishReason(event.target.value)}
+                    value={publishReason}
+                  />
+                </label>
+              ) : null}
+            </div>
+            <div className="buttonRow">
+              {canValidateSelectedAgent ? (
+                <button
+                  className="button secondary"
+                  disabled={isLifecyclePending}
+                  onClick={() => handleLifecycleAction("validate")}
+                  type="button"
+                >
+                  Confirm validate
+                </button>
+              ) : null}
+              {canPublishSelectedAgent ? (
+                <button
+                  className="button"
+                  disabled={isLifecyclePending}
+                  onClick={() => handleLifecycleAction("publish")}
+                  type="button"
+                >
+                  Confirm publish
+                </button>
+              ) : null}
+            </div>
+            {lifecycleError ? (
+              <p className="formNotice danger">{lifecycleError}</p>
+            ) : (
+              <p className="formNotice">{lifecycleNotice}</p>
+            )}
+          </div>
+        </div>
       </section>
 
       <div className="agentWorkbench">
@@ -296,7 +537,7 @@ export default function AgentsPage() {
         <div className="panelHeader">
           <div>
             <h2 id="test-chat-heading">Test chat</h2>
-            <p>Send a test run against the selected published or validated agent.</p>
+            <p>Send a test run against the selected published agent version.</p>
           </div>
           <span className={`badge ${canTestSelectedAgent ? "neutral" : "warn"}`}>
             {canTestSelectedAgent ? "Ready to test" : "Draft locked"}
@@ -308,18 +549,18 @@ export default function AgentsPage() {
             <label>
               Message
               <textarea
-                disabled={!canTestSelectedAgent || isPending}
+                disabled={!canTestSelectedAgent || isChatPending}
                 onChange={(event) => setQuestion(event.target.value)}
                 value={question}
               />
             </label>
             <div className="buttonRow">
-              <button className="button" disabled={!canTestSelectedAgent || isPending} type="submit">
-                {isPending ? "Running..." : "Send test"}
+              <button className="button" disabled={!canTestSelectedAgent || isChatPending} type="submit">
+                {isChatPending ? "Running..." : "Send test"}
               </button>
               <button
                 className="button secondary"
-                disabled={!canTestSelectedAgent || isPending}
+                disabled={!canTestSelectedAgent || isChatPending}
                 onClick={() => setQuestion("Ask an unsupported no context question about a private contract.")}
                 type="button"
               >
@@ -393,5 +634,16 @@ export default function AgentsPage() {
         </div>
       </section>
     </section>
+  );
+}
+
+function parseKnowledgeSourceIds(value: string) {
+  return Array.from(
+    new Set(
+      value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
   );
 }

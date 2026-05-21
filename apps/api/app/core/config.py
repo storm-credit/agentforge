@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     model_gateway_validation_lane: str = "local-regression"
     model_gateway_timeout_seconds: float = 2.0
     model_gateway_mode: str = "fake"
+    model_gateway_openai_base_url: str | None = None
+    model_gateway_openai_api_key: SecretStr | None = None
 
     model_config = SettingsConfigDict(
         env_file=".env",

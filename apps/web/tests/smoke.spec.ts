@@ -626,21 +626,83 @@ test.describe("Agent Studio shell", () => {
     );
   });
 
-  test("agent test chat submits a mocked run and renders runtime evidence", async ({ page }) => {
+  test("agent test chat hydrates API catalog and submits a versioned run", async ({ page }) => {
+    let runPayload: Record<string, unknown> | null = null;
+
+    await page.route("**/api/v1/agents", async (route) => {
+      expect(route.request().method()).toBe("GET");
+
+      await route.fulfill({
+        contentType: "application/json",
+        json: [
+          {
+            id: "api-policy-agent",
+            name: "Remote Work API Assistant",
+            purpose: "Answer remote work questions with citations.",
+            owner_department: "People Operations",
+            status: "published",
+            created_at: "2026-05-20T00:00:00Z",
+            updated_at: "2026-05-20T00:00:00Z",
+          },
+        ],
+      });
+    });
+    await page.route("**/api/v1/agents/api-policy-agent/versions", async (route) => {
+      expect(route.request().method()).toBe("GET");
+
+      await route.fulfill({
+        contentType: "application/json",
+        json: [
+          {
+            id: "api-version-draft",
+            agent_id: "api-policy-agent",
+            version: 2,
+            status: "draft",
+            config: {
+              citation_required: true,
+              knowledge_source_ids: ["draft-source"],
+            },
+            created_by: "agent-owner",
+            created_at: "2026-05-20T00:00:00Z",
+            published_at: null,
+          },
+          {
+            id: "api-version-1",
+            agent_id: "api-policy-agent",
+            version: 1,
+            status: "published",
+            config: {
+              citation_required: true,
+              knowledge_source_ids: ["source-live-1", "source-live-2"],
+              model_policy: {
+                budget_class: "standard",
+                stages: {
+                  answer_generator: { tier: "standard-rag" },
+                },
+              },
+            },
+            created_by: "agent-owner",
+            created_at: "2026-05-19T00:00:00Z",
+            published_at: "2026-05-20T00:00:00Z",
+          },
+        ],
+      });
+    });
     await page.route("**/api/v1/runs", async (route) => {
       expect(route.request().method()).toBe("POST");
+      runPayload = route.request().postDataJSON() as Record<string, unknown>;
 
       await route.fulfill({
         contentType: "application/json",
         json: {
           id: "runtime-agent-chat-1",
           status: "succeeded",
-          answer: "Employees should cite the receipt deadline before answering reimbursement questions.",
+          answer: "Remote work answers should cite manager approval guidance before release.",
           citations: [
             {
-              document_id: "FIN-001",
-              title: "Expense Reimbursement Policy",
-              citation_locator: "section:receipt-deadline",
+              document_id: "HR-REMOTE-001",
+              title: "Remote Work Policy",
+              citation_locator: "section:manager-approval",
             },
           ],
           guardrail: {
@@ -654,13 +716,27 @@ test.describe("Agent Studio shell", () => {
     });
 
     await page.goto("/agents");
+    await expect(page.getByText(/Loaded 1 API-ready agent version/)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Remote Work API Assistant/ })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Test chat" })).toBeVisible();
 
-    await page.getByLabel("Message").fill("When should expense receipts be submitted?");
+    await page.getByLabel("Message").fill("When should remote work be approved?");
     await page.getByRole("button", { name: "Send test" }).click();
 
-    await expect(page.getByText("Employees should cite the receipt deadline")).toBeVisible();
-    await expect(page.getByText("Expense Reimbursement Policy / section:receipt-deadline")).toBeVisible();
+    expect(runPayload).toMatchObject({
+      agent_id: "api-policy-agent",
+      agent_name: "Remote Work API Assistant",
+      agent_version_id: "api-version-1",
+      knowledge_source_ids: ["source-live-1", "source-live-2"],
+      input: {
+        message: "When should remote work be approved?",
+      },
+      metadata: {
+        source: "agent-studio-test-chat",
+      },
+    });
+    await expect(page.getByText("Remote work answers should cite manager approval")).toBeVisible();
+    await expect(page.getByText("Remote Work Policy / section:manager-approval")).toBeVisible();
     await expect(page.getByText("runtime-agent-chat-1")).toBeVisible();
     await expect(page.getByText("answer", { exact: true })).toBeVisible();
     await expect(page.getByText("passed", { exact: true })).toBeVisible();

@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState, useTransition } from "react";
-import { AgentRunResult, submitAgentRun } from "./api";
+import { FormEvent, useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import { AgentOption, AgentRunResult, fetchAgentCatalog, submitAgentRun } from "./api";
 
-const agents = [
+const seedAgents: AgentOption[] = [
   {
+    key: "seed-policy-rag",
     id: "policy-rag",
     name: "Policy RAG Assistant",
     owner: "Risk Operations",
@@ -17,8 +18,11 @@ const agents = [
     next: "Trace Viewer link",
     tone: "warn",
     canTest: true,
+    source: "seed",
+    knowledgeSourceIds: [],
   },
   {
+    key: "seed-it-procedure",
     id: "it-procedure",
     name: "IT Procedure Helper",
     owner: "IT Operations",
@@ -30,8 +34,11 @@ const agents = [
     next: "Index source docs",
     tone: "neutral",
     canTest: false,
+    source: "seed",
+    knowledgeSourceIds: [],
   },
   {
+    key: "seed-security-policy",
     id: "security-policy",
     name: "Security Policy Assistant",
     owner: "Security",
@@ -43,6 +50,8 @@ const agents = [
     next: "Run ACL suite",
     tone: "warn",
     canTest: true,
+    source: "seed",
+    knowledgeSourceIds: [],
   },
 ];
 
@@ -62,14 +71,17 @@ const gates = [
 ];
 
 export default function AgentsPage() {
-  const [selectedAgentName, setSelectedAgentName] = useState(agents[0].name);
+  const [agents, setAgents] = useState(seedAgents);
+  const [selectedAgentKey, setSelectedAgentKey] = useState(seedAgents[0].key);
   const [question, setQuestion] = useState(
     "What policy evidence should this agent cite before a pilot answer?",
   );
   const [runResult, setRunResult] = useState<AgentRunResult | null>(null);
   const [chatError, setChatError] = useState("");
+  const [catalogNotice, setCatalogNotice] = useState("Checking Agent API catalog...");
+  const [isCatalogPending, setIsCatalogPending] = useState(true);
   const [isPending, startTransition] = useTransition();
-  const selectedAgent = agents.find((agent) => agent.name === selectedAgentName) ?? agents[0];
+  const selectedAgent = agents.find((agent) => agent.key === selectedAgentKey) ?? agents[0];
   const canTestSelectedAgent = selectedAgent.canTest;
   const traceHref = runResult ? `/trace?run_id=${encodeURIComponent(runResult.runId)}` : "/trace";
   const citationSummary = useMemo(() => {
@@ -82,8 +94,56 @@ export default function AgentsPage() {
       : "No citations";
   }, [runResult]);
 
-  function handleAgentSelect(agentName: string) {
-    setSelectedAgentName(agentName);
+  const applyCatalogResult = useCallback((result: Awaited<ReturnType<typeof fetchAgentCatalog>>) => {
+    if (result.ok && result.data?.length) {
+      setAgents(result.data);
+      setSelectedAgentKey(result.data[0].key);
+      setRunResult(null);
+      setChatError("");
+      setCatalogNotice(
+        `Loaded ${result.data.length} API-ready agent version(s) from ${result.endpoint}.`,
+      );
+      return;
+    }
+
+    setAgents(seedAgents);
+    setSelectedAgentKey(seedAgents[0].key);
+    setCatalogNotice("Using seed fallback catalog while the Agent API is unavailable.");
+  }, []);
+
+  const syncAgentCatalog = useCallback(async () => {
+    setIsCatalogPending(true);
+    try {
+      applyCatalogResult(await fetchAgentCatalog());
+    } finally {
+      setIsCatalogPending(false);
+    }
+  }, [applyCatalogResult]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchAgentCatalog()
+      .then((result) => {
+        if (!isMounted) {
+          return;
+        }
+
+        applyCatalogResult(result);
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsCatalogPending(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [applyCatalogResult]);
+
+  function handleAgentSelect(agentKey: string) {
+    setSelectedAgentKey(agentKey);
     setRunResult(null);
     setChatError("");
   }
@@ -107,8 +167,10 @@ export default function AgentsPage() {
       const result = await submitAgentRun({
         agentId: selectedAgent.id,
         agentName: selectedAgent.name,
+        agentVersionId: selectedAgent.agentVersionId,
         question: trimmedQuestion,
         knowledge: selectedAgent.knowledge,
+        knowledgeSourceIds: selectedAgent.knowledgeSourceIds,
       });
 
       setRunResult(result);
@@ -151,14 +213,27 @@ export default function AgentsPage() {
               <h2>Agent versions</h2>
               <p>Current pilot inventory and readiness state.</p>
             </div>
+            <div className="buttonRow">
+              <span className={`badge ${isCatalogPending || selectedAgent.source === "api" ? "neutral" : "warn"}`}>
+                {isCatalogPending
+                  ? "Syncing API"
+                  : selectedAgent.source === "api"
+                    ? "API catalog"
+                    : "Seed fallback"}
+              </span>
+              <button className="button secondary" disabled={isCatalogPending} onClick={syncAgentCatalog} type="button">
+                Sync API
+              </button>
+            </div>
           </div>
+          <p className="formNotice">{catalogNotice}</p>
           <div className="agentRows">
             {agents.map((agent) => (
               <button
-                aria-pressed={agent.name === selectedAgent.name}
+                aria-pressed={agent.key === selectedAgent.key}
                 className="agentRow"
-                key={agent.name}
-                onClick={() => handleAgentSelect(agent.name)}
+                key={agent.key}
+                onClick={() => handleAgentSelect(agent.key)}
                 type="button"
               >
                 <div>
@@ -221,7 +296,7 @@ export default function AgentsPage() {
         <div className="panelHeader">
           <div>
             <h2 id="test-chat-heading">Test chat</h2>
-            <p>Send a local draft run against the selected published or validated agent.</p>
+            <p>Send a test run against the selected published or validated agent.</p>
           </div>
           <span className={`badge ${canTestSelectedAgent ? "neutral" : "warn"}`}>
             {canTestSelectedAgent ? "Ready to test" : "Draft locked"}

@@ -39,6 +39,8 @@
 - Agent Studio 주요 화면과 Trace Viewer
 - Agent Studio Test Chat draft
 - local deterministic model gateway provenance
+- optional OpenAI-compatible local model gateway for authorized runtime answers
+- Agent Studio API-backed agent catalog sync and versioned Test Chat runs
 - 로컬 Docker Qwen3 8B `local-regression` lane
 - 회사 Qwen3.6 35B/vLLM `company-quality` lane 연결 준비
 
@@ -91,17 +93,30 @@ docker start wset-ollama
 
 `-KeepStack`을 붙였으면 Web URL과 API URL이 살아 있다. 출력에 나온 Web URL을 열고 `Knowledge`, `Eval`, `Audit`, `Trace` 화면을 확인한다.
 
+로컬 runtime answer generator도 Docker Ollama/OpenAI-compatible endpoint로 직접 붙이고 싶으면 API 실행 환경에 아래 값을 준다. 기본값은 여전히 deterministic fake라서 일반 회귀 테스트는 깨지지 않는다.
+
+```powershell
+$env:AGENT_FORGE_MODEL_GATEWAY_MODE="openai-compatible"
+$env:AGENT_FORGE_MODEL_GATEWAY_OPENAI_BASE_URL="http://127.0.0.1:11434/v1"
+$env:AGENT_FORGE_MODEL_GATEWAY_MODEL_ID="qwen3:8b"
+$env:AGENT_FORGE_MODEL_GATEWAY_PROVIDER="local-ollama"
+$env:AGENT_FORGE_MODEL_GATEWAY_ENDPOINT_ALIAS="docker-wset-ollama"
+$env:AGENT_FORGE_MODEL_GATEWAY_TIMEOUT_SECONDS="120"
+```
+
 ## 4. 화면에서 확인할 것
 
 Agent Studio에서 보는 순서:
 
-1. `Knowledge`: 문서 업로드, 인덱싱, retrieval preview가 되는지 확인
-2. `Eval`: 최근 eval run이 저장되어 있는지 확인
-3. `Trace`: run ID로 단계별 실행 흐름을 확인
-4. `Audit`: 문서 업로드, 인덱싱, retrieval, run 이벤트가 남는지 확인
+1. `Agents`: `Sync API`로 published/validated agent version을 불러오고 Test Chat을 보낸다.
+2. `Knowledge`: 문서 업로드, 인덱싱, retrieval preview가 되는지 확인
+3. `Eval`: 최근 eval run이 저장되어 있는지 확인
+4. `Trace`: run ID로 단계별 실행 흐름을 확인
+5. `Audit`: 문서 업로드, 인덱싱, retrieval, run 이벤트가 남는지 확인
 
 좋은 상태:
 
+- Test Chat이 `agent_version_id`, `knowledge_source_ids`, citation, guardrail status, Trace link를 보여준다.
 - 업로드한 문서 ID가 retrieval hit와 citation까지 이어진다.
 - 권한 없는 문서는 retrieval result에 나오지 않는다.
 - 답변이 citation 없이 성공 처리되지 않는다.

@@ -264,3 +264,98 @@ class RetrievalHitRead(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EvalCaseResultCreate(BaseModel):
+    case_id: str = Field(min_length=1, max_length=120)
+    suite: str = Field(min_length=1, max_length=80)
+    expected_behavior: str = Field(min_length=1, max_length=80)
+    passed: bool
+    findings: list[str] = Field(default_factory=list)
+    run_id: str | None = None
+    status: str | None = None
+    citation_document_ids: list[str] = Field(default_factory=list)
+    retrieval_document_ids: list[str] = Field(default_factory=list)
+    retrieval_denied_count: int = Field(default=0, ge=0)
+
+
+class EvalCaseResultRead(EvalCaseResultCreate):
+    id: str
+    eval_run_id: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EvalRunCreate(BaseModel):
+    corpus_id: str = Field(min_length=1, max_length=120)
+    mode: str = Field(default="api", min_length=1, max_length=40)
+    model_routing_policy_ref: str = Field(
+        default="packages/shared-contracts/model-routing-policy.v0.1.json",
+        min_length=1,
+        max_length=240,
+    )
+    budget_class: str = Field(default="standard", min_length=1, max_length=40)
+    model_route_summary: dict[str, Any] = Field(default_factory=dict)
+    passed: bool = False
+    total_cases: int = Field(ge=0)
+    passed_cases: int = Field(ge=0)
+    failed_cases: int = Field(ge=0)
+    suite_counts: dict[str, int] = Field(default_factory=dict)
+    setup_findings: list[str] = Field(default_factory=list)
+    setup: dict[str, Any] = Field(default_factory=dict)
+    summary: dict[str, Any] = Field(default_factory=dict)
+    results: list[EvalCaseResultCreate] = Field(default_factory=list)
+
+
+class EvalRunRead(BaseModel):
+    id: str
+    corpus_id: str
+    mode: str
+    status: str
+    passed: bool
+    total_cases: int
+    passed_cases: int
+    failed_cases: int
+    suite_counts: dict[str, int]
+    setup_findings: list[str]
+    setup: dict[str, Any]
+    summary: dict[str, Any]
+    model_routing_policy_ref: str
+    budget_class: str
+    model_route_summary: dict[str, Any]
+    created_by: str
+    approved_baseline_at: datetime | None
+    approved_baseline_by: str | None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EvalRunWithResultsRead(EvalRunRead):
+    results: list[EvalCaseResultRead]
+
+
+class EvalOverviewRead(BaseModel):
+    run: EvalRunRead
+    suite_counts: dict[str, int]
+    results: list[EvalCaseResultRead]
+
+
+class EvalBaselineApproval(BaseModel):
+    reason: str = Field(default="Approve eval run as baseline")
+
+
+class AuditEventRead(BaseModel):
+    id: str
+    event_type: str
+    actor_id: str
+    actor_department: str
+    target_type: str
+    target_id: str
+    reason: str
+    payload: dict[str, Any]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

@@ -106,6 +106,12 @@ def test_agent_and_version_contract(client):
     assert version["agent_id"] == agent["id"]
     assert version["version"] == 1
     assert version["created_by"] == "agent-owner"
+    assert version["config"]["model_policy"]["routing_profile_ref"] == (
+        "packages/shared-contracts/model-routing-policy.v0.1.json"
+    )
+    assert version["config"]["model_policy"]["stages"]["answer_generator"]["tier"] == (
+        "standard-rag"
+    )
 
     versions_response = client.get(f"/api/v1/agents/{agent['id']}/versions")
 
@@ -136,6 +142,75 @@ def test_agent_and_version_contract(client):
     listed_agents = list_response.json()
     assert [item["id"] for item in listed_agents] == [agent["id"]]
     assert listed_agents[0]["status"] == "published"
+
+
+def test_agent_version_rejects_invalid_model_policy(client):
+    agent_response = client.post(
+        "/api/v1/agents",
+        json={
+            "name": "Invalid Policy Assistant",
+            "purpose": "Exercise model policy validation.",
+            "owner_department": "Operations",
+        },
+    )
+    agent = agent_response.json()
+
+    version_response = client.post(
+        "/api/v1/agents/versions",
+        json={
+            "agent_id": agent["id"],
+            "version": 1,
+            "config": {
+                "model_policy": {
+                    "routing_profile_ref": "packages/shared-contracts/model-routing-policy.v0.1.json",
+                    "budget_class": "standard",
+                    "stages": {
+                        "security_precheck": {"tier": "fast-small"},
+                        "planner": {"tier": "fast-small"},
+                    },
+                }
+            },
+        },
+    )
+
+    assert version_response.status_code == 422
+    assert "missing runtime stages" in version_response.json()["detail"]
+
+
+def test_agent_version_accepts_smoke_budget_with_declared_escalation(client):
+    from app.domain.model_routing import runtime_model_route_summary
+
+    agent_response = client.post(
+        "/api/v1/agents",
+        json={
+            "name": "Smoke Policy Assistant",
+            "purpose": "Exercise smoke model policy validation.",
+            "owner_department": "Operations",
+        },
+    )
+    agent = agent_response.json()
+
+    version_response = client.post(
+        "/api/v1/agents/versions",
+        json={
+            "agent_id": agent["id"],
+            "version": 1,
+            "config": {
+                "model_policy": {
+                    "routing_profile_ref": "packages/shared-contracts/model-routing-policy.v0.1.json",
+                    "budget_class": "smoke",
+                    "stages": runtime_model_route_summary(),
+                }
+            },
+        },
+    )
+
+    assert version_response.status_code == 201
+    version = version_response.json()
+    assert version["config"]["model_policy"]["budget_class"] == "smoke"
+    assert version["config"]["model_policy"]["stages"]["critic"]["escalation_tier"] == (
+        "deep-review"
+    )
 
 
 def test_knowledge_source_and_document_contract(client):
@@ -351,6 +426,99 @@ def test_index_job_creates_txt_md_chunks_and_preview_uses_chunk_citations(client
     hit = preview_response.json()["hits"][0]
     assert hit["chunk_id"] == chunks[1]["id"]
     assert hit["citation_locator"] == chunks[1]["citation_locator"]
+
+
+def test_force_reindex_deletes_stale_vectors_and_replaces_chunks(client, monkeypatch):
+    from app.api.v1 import knowledge as knowledge_api
+    from app.domain.vector import FakeVectorStore
+
+    class RecordingVectorStore(FakeVectorStore):
+        def __init__(self):
+            super().__init__()
+            self.deleted_document_ids = []
+
+        def delete_document(self, document_id: str) -> None:
+            self.deleted_document_ids.append(document_id)
+            super().delete_document(document_id)
+
+    vector_store = RecordingVectorStore()
+    monkeypatch.setattr(knowledge_api, "get_vector_store", lambda: vector_store)
+
+    source_response = client.post(
+        "/api/v1/knowledge/sources",
+        json={
+            "name": "Reindex Corpus",
+            "description": "Synthetic reindex corpus.",
+            "owner_department": "Operations",
+        },
+    )
+    source = source_response.json()
+    document_response = client.post(
+        "/api/v1/knowledge/documents",
+        json={
+            "knowledge_source_id": source["id"],
+            "title": "Remote Work Reindex Policy",
+            "object_uri": "object://synthetic/ops/reindex.md",
+            "checksum": "sha256-remote-work-reindex",
+            "mime_type": "text/markdown",
+            "confidentiality_level": "internal",
+            "access_groups": ["all-employees"],
+            "effective_date": "2026-05-10",
+        },
+    )
+    document = document_response.json()
+
+    first_job_response = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        json={
+            "source_text": "# Remote Work\n\nOffice badge check-in is required.",
+            "chunking": {"strategy": "line-heading", "chunk_size": 900, "chunk_overlap": 0},
+        },
+    )
+
+    assert first_job_response.status_code == 201
+    assert first_job_response.json()["status"] == "succeeded"
+    first_chunks_response = client.get(f"/api/v1/knowledge/documents/{document['id']}/chunks")
+    first_chunks = first_chunks_response.json()
+    assert len(first_chunks) == 1
+
+    second_job_response = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        json={
+            "source_text": (
+                "# Remote Work\n\n"
+                "## Eligibility\n\n"
+                "Employees may request remote work after manager approval."
+            ),
+            "force_reindex": True,
+            "chunking": {"strategy": "line-heading", "chunk_size": 900, "chunk_overlap": 0},
+        },
+    )
+
+    assert second_job_response.status_code == 201
+    assert second_job_response.json()["status"] == "succeeded"
+    assert vector_store.deleted_document_ids == [document["id"]]
+
+    second_chunks_response = client.get(f"/api/v1/knowledge/documents/{document['id']}/chunks")
+
+    assert second_chunks_response.status_code == 200
+    second_chunks = second_chunks_response.json()
+    assert len(second_chunks) == 1
+    assert second_chunks[0]["id"] not in {chunk["id"] for chunk in first_chunks}
+    assert second_chunks[0]["section_path"] == ["Remote Work", "Eligibility"]
+
+    preview_response = client.post(
+        "/api/v1/knowledge/retrieval/preview",
+        json={
+            "query": "manager approval",
+            "knowledge_source_ids": [source["id"]],
+            "top_k": 1,
+        },
+    )
+
+    assert preview_response.status_code == 200
+    preview_hits = preview_response.json()["hits"]
+    assert [hit["chunk_id"] for hit in preview_hits] == [second_chunks[0]["id"]]
 
 
 def test_index_job_fails_closed_for_missing_acl(client):

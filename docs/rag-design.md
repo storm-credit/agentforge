@@ -91,7 +91,8 @@ acl:
 - ACL/기밀 metadata는 embedding text에 넣지 않는다.
 - embedding 모델 변경 시 새 index snapshot을 만든다.
 - vector index와 lexical index를 함께 사용한다.
-- Sprint 1 uses a deterministic fake vector adapter to lock the interface before Qdrant or pgvector is wired.
+- Sprint 1 uses a deterministic fake vector adapter to lock the interface before real backends are promoted.
+- Sprint 2 Qdrant wiring is available behind `AGENT_FORGE_VECTOR_STORE_BACKEND=qdrant`; it stores chunk payload metadata in Qdrant and pushes status, knowledge source, clearance, and access-group filters into the vector query before ranking.
 - Vector search requires an ACL filter and returns only allowed chunk IDs, citation locators, hashes, ranks, and scores.
 
 ## ACL-aware Retrieval

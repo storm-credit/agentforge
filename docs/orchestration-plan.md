@@ -4,6 +4,8 @@ Agent Forge is managed as an orchestrated expert workflow rather than a single c
 
 The operating model is: the orchestrator governs direction and gates; specialist agents perform deep domain work. See [Agent Operating Model](agent-operating-model.md).
 
+Model usage is also orchestrated. Specialist and runtime agents must follow [Agent Model Routing Policy](agent-model-routing-policy.md), which fixes when work stays deterministic, when a small model is enough, and when deep-review reasoning is mandatory.
+
 ## Current Objective
 
 Create an explainable project package for the first MVP: an internal document-based RAG agent builder for closed-network environments.
@@ -30,6 +32,19 @@ Create an explainable project package for the first MVP: an internal document-ba
 - Frontend: Agent Studio flows
 - DevOps/MLOps: closed-network deployment and observability
 - QA/Eval: success criteria and regression set
+
+## Model-Aware Dispatch
+
+The orchestrator assigns each dispatch with both a specialist owner and a model route:
+
+| Dispatch Type | Default Route | Escalation |
+|---|---|---|
+| routine document cleanup, checklist sync, UI copy | `fast-small` | `standard-rag` if acceptance criteria changes |
+| API, DB, runtime, RAG, eval implementation | `standard-rag` | `deep-review` for migration, auth, audit, release gates |
+| ACL, PII, prompt injection, audit, model policy | `deep-review` | no downgrade without explicit orchestrator decision |
+| synthetic eval scoring and smoke checks | `deterministic` first | `deep-review` only for failed-case triage |
+
+The dispatch is not complete until the expected D3 evidence is named: contract test, smoke run, eval report, runbook, or release-gate decision.
 
 ## Depth Expectation
 

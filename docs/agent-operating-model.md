@@ -34,6 +34,8 @@ The repository already uses the project orchestration layer through `notes/00_Or
 
 The product runtime layer will become real through Agent Registry, Knowledge ingestion, Runtime runs, evaluation gates, and audit logging.
 
+Model routing is part of this operating model. The orchestrator does not treat model selection as a hidden implementation detail; every specialist and runtime agent gets a default tier, escalation tier, and D3 evidence expectation. The official routing matrix is [Agent Model Routing Policy](agent-model-routing-policy.md).
+
 ## 3. Agent Depth Levels
 
 | Level | Name | Expected Behavior |
@@ -61,6 +63,20 @@ Current audit: [Deep Specialist Audit](deep-specialist-audit.md) records which w
 | Frontend Specialist | Agent Studio workflows | screens, interaction states, operator flows |
 | DevOps/MLOps | closed-net deployment and observability | compose, offline packaging, monitoring plan |
 | QA/Eval | quality gates and regression evidence | golden set, scoring rubric, release report |
+
+Each specialist contract also carries a model route:
+
+| Agent | Default Model Tier | Escalates When |
+|---|---|---|
+| PM Agent | `fast-small` | pilot risk or acceptance criteria changes |
+| Chief Architect | `standard-rag` | service boundary or deployment topology changes |
+| Security Architect | `deep-review` | any ACL, audit, PII, or prompt-injection decision |
+| AI Runtime Architect | `standard-rag` | agent contract, runtime flow, or model policy changes |
+| RAG/Data Specialist | `standard-rag` | chunking, ACL retrieval, or citation failures |
+| Backend Specialist | `standard-rag` | migration, auth boundary, or audit persistence |
+| Frontend Specialist | `fast-small` | operator workflow or release-gate UI changes |
+| DevOps/MLOps | `standard-rag` | closed-net release, model serving, backup/restore |
+| QA/Eval | `standard-rag` | release gate, failed-case triage, scorer policy |
 
 ## 5. Dispatch Loop
 

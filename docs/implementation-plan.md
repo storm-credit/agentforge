@@ -218,7 +218,7 @@ pgvector implementation:
 - `GET /api/v1/runs/{run_id}/steps`
 - `GET /api/v1/runs/{run_id}/events`
 - `POST /api/v1/runs/{run_id}/feedback`
-- `POST /api/v1/retrieval-preview`
+- `POST /api/v1/knowledge/retrieval/preview`
 
 단계:
 

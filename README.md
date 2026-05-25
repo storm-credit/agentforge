@@ -30,19 +30,25 @@ Sprint 0 실행 골격은 `apps/`와 `deploy/compose/` 아래에 있습니다.
 - API: `apps/api` FastAPI, SQLAlchemy, Alembic
 - Web: `apps/web` Next.js App Router shell
 - Local stack: `deploy/compose/docker-compose.dev.yaml`
-- Runbook: [docs/sprint-0-runbook.md](docs/sprint-0-runbook.md)
+- 처음 보는 사람용 사용/테스트 가이드: [docs/orchestrator-usage-and-test-guide.md](docs/orchestrator-usage-and-test-guide.md)
+- Sprint 0 runbook: [docs/sprint-0-runbook.md](docs/sprint-0-runbook.md)
+- Sprint 1 real ingestion runbook: [docs/sprint-1-real-ingestion-runbook.md](docs/sprint-1-real-ingestion-runbook.md)
+- Eval/Trace UI workflow: [docs/eval-trace-ui-runbook.md](docs/eval-trace-ui-runbook.md)
+- API-backed eval smoke: `./tools/smoke/api-eval-runner-smoke.ps1 -BootStack -WebPort 0`
 
 ## 공식 산출물
 
 | 문서 | 목적 |
 |---|---|
 | [docs/index.md](docs/index.md) | 공식 문서 목차 |
+| [docs/orchestrator-usage-and-test-guide.md](docs/orchestrator-usage-and-test-guide.md) | 처음 보는 사람용 사용법과 테스트 절차 |
 | [docs/project-proposal.md](docs/project-proposal.md) | 회의/상신용 프로젝트 제안서 |
 | [docs/use-case-definition.md](docs/use-case-definition.md) | 1차 MVP 유스케이스 정의 |
 | [docs/pilot-readiness.md](docs/pilot-readiness.md) | 파일럿 부서/문서/권한 준비 체크리스트 |
 | [docs/orchestration-plan.md](docs/orchestration-plan.md) | 오케스트라 운영 계획 |
 | [docs/agent-operating-model.md](docs/agent-operating-model.md) | 오케스트라-전문 에이전트 운영 모델 |
 | [docs/deep-specialist-audit.md](docs/deep-specialist-audit.md) | 분야별 deep specialist 점검 결과 |
+| [docs/agent-model-routing-policy.md](docs/agent-model-routing-policy.md) | 전문/런타임 에이전트별 모델 효율화 정책 |
 | [docs/open-design-adoption.md](docs/open-design-adoption.md) | Open Design 활용 검토 |
 | [docs/architecture.md](docs/architecture.md) | 전체 아키텍처 |
 | [docs/security-model.md](docs/security-model.md) | 사내망 보안 모델 |
@@ -51,6 +57,8 @@ Sprint 0 실행 골격은 `apps/`와 `deploy/compose/` 아래에 있습니다.
 | [docs/implementation-plan.md](docs/implementation-plan.md) | 구현 계획 |
 | [docs/implementation-backlog.md](docs/implementation-backlog.md) | 개발 착수용 Epic/Story backlog |
 | [docs/sprint-0-runbook.md](docs/sprint-0-runbook.md) | Sprint 0 로컬 실행 절차 |
+| [docs/sprint-1-real-ingestion-runbook.md](docs/sprint-1-real-ingestion-runbook.md) | Sprint 1 실제 업로드 ingestion 검증 절차 |
+| [docs/eval-trace-ui-runbook.md](docs/eval-trace-ui-runbook.md) | API-backed eval 이후 Eval/Trace UI 검토 절차 |
 | [docs/evaluation-plan.md](docs/evaluation-plan.md) | 평가 계획 |
 
 ## 전문가 역할

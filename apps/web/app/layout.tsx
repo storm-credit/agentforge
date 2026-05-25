@@ -1,20 +1,12 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
+import { PrimaryNav } from "./nav";
 
 export const metadata: Metadata = {
   title: "Agent Forge",
   description: "Governed internal agent build platform",
 };
-
-const navItems = [
-  { href: "/", label: "Overview" },
-  { href: "/agents", label: "Agents" },
-  { href: "/knowledge", label: "Knowledge" },
-  { href: "/eval", label: "Eval" },
-  { href: "/audit", label: "Audit" },
-  { href: "/admin/settings", label: "Settings" },
-];
 
 export default function RootLayout({
   children,
@@ -29,13 +21,7 @@ export default function RootLayout({
             <span className="brandMark">AF</span>
             <span>Agent Forge</span>
           </Link>
-          <nav aria-label="Primary">
-            {navItems.map((item) => (
-              <Link key={item.href} href={item.href}>
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+          <PrimaryNav />
         </aside>
         <main>{children}</main>
       </body>

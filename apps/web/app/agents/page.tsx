@@ -2,11 +2,11 @@
 
 import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState, useTransition } from "react";
+import type { AgentKnowledgeSource, AgentOption, AgentRunResult } from "./api";
 import {
-  AgentOption,
-  AgentRunResult,
   createDraftAgentWithVersion,
   fetchAgentCatalog,
+  fetchKnowledgeSources,
   publishAgentVersion,
   submitAgentRun,
   validateAgentVersion,
@@ -95,6 +95,12 @@ export default function AgentsPage() {
   );
   const [draftOwner, setDraftOwner] = useState("Risk Operations");
   const [draftKnowledgeSourceIds, setDraftKnowledgeSourceIds] = useState("");
+  const [knowledgeSources, setKnowledgeSources] = useState<AgentKnowledgeSource[]>([]);
+  const [selectedKnowledgeSourceIds, setSelectedKnowledgeSourceIds] = useState<string[]>([]);
+  const [knowledgeSourceNotice, setKnowledgeSourceNotice] = useState(
+    "Checking Knowledge API sources...",
+  );
+  const [isKnowledgeSourcePending, setIsKnowledgeSourcePending] = useState(true);
   const [lifecycleNotice, setLifecycleNotice] = useState(
     "Create a v1 draft or select an API version to advance its lifecycle.",
   );
@@ -125,6 +131,10 @@ export default function AgentsPage() {
       ? `${runResult.citations.length} citation(s)`
       : "No citations";
   }, [runResult]);
+  const draftKnowledgeIds = useMemo(
+    () => mergeKnowledgeSourceIds(selectedKnowledgeSourceIds, draftKnowledgeSourceIds),
+    [draftKnowledgeSourceIds, selectedKnowledgeSourceIds],
+  );
 
   const upsertAgentOption = useCallback((option: AgentOption) => {
     setAgents((currentAgents) => [
@@ -152,6 +162,33 @@ export default function AgentsPage() {
     setSelectedAgentKey(seedAgents[0].key);
     setCatalogNotice("Using seed fallback catalog while the Agent API is unavailable.");
   }, []);
+
+  const applyKnowledgeSourceResult = useCallback(
+    (result: Awaited<ReturnType<typeof fetchKnowledgeSources>>) => {
+      if (result.ok) {
+        const sources = result.data ?? [];
+        const sourceIds = new Set(sources.map((source) => source.id));
+
+        setKnowledgeSources(sources);
+        setSelectedKnowledgeSourceIds((currentIds) =>
+          currentIds.filter((sourceId) => sourceIds.has(sourceId)),
+        );
+        setKnowledgeSourceNotice(
+          sources.length > 0
+            ? `Loaded ${sources.length} Knowledge API source(s) from ${result.endpoint}.`
+            : "Knowledge API returned no sources.",
+        );
+        return;
+      }
+
+      setKnowledgeSources([]);
+      setSelectedKnowledgeSourceIds([]);
+      setKnowledgeSourceNotice(
+        "Knowledge API source list unavailable; manual IDs are still available.",
+      );
+    },
+    [],
+  );
 
   const syncAgentCatalog = useCallback(async () => {
     setIsCatalogPending(true);
@@ -184,11 +221,41 @@ export default function AgentsPage() {
     };
   }, [applyCatalogResult]);
 
+  useEffect(() => {
+    let isMounted = true;
+
+    fetchKnowledgeSources()
+      .then((result) => {
+        if (!isMounted) {
+          return;
+        }
+
+        applyKnowledgeSourceResult(result);
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsKnowledgeSourcePending(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [applyKnowledgeSourceResult]);
+
   function handleAgentSelect(agentKey: string) {
     setSelectedAgentKey(agentKey);
     setRunResult(null);
     setChatError("");
     setLifecycleError("");
+  }
+
+  function handleKnowledgeSourceToggle(sourceId: string) {
+    setSelectedKnowledgeSourceIds((currentIds) =>
+      currentIds.includes(sourceId)
+        ? currentIds.filter((currentId) => currentId !== sourceId)
+        : [...currentIds, sourceId],
+    );
   }
 
   function handleCreateDraft(event: FormEvent<HTMLFormElement>) {
@@ -197,7 +264,7 @@ export default function AgentsPage() {
     const name = draftName.trim();
     const purpose = draftPurpose.trim();
     const ownerDepartment = draftOwner.trim();
-    const knowledgeSourceIds = parseKnowledgeSourceIds(draftKnowledgeSourceIds);
+    const knowledgeSourceIds = draftKnowledgeIds;
 
     if (!name || !purpose || !ownerDepartment) {
       setLifecycleError("Enter a draft name, purpose, and owner department before creating v1.");
@@ -362,12 +429,42 @@ export default function AgentsPage() {
                 value={draftPurpose}
               />
             </label>
+            <div className="documentList" aria-labelledby="knowledge-source-picker-label">
+              <div className="buttonRow">
+                <strong id="knowledge-source-picker-label">Knowledge sources</strong>
+                <span className={`badge ${knowledgeSources.length > 0 ? "neutral" : "warn"}`}>
+                  {isKnowledgeSourcePending
+                    ? "Syncing"
+                    : `${draftKnowledgeIds.length} selected`}
+                </span>
+              </div>
+              {knowledgeSources.map((source) => (
+                <label className="documentRow" key={source.id}>
+                  <input
+                    checked={selectedKnowledgeSourceIds.includes(source.id)}
+                    disabled={isLifecyclePending}
+                    onChange={() => handleKnowledgeSourceToggle(source.id)}
+                    type="checkbox"
+                  />
+                  <span className="documentMain">
+                    <strong>{source.name}</strong>
+                    <small>
+                      {source.id} / {source.owner} / {source.confidentiality}
+                    </small>
+                  </span>
+                  <span className={`badge ${source.status === "Ready" ? "neutral" : "warn"}`}>
+                    {source.status}
+                  </span>
+                </label>
+              ))}
+              <p className="formNotice">{knowledgeSourceNotice}</p>
+            </div>
             <label>
               Knowledge source IDs
               <input
                 disabled={isLifecyclePending}
                 onChange={(event) => setDraftKnowledgeSourceIds(event.target.value)}
-                placeholder="ks_policy, ks_security"
+                placeholder="Advanced: ks_policy, ks_security"
                 value={draftKnowledgeSourceIds}
               />
             </label>
@@ -637,13 +734,15 @@ export default function AgentsPage() {
   );
 }
 
-function parseKnowledgeSourceIds(value: string) {
+function mergeKnowledgeSourceIds(selectedIds: string[], manualValue: string) {
   return Array.from(
     new Set(
-      value
-        .split(",")
-        .map((item) => item.trim())
-        .filter(Boolean),
+      selectedIds.concat(
+        manualValue
+          .split(",")
+          .map((item) => item.trim())
+          .filter(Boolean),
+      ),
     ),
   );
 }

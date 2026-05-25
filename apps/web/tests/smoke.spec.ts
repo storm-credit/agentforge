@@ -786,6 +786,189 @@ test.describe("Agent Studio shell", () => {
     );
   });
 
+  test("agent lifecycle binds selected and manual knowledge sources", async ({ page }) => {
+    let agentPayload: Record<string, unknown> | null = null;
+    let versionPayload: Record<string, unknown> | null = null;
+    let validatePayload: Record<string, unknown> | null = null;
+    let publishPayload: Record<string, unknown> | null = null;
+    let runPayload: Record<string, unknown> | null = null;
+    let created = false;
+    let versionStatus = "draft";
+    const expectedKnowledgeSourceIds = ["ks-policy", "ks-security", "ks-manual", "ks-legacy"];
+
+    const agentRecord = {
+      id: "agent-binding-1",
+      name: "Binding Policy Assistant",
+      purpose: "Answer with selected and fallback knowledge.",
+      owner_department: "Risk Operations",
+      status: "published",
+      created_at: "2026-05-25T00:00:00Z",
+      updated_at: "2026-05-25T00:00:00Z",
+    };
+    const versionRecord = () => ({
+      id: "version-binding-1",
+      agent_id: "agent-binding-1",
+      version: 1,
+      status: versionStatus,
+      config: {
+        citation_required: true,
+        knowledge_source_ids: expectedKnowledgeSourceIds,
+        model_policy: {
+          routing_profile_ref: "packages/shared-contracts/model-routing-policy.v0.1.json",
+          budget_class: "standard",
+          stages: {
+            answer_generator: { tier: "standard-rag" },
+          },
+        },
+      },
+      created_by: "agent-owner",
+      created_at: "2026-05-25T00:00:00Z",
+      published_at: versionStatus === "published" ? "2026-05-25T00:00:00Z" : null,
+    });
+
+    await page.route("**/api/v1/knowledge/sources", async (route) => {
+      expect(route.request().method()).toBe("GET");
+      await route.fulfill({
+        contentType: "application/json",
+        json: [
+          {
+            id: "ks-policy",
+            name: "Policy library",
+            description: "Policy source",
+            owner_department: "Risk Operations",
+            default_confidentiality_level: "internal",
+            status: "active",
+            created_at: "2026-05-25T00:00:00Z",
+            updated_at: "2026-05-25T00:00:00Z",
+          },
+          {
+            id: "ks-security",
+            name: "Security runbooks",
+            description: "Security source",
+            owner_department: "Security",
+            default_confidentiality_level: "restricted",
+            status: "active",
+            created_at: "2026-05-25T00:00:00Z",
+            updated_at: "2026-05-25T00:00:00Z",
+          },
+        ],
+      });
+    });
+    await page.route("**/api/v1/agents", async (route) => {
+      if (route.request().method() === "POST") {
+        agentPayload = route.request().postDataJSON() as Record<string, unknown>;
+        created = true;
+        await route.fulfill({ contentType: "application/json", json: { ...agentRecord, status: "draft" } });
+        return;
+      }
+
+      expect(route.request().method()).toBe("GET");
+      await route.fulfill({ contentType: "application/json", json: created ? [agentRecord] : [] });
+    });
+    await page.route("**/api/v1/agents/versions", async (route) => {
+      expect(route.request().method()).toBe("POST");
+      versionPayload = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({ contentType: "application/json", json: versionRecord() });
+    });
+    await page.route("**/api/v1/agents/versions/version-binding-1/validate", async (route) => {
+      expect(route.request().method()).toBe("POST");
+      validatePayload = route.request().postDataJSON() as Record<string, unknown>;
+      versionStatus = "validated";
+      await route.fulfill({ contentType: "application/json", json: versionRecord() });
+    });
+    await page.route("**/api/v1/agents/versions/version-binding-1/publish", async (route) => {
+      expect(route.request().method()).toBe("POST");
+      publishPayload = route.request().postDataJSON() as Record<string, unknown>;
+      versionStatus = "published";
+      await route.fulfill({ contentType: "application/json", json: versionRecord() });
+    });
+    await page.route("**/api/v1/agents/agent-binding-1/versions", async (route) => {
+      expect(route.request().method()).toBe("GET");
+      await route.fulfill({ contentType: "application/json", json: [versionRecord()] });
+    });
+    await page.route("**/api/v1/runs", async (route) => {
+      expect(route.request().method()).toBe("POST");
+      runPayload = route.request().postDataJSON() as Record<string, unknown>;
+      await route.fulfill({
+        contentType: "application/json",
+        json: {
+          id: "runtime-binding-chat-1",
+          status: "succeeded",
+          answer: "The answer should cite the selected policy and security sources.",
+          citations: [
+            {
+              document_id: "POL-001",
+              title: "Policy library",
+              citation_locator: "section:binding",
+            },
+          ],
+          guardrail: { outcome: "answer" },
+          citation_validation: { status: "passed" },
+        },
+      });
+    });
+
+    await page.goto("/agents");
+    await expect(page.getByText(/Loaded 2 Knowledge API source/)).toBeVisible();
+
+    await page.getByRole("checkbox", { name: /Policy library/ }).check();
+    await page.getByRole("checkbox", { name: /Security runbooks/ }).check();
+    await page.getByLabel("Knowledge source IDs").fill("ks-manual, ks-policy, ks-manual, ks-legacy");
+    await page.getByLabel("Agent name").fill("Binding Policy Assistant");
+    await page.getByLabel("Purpose").fill("Answer with selected and fallback knowledge.");
+    await page.getByLabel("Owner department").fill("Risk Operations");
+    await page.getByRole("button", { name: "Create draft + v1" }).click();
+    await expect(page.getByText(/Created Binding Policy Assistant v1/)).toBeVisible();
+
+    expect(agentPayload).toMatchObject({
+      name: "Binding Policy Assistant",
+      purpose: "Answer with selected and fallback knowledge.",
+      owner_department: "Risk Operations",
+      status: "draft",
+    });
+    expect(versionPayload).toMatchObject({
+      agent_id: "agent-binding-1",
+      version: 1,
+      status: "draft",
+      config: {
+        citation_required: true,
+        knowledge_source_ids: expectedKnowledgeSourceIds,
+        model_policy: {
+          routing_profile_ref: "packages/shared-contracts/model-routing-policy.v0.1.json",
+          budget_class: "standard",
+        },
+      },
+    });
+
+    await page.getByLabel("Validation reason").fill("Knowledge binding validation");
+    await page.getByRole("button", { name: "Confirm validate" }).click();
+    expect(validatePayload).toMatchObject({ reason: "Knowledge binding validation" });
+    await expect(page.getByText(/is now validated/)).toBeVisible();
+
+    await page.getByLabel("Publish reason").fill("Knowledge binding publish");
+    await page.getByRole("button", { name: "Confirm publish" }).click();
+    expect(publishPayload).toMatchObject({ reason: "Knowledge binding publish" });
+    await expect(page.getByText(/is now published/)).toBeVisible();
+
+    await page.getByRole("button", { name: "Sync API" }).click();
+    await expect(page.getByText(/Loaded 1 API-ready agent version/)).toBeVisible();
+
+    await page.getByLabel("Message").fill("Which policy source should be cited?");
+    await page.getByRole("button", { name: "Send test" }).click();
+
+    expect(runPayload).toMatchObject({
+      agent_id: "agent-binding-1",
+      agent_name: "Binding Policy Assistant",
+      agent_version_id: "version-binding-1",
+      knowledge_source_ids: expectedKnowledgeSourceIds,
+      input: { message: "Which policy source should be cited?" },
+      metadata: { source: "agent-studio-test-chat" },
+    });
+    await expect(page.getByText("The answer should cite the selected policy")).toBeVisible();
+    await expect(page.getByText("Policy library / section:binding")).toBeVisible();
+    await expect(page.getByText("runtime-binding-chat-1")).toBeVisible();
+  });
+
   test("agent test chat hydrates API catalog and submits a versioned run", async ({ page }) => {
     let runPayload: Record<string, unknown> | null = null;
 

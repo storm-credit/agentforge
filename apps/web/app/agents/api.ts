@@ -57,6 +57,14 @@ export type AgentDraftRequest = {
   knowledgeSourceIds: string[];
 };
 
+export type AgentKnowledgeSource = {
+  id: string;
+  name: string;
+  owner: string;
+  status: string;
+  confidentiality: string;
+};
+
 export type AgentLifecycleTarget = {
   agentId: string;
   agentName: string;
@@ -66,6 +74,7 @@ export type AgentLifecycleTarget = {
 };
 
 const agentEndpointRoots = buildEndpointRoots("agents");
+const knowledgeEndpointRoots = buildEndpointRoots("knowledge");
 const runEndpointRoots = buildEndpointRoots("runs");
 const requestTimeoutMs = 2500;
 const modelRoutingPolicyRef = "packages/shared-contracts/model-routing-policy.v0.1.json";
@@ -124,6 +133,22 @@ export async function fetchAgentCatalog(): Promise<AgentApiResult<AgentOption[]>
     ok: true,
     data: options,
     endpoint: versionResults.find(({ result }) => result.endpoint)?.result.endpoint ?? agentsResult.endpoint,
+  };
+}
+
+export async function fetchKnowledgeSources(): Promise<AgentApiResult<AgentKnowledgeSource[]>> {
+  const result = await requestAgentApi<unknown>(knowledgeEndpointRoots, ["sources"]);
+
+  if (!result.ok || !result.data) {
+    return withoutData(result);
+  }
+
+  return {
+    ok: true,
+    data: arrayPayload(result.data)
+      .map(mapKnowledgeSource)
+      .filter((item): item is AgentKnowledgeSource => item !== null),
+    endpoint: result.endpoint,
   };
 }
 
@@ -316,7 +341,7 @@ function normalizeRunPayload(payload: unknown): AgentRunResult | null {
   };
 }
 
-function buildEndpointRoots(resource: "agents" | "runs") {
+function buildEndpointRoots(resource: "agents" | "knowledge" | "runs") {
   const configuredBase = process.env.NEXT_PUBLIC_AGENT_FORGE_API_BASE_URL;
   const roots = [];
 
@@ -622,6 +647,48 @@ function mapCitation(payload: unknown): AgentRunCitation | null {
   };
 }
 
+function mapKnowledgeSource(payload: unknown): AgentKnowledgeSource | null {
+  const source = asRecord(payload);
+
+  if (!source) {
+    return null;
+  }
+
+  const id = stringField(source, "id");
+  const name = stringField(source, "name") ?? id;
+
+  if (!id || !name) {
+    return null;
+  }
+
+  return {
+    id,
+    name,
+    owner:
+      stringField(source, "owner_department") ??
+      stringField(source, "ownerDepartment") ??
+      stringField(source, "owner") ??
+      "Unassigned",
+    status: knowledgeSourceStatusLabel(stringField(source, "status") ?? "draft"),
+    confidentiality: titleCase(
+      stringField(source, "default_confidentiality_level") ??
+        stringField(source, "defaultConfidentialityLevel") ??
+        stringField(source, "confidentiality") ??
+        "internal",
+    ),
+  };
+}
+
+function knowledgeSourceStatusLabel(status: string) {
+  const normalizedStatus = status.toLowerCase();
+
+  if (normalizedStatus === "active" || normalizedStatus === "ready") {
+    return "Ready";
+  }
+
+  return titleCase(status);
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return null;
@@ -640,7 +707,7 @@ function arrayPayload(payload: unknown): unknown[] {
     return [];
   }
 
-  for (const key of ["items", "data", "agents", "versions"]) {
+  for (const key of ["items", "data", "agents", "versions", "sources"]) {
     const value = record[key];
     if (Array.isArray(value)) {
       return value;

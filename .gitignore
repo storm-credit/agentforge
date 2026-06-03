@@ -157,6 +157,12 @@ ENV/
 env.bak/
 venv.bak/
 
+# Tooling runtime / generated artifacts (not project source)
+# agentmemory backend local state store (runtime)
+data/
+# understand-anything knowledge graph cache (regenerate via /understand)
+.understand-anything/
+
 # Spyder project settings
 .spyderproject
 .spyproject

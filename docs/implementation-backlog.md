@@ -112,16 +112,17 @@ Scope:
 
 Sprint 1 progress:
 
-- AF-013 ACL filter model started in `apps/api/app/domain/acl.py`.
-- AF-014 retrieval preview API started at `POST /api/v1/knowledge/retrieval/preview`.
+- AF-013 ACL filter model completed in `apps/api/app/domain/acl.py`.
+- AF-014 retrieval preview API completed at `POST /api/v1/knowledge/retrieval/preview`.
 - Contract coverage was added for allowed vs blocked users and deny-by-default documents.
-- AF-010 index job skeleton started with `index_jobs` and `document_chunks` tables.
+- AF-010 index job skeleton completed with `index_jobs` and `document_chunks` tables, plus a reusable worker (`apps/api/app/domain/indexing.py`) and a queued-job processing trigger (`POST /api/v1/knowledge/index-jobs/{job_id}/process`) that records the full `queued -> running -> succeeded/failed` lifecycle and fails closed with `SOURCE_CONTENT_UNAVAILABLE` when no content is available (object-storage retrieval is Sprint 2 / AF-009).
 - AF-011 TXT/MD parser smoke started with deterministic chunk IDs, line locators, and heading paths.
 - `tools/smoke/indexing-smoke.ps1` verifies job creation, chunk metadata, chunk retrieval preview, and fail-closed no-ACL indexing.
 - AF-012 vector adapter interface started with a deterministic fake adapter and ACL-required search contract.
 - AF-015 runtime run API skeleton started with `runs`, `run_steps`, `retrieval_hits`, and `POST /api/v1/runs`.
 - Runtime contract coverage verifies published-version gating, ACL-filtered retrieval hits, step trace ordering, and citation trace storage.
 - AF-016 citation validator started with required-citation pass/fail contracts and runtime no-citation failure trace coverage.
+- API contract tests run on a Python 3.11 virtualenv; the full `apps/api` pytest suite passes with no skipped runtime-dependent tests.
 
 ### Sprint 2
 

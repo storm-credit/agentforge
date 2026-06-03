@@ -404,6 +404,104 @@ def test_index_job_rejects_unknown_document(client):
     assert response.json()["detail"] == "Document not found"
 
 
+def _create_indexable_document(client) -> dict:
+    source = client.post(
+        "/api/v1/knowledge/sources",
+        json={
+            "name": "Queued Worker Corpus",
+            "description": "Documents indexed through the queued worker stub.",
+            "owner_department": "Operations",
+        },
+    ).json()
+    return client.post(
+        "/api/v1/knowledge/documents",
+        json={
+            "knowledge_source_id": source["id"],
+            "title": "Async Remote Work Policy",
+            "object_uri": "object://synthetic/ops/async-remote-work.md",
+            "checksum": "sha256-async-remote-work",
+            "mime_type": "text/markdown",
+            "confidentiality_level": "internal",
+            "access_groups": ["all-employees"],
+            "effective_date": "2026-05-10",
+        },
+    ).json()
+
+
+def test_queued_index_job_is_processed_by_worker(client):
+    document = _create_indexable_document(client)
+
+    queued_response = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        json={"chunking": {"strategy": "line-heading", "chunk_size": 900, "chunk_overlap": 0}},
+    )
+    assert queued_response.status_code == 201
+    queued_job = queued_response.json()
+    assert queued_job["status"] == "queued"
+    assert queued_job["config"]["source"] == "object_store"
+
+    process_response = client.post(
+        f"/api/v1/knowledge/index-jobs/{queued_job['id']}/process",
+        json={
+            "source_text": (
+                "# Remote Work\n\n"
+                "Company-wide remote work rules.\n\n"
+                "## Eligibility\n\n"
+                "Employees may request remote work after manager approval."
+            )
+        },
+    )
+    assert process_response.status_code == 200
+    processed_job = process_response.json()
+    assert processed_job["id"] == queued_job["id"]
+    assert processed_job["status"] == "succeeded"
+    assert processed_job["stage"] == "upsert"
+    assert processed_job["chunk_count"] == 2
+
+    chunks = client.get(f"/api/v1/knowledge/documents/{document['id']}/chunks").json()
+    assert len(chunks) == 2
+
+
+def test_queued_index_job_without_content_fails_closed(client):
+    document = _create_indexable_document(client)
+
+    queued_job = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        json={},
+    ).json()
+    assert queued_job["status"] == "queued"
+
+    process_response = client.post(
+        f"/api/v1/knowledge/index-jobs/{queued_job['id']}/process",
+        json={},
+    )
+    assert process_response.status_code == 200
+    processed_job = process_response.json()
+    assert processed_job["status"] == "failed"
+    assert processed_job["error_code"] == "SOURCE_CONTENT_UNAVAILABLE"
+    assert processed_job["chunk_count"] == 0
+
+    chunks = client.get(f"/api/v1/knowledge/documents/{document['id']}/chunks").json()
+    assert chunks == []
+
+
+def test_process_rejects_non_queued_job(client):
+    document = _create_indexable_document(client)
+
+    job = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        json={"source_text": "# Title\n\nBody."},
+    ).json()
+    assert job["status"] == "succeeded"
+
+    response = client.post(
+        f"/api/v1/knowledge/index-jobs/{job['id']}/process",
+        json={"source_text": "# Title\n\nBody."},
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Index job is not queued"
+
+
 def test_document_registration_rejects_unknown_source(client):
     response = client.post(
         "/api/v1/knowledge/documents",

@@ -103,6 +103,13 @@
 - AF-015 Runtime run API skeleton
 - AF-018 Synthetic corpus v0.1
 
+### Sprint 1 진행 상황
+
+- AF-013 ACL filter model 완료 (`apps/api/app/domain/acl.py`). 허용/차단 principal 계약 테스트 통과.
+- AF-014 Retrieval preview API 완료 (`POST /api/v1/knowledge/retrieval/preview`). 권한 없는 문서는 결과에서 제외되고 `denied_count`로 기록.
+- AF-010 Index job skeleton 완료. 재사용 worker(`apps/api/app/domain/indexing.py`)와 queued 잡 처리 트리거(`POST /api/v1/knowledge/index-jobs/{job_id}/process`)로 `queued → running → succeeded/failed` 전체 상태 전이를 기록한다. 콘텐츠가 없으면 `SOURCE_CONTENT_UNAVAILABLE`로 fail-closed (객체 스토리지 본문 로딩은 Sprint 2 / AF-009 범위).
+- API 계약 테스트는 Python 3.11 가상환경에서 실행하며, `apps/api` pytest 전체가 skip 없이 통과한다.
+
 ## 7. Sprint 2 권장 범위
 
 목표: 실제 RAG 동작을 최소 수준으로 만들고, 권한 차단과 citation을 검증한다.

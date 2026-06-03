@@ -6,15 +6,15 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.database import get_db
 from app.core.principal import Principal, get_principal
-from app.domain.acl import document_can_be_indexed
+from app.domain.indexing import run_index_job
 from app.domain.models import Document, DocumentChunk, IndexJob, KnowledgeSource
-from app.domain.parsers import parse_txt_md_document
-from app.domain.vector import FakeVectorStore, VectorQuery, VectorUpsertInput, build_acl_filter
+from app.domain.vector import FakeVectorStore, VectorQuery, build_acl_filter
 from app.domain.schemas import (
     DocumentCreate,
     DocumentChunkRead,
     DocumentRead,
     IndexJobCreate,
+    IndexJobProcess,
     IndexJobRead,
     KnowledgeSourceCreate,
     KnowledgeSourceRead,
@@ -128,11 +128,68 @@ def create_index_job(
             },
         )
     else:
-        _run_synthetic_index_job(
+        run_index_job(
             db=db,
             document=document,
             job=job,
-            payload=payload,
+            source_text=payload.source_text,
+            principal=principal,
+        )
+
+    db.commit()
+    db.refresh(job)
+    return job
+
+
+@router.post("/index-jobs/{job_id}/process", response_model=IndexJobRead)
+def process_index_job(
+    job_id: str,
+    payload: IndexJobProcess,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> IndexJob:
+    """Worker stub: drive a queued index job through the pipeline.
+
+    Real deployments will fetch the document body from object storage (AF-009).
+    Until then a queued job is processed with the synthetic ``source_text`` provided
+    here; if no content is available the job fails closed.
+    """
+    job = db.get(IndexJob, job_id)
+    if job is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Index job not found")
+    if job.status != "queued":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Index job is not queued"
+        )
+
+    document = db.get(Document, job.document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    if payload.source_text is None:
+        job.started_at = datetime.now(UTC)
+        job.status = "failed"
+        job.stage = "parse"
+        job.error_code = "SOURCE_CONTENT_UNAVAILABLE"
+        job.error_message = (
+            "No document content is available to index. Object storage retrieval is not yet wired."
+        )
+        job.finished_at = datetime.now(UTC)
+        document.status = "index_failed"
+        write_audit_event(
+            db,
+            principal=principal,
+            event_type="document.index_failed",
+            target_type="document",
+            target_id=document.id,
+            payload={"index_job_id": job.id, "error_code": job.error_code},
+        )
+    else:
+        run_index_job(
+            db=db,
+            document=document,
+            job=job,
+            source_text=payload.source_text,
             principal=principal,
         )
 
@@ -220,124 +277,6 @@ def preview_retrieval(
         query=payload.query,
         hits=hits,
         denied_count=vector_result.denied_count,
-    )
-
-
-def _run_synthetic_index_job(
-    *,
-    db: Session,
-    document: Document,
-    job: IndexJob,
-    payload: IndexJobCreate,
-    principal: Principal,
-) -> None:
-    job.started_at = datetime.now(UTC)
-    job.status = "running"
-    job.stage = "parse"
-
-    if not document_can_be_indexed(document):
-        job.status = "failed"
-        job.error_code = "DOCUMENT_NOT_INDEXABLE"
-        job.error_message = (
-            "Document is missing ACL metadata, is not searchable, or is excluded by confidentiality."
-        )
-        job.finished_at = datetime.now(UTC)
-        document.status = "index_failed"
-        write_audit_event(
-            db,
-            principal=principal,
-            event_type="document.index_failed",
-            target_type="document",
-            target_id=document.id,
-            payload={"index_job_id": job.id, "error_code": job.error_code},
-        )
-        return
-
-    try:
-        parsed_chunks = parse_txt_md_document(
-            document_id=document.id,
-            document_version=document.effective_date or "v0",
-            title=document.title,
-            mime_type=document.mime_type,
-            source_text=payload.source_text or "",
-            chunk_size=int(payload.chunking.get("chunk_size", 900)),
-        )
-    except ValueError as exc:
-        job.status = "failed"
-        job.error_code = "UNSUPPORTED_MIME_TYPE"
-        job.error_message = str(exc)
-        job.finished_at = datetime.now(UTC)
-        document.status = "index_failed"
-        write_audit_event(
-            db,
-            principal=principal,
-            event_type="document.index_failed",
-            target_type="document",
-            target_id=document.id,
-            payload={"index_job_id": job.id, "error_code": job.error_code},
-        )
-        return
-
-    if payload.force_reindex:
-        for chunk in list(document.chunks):
-            db.delete(chunk)
-        db.flush()
-
-    acl_snapshot = {
-        "confidentiality_level": document.confidentiality_level,
-        "access_groups": document.access_groups,
-        "knowledge_source_id": document.knowledge_source_id,
-    }
-    upsert_results = FakeVectorStore().upsert_chunks(
-        tuple(
-            VectorUpsertInput(
-                chunk_id=parsed_chunk.chunk_id,
-                document_id=document.id,
-                content_hash=parsed_chunk.content_hash,
-                embedding_model=payload.embedding_model,
-            )
-            for parsed_chunk in parsed_chunks
-        )
-    )
-    vector_refs = {result.chunk_id: result.vector_ref for result in upsert_results}
-
-    job.stage = "chunk"
-    for parsed_chunk in parsed_chunks:
-        db.add(
-            DocumentChunk(
-                id=parsed_chunk.chunk_id,
-                document_id=document.id,
-                chunk_index=parsed_chunk.chunk_index,
-                content=parsed_chunk.content,
-                content_hash=parsed_chunk.content_hash,
-                chunk_hash=parsed_chunk.chunk_hash,
-                token_count=parsed_chunk.token_count,
-                line_start=parsed_chunk.line_start,
-                line_end=parsed_chunk.line_end,
-                section_path=list(parsed_chunk.section_path),
-                citation_locator=parsed_chunk.citation_locator,
-                parser_version=parsed_chunk.parser_version,
-                chunker_version=parsed_chunk.chunker_version,
-                embedding_model=payload.embedding_model,
-                vector_ref=vector_refs[parsed_chunk.chunk_id],
-                acl_snapshot=acl_snapshot,
-                status="indexed",
-            )
-        )
-
-    job.status = "succeeded"
-    job.stage = "upsert"
-    job.chunk_count = len(parsed_chunks)
-    job.artifact_uri = f"db://document_chunks/{document.id}"
-    job.finished_at = datetime.now(UTC)
-    document.status = "indexed"
-    write_audit_event(
-        db,
-        principal=principal,
-        event_type="document.indexed",
-        target_type="document",
-        target_id=document.id,
-        payload={"index_job_id": job.id, "chunk_count": job.chunk_count},
     )
 
 

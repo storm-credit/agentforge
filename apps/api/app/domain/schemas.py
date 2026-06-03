@@ -121,6 +121,13 @@ class IndexJobCreate(BaseModel):
     )
 
 
+class IndexJobProcess(BaseModel):
+    source_text: str | None = Field(
+        default=None,
+        description="Synthetic TXT/MD smoke content for a queued job. Real uploads will read from object storage.",
+    )
+
+
 class IndexJobRead(BaseModel):
     id: str
     document_id: str

@@ -194,3 +194,21 @@ def _lexical_score(query: str, *values: str) -> float:
         return 0.0
     overlap = len(query_terms.intersection(haystack_terms))
     return round(overlap / len(query_terms), 4)
+
+
+def get_vector_store() -> "VectorStore":
+    from app.core.config import get_settings
+
+    s = get_settings()
+    if s.vector_backend == "qdrant" and s.embedding_base_url:
+        from qdrant_client import QdrantClient
+
+        from app.infra.qdrant_store import QdrantVectorStore
+        from app.services.embedding_gateway import get_embedding_gateway
+
+        gateway = get_embedding_gateway()
+        client = QdrantClient(url=s.qdrant_url)
+        return QdrantVectorStore(
+            client=client, embed=gateway.embed, dim=s.embedding_dim, collection="chunks_active"
+        )
+    return FakeVectorStore()

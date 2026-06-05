@@ -13,6 +13,12 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_model: str = "qwen3:8b"
     llm_timeout_seconds: float = 30.0
+    embedding_base_url: str | None = None
+    embedding_model: str = "bge-m3"
+    embedding_dim: int = 1024
+    embedding_timeout_seconds: float = 30.0
+    qdrant_url: str = "http://localhost:6333"
+    vector_backend: str = "fake"  # "fake" | "qdrant"
 
     model_config = SettingsConfigDict(
         env_file=".env",

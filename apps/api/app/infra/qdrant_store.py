@@ -4,10 +4,7 @@ import logging
 
 from qdrant_client import models as qm
 
-from app.domain.acl import (
-    EXCLUDED_INDEX_CONFIDENTIALITY_LEVELS,
-    confidentiality_rank,
-)
+from app.domain.acl import confidentiality_rank
 from app.domain.vector import AclFilter
 
 logger = logging.getLogger(__name__)

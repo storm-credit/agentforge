@@ -10,17 +10,23 @@ from sqlalchemy.orm import Session, selectinload
 from app.core.database import get_db
 from app.core.principal import Principal, get_principal
 from app.domain.citations import CitationValidationResult, validate_run_citations
-from app.domain.models import Agent, AgentVersion, Document, RetrievalHit, Run, RunStep
+from app.domain.models import Agent, AgentVersion, Document, DocumentChunk, RetrievalHit, Run, RunStep
 from app.domain.schemas import (
     RetrievalHitRead,
     RunCreate,
     RunRead,
     RunStepRead,
 )
+from app.domain.language import resolve_language
 from app.domain.vector import FakeVectorStore, VectorQuery, VectorSearchResult, build_acl_filter
 from app.infra.audit import write_audit_event
+from app.services.llm_gateway import ContextBlock, get_gateway
 
 router = APIRouter()
+
+
+def _hit_locator(hit) -> str | None:
+    return hit.citation_locator or hit.citation
 
 
 @router.get("", response_model=list[RunRead])
@@ -98,7 +104,7 @@ def create_run(
 
     citations = []
     for rank, hit in enumerate(vector_result.hits, start=1):
-        citation_locator = hit.citation_locator or hit.citation
+        citation_locator = _hit_locator(hit)
         usable_as_citation = bool(hit.chunk_id and citation_locator)
         db.add(
             RetrievalHit(
@@ -132,7 +138,12 @@ def create_run(
                 }
             )
 
-    run.answer = _build_synthetic_answer(len(citations))
+    answer_language = resolve_language(payload.language, payload.input.message)
+    context_blocks = _load_context_blocks(db, vector_result.hits)
+    generated = get_gateway().generate(
+        question=payload.input.message, context=context_blocks, language=answer_language
+    )
+    run.answer = generated.text
     run.citations = citations
     run.retrieval_denied_count = vector_result.denied_count
     citation_required = bool(agent_version.config.get("citation_required", True))
@@ -156,11 +167,12 @@ def create_run(
         run=run,
         order=3,
         step_type="generator",
-        input_summary={"context_count": len(citations)},
+        input_summary={"context_count": len(context_blocks)},
         output_summary={
             "answer_length": len(run.answer),
             "citation_count": len(citations),
-            "mode": "synthetic",
+            "mode": "llm" if generated.used_llm else ("fallback" if generated.fallback_used else "refused"),
+            "language": answer_language,
         },
     )
     _add_step(
@@ -367,8 +379,16 @@ def _citation_validation_summary(result: CitationValidationResult) -> dict:
     }
 
 
-def _build_synthetic_answer(citation_count: int) -> str:
-    if citation_count == 0:
-        return "No authorized context was available for this runtime run."
-
-    return f"Synthetic runtime response based on {citation_count} authorized citation(s)."
+def _load_context_blocks(db: Session, hits) -> tuple[ContextBlock, ...]:
+    chunk_ids = [hit.chunk_id for hit in hits if hit.chunk_id]
+    contents: dict[str, str] = {}
+    if chunk_ids:
+        rows = db.scalars(select(DocumentChunk).where(DocumentChunk.id.in_(chunk_ids)))
+        contents = {row.id: row.content for row in rows}
+    blocks = []
+    for hit in hits:
+        text = contents.get(hit.chunk_id or "", "")
+        if not text:
+            continue
+        blocks.append(ContextBlock(title=hit.title, locator=_hit_locator(hit), content=text))
+    return tuple(blocks)

@@ -25,6 +25,10 @@ from app.services.llm_gateway import ContextBlock, get_gateway
 router = APIRouter()
 
 
+def _hit_locator(hit) -> str | None:
+    return hit.citation_locator or hit.citation
+
+
 @router.get("", response_model=list[RunRead])
 def list_runs(db: Session = Depends(get_db)) -> list[Run]:
     return list(db.scalars(select(Run).order_by(Run.created_at.desc())))
@@ -100,7 +104,7 @@ def create_run(
 
     citations = []
     for rank, hit in enumerate(vector_result.hits, start=1):
-        citation_locator = hit.citation_locator or hit.citation
+        citation_locator = _hit_locator(hit)
         usable_as_citation = bool(hit.chunk_id and citation_locator)
         db.add(
             RetrievalHit(
@@ -163,7 +167,7 @@ def create_run(
         run=run,
         order=3,
         step_type="generator",
-        input_summary={"context_count": len(citations)},
+        input_summary={"context_count": len(context_blocks)},
         output_summary={
             "answer_length": len(run.answer),
             "citation_count": len(citations),
@@ -386,5 +390,5 @@ def _load_context_blocks(db: Session, hits) -> tuple[ContextBlock, ...]:
         text = contents.get(hit.chunk_id or "", "")
         if not text:
             continue
-        blocks.append(ContextBlock(title=hit.title, locator=hit.citation_locator or hit.citation, content=text))
+        blocks.append(ContextBlock(title=hit.title, locator=_hit_locator(hit), content=text))
     return tuple(blocks)

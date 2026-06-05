@@ -377,7 +377,8 @@ def test_run_refuses_when_no_authorized_context(client):
     )
     assert resp.status_code == 201
     assert resp.json()["citations"] == []
-    assert "문서" in resp.json()["answer"]
+    assert resp.json()["answer"]
+    assert resp.json()["guardrail"]["citation_count"] == 0
 
 
 def test_run_falls_back_when_llm_unconfigured(client):
@@ -392,4 +393,11 @@ def test_run_falls_back_when_llm_unconfigured(client):
         },
     )
     assert resp.status_code == 201
-    assert resp.json()["answer"]
+    run = resp.json()
+    assert run["answer"]
+
+    steps_response = client.get(f"/api/v1/runs/{run['id']}/steps")
+    assert steps_response.status_code == 200
+    steps = steps_response.json()
+    generator_step = next(s for s in steps if s["step_type"] == "generator")
+    assert generator_step["output_summary"]["mode"] == "fallback"

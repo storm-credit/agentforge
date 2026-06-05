@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 
@@ -7,8 +8,11 @@ import httpx
 
 from app.core.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 _THINK = re.compile(r"<think>.*?</think>", re.DOTALL)
 _LANG_NAME = {"ko": "한국어", "en": "English"}
+_TEMPERATURE = 0.2
 
 
 @dataclass(frozen=True)
@@ -57,6 +61,11 @@ def _fallback(context: tuple[ContextBlock, ...], language: str) -> str:
 
 
 class LLMGateway:
+    """Gateway to an OpenAI-compatible chat endpoint.
+
+    base_url must include the OpenAI version prefix, e.g. ``http://host:11434/v1``.
+    """
+
     def __init__(self, base_url: str | None, model: str, timeout_seconds: float) -> None:
         self.base_url = base_url.rstrip("/") if base_url else None
         self.model = model
@@ -86,15 +95,15 @@ class LLMGateway:
                     f"{self.base_url}/chat/completions",
                     json={
                         "model": self.model,
-                        "temperature": 0.2,
+                        "temperature": _TEMPERATURE,
                         "messages": build_messages(question=question, context=context, language=language),
                     },
                 )
-                if r.status_code >= 400:
-                    r.raise_for_status()
+                r.raise_for_status()
                 content = r.json()["choices"][0]["message"]["content"]
                 return GeneratedAnswer(text=_THINK.sub("", content).strip(), used_llm=True, fallback_used=False)
-        except Exception:
+        except Exception as exc:
+            logger.warning("LLM call failed, using fallback: %s", exc)
             return GeneratedAnswer(text=_fallback(context, language), used_llm=False, fallback_used=True)
 
 

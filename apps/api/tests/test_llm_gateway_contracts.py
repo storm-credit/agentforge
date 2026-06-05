@@ -1,6 +1,6 @@
 import httpx
 
-from app.services.llm_gateway import ContextBlock, LLMGateway, build_messages
+from app.services.llm_gateway import ContextBlock, LLMGateway, _refusal, build_messages
 
 CTX = (ContextBlock(title="Holiday Policy", locator="Holiday Policy / lines 1-3", content="Five days paid leave per year."),)
 
@@ -17,7 +17,7 @@ def test_empty_context_refuses_without_calling_llm():
     gw = LLMGateway(base_url="http://x/v1", model="m", timeout_seconds=5)
     result = gw.generate(question="무엇?", context=(), language="ko")
     assert result.used_llm is False
-    assert "근거" in result.text or "no" in result.text.lower() or "못" in result.text
+    assert result.text == _refusal("ko")
 
 
 def test_generate_calls_openai_endpoint(monkeypatch):
@@ -26,7 +26,11 @@ def test_generate_calls_openai_endpoint(monkeypatch):
     def fake_post(self, url, json, **kwargs):
         captured["url"] = url
         captured["json"] = json
-        return httpx.Response(200, json={"choices": [{"message": {"content": "<think>x</think>5 days."}}]})
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "<think>x</think>5 days."}}]},
+            request=httpx.Request("POST", url),
+        )
 
     monkeypatch.setattr(httpx.Client, "post", fake_post)
     gw = LLMGateway(base_url="http://x/v1", model="qwen3:8b", timeout_seconds=5)
@@ -52,3 +56,8 @@ def test_build_messages_sets_language_and_context():
     assert msgs[0]["role"] == "system"
     assert "한국어" in msgs[0]["content"]
     assert "Holiday Policy / lines 1-3" in msgs[1]["content"]
+
+
+def test_health_not_configured():
+    result = LLMGateway(base_url=None, model="m", timeout_seconds=5).health()
+    assert result["configured"] is False

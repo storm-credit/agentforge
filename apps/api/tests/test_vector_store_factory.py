@@ -12,13 +12,16 @@ def _clear_settings_cache():
 
 
 def test_default_backend_is_fake(monkeypatch):
-    monkeypatch.delenv("AGENT_FORGE_VECTOR_BACKEND", raising=False)
+    # setenv (not delenv): OS env overrides the .env file, so the test is
+    # hermetic whether or not a live .env is present.
+    monkeypatch.setenv("AGENT_FORGE_VECTOR_BACKEND", "fake")
     assert isinstance(get_vector_store(), FakeVectorStore)
 
 
 def test_qdrant_backend_without_embedding_url_falls_back_to_fake(monkeypatch):
     monkeypatch.setenv("AGENT_FORGE_VECTOR_BACKEND", "qdrant")
-    monkeypatch.delenv("AGENT_FORGE_EMBEDDING_BASE_URL", raising=False)
+    # empty string overrides any .env value and is falsy -> factory returns Fake
+    monkeypatch.setenv("AGENT_FORGE_EMBEDDING_BASE_URL", "")
     assert isinstance(get_vector_store(), FakeVectorStore)
 
 

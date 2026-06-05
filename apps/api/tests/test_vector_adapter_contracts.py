@@ -154,3 +154,18 @@ def test_fake_vector_search_respects_knowledge_source_scope_and_delete():
     )
 
     assert deleted.hits == ()
+
+
+def test_upsert_input_new_fields_are_optional():
+    from app.domain.vector import VectorUpsertInput
+
+    minimal = VectorUpsertInput(
+        chunk_id="d:chunk-001",
+        document_id="d",
+        content_hash="sha256-d",
+        embedding_model="none-smoke",
+    )
+    assert minimal.content == ""
+    assert minimal.access_groups == ()
+    assert minimal.confidentiality_rank == 1
+    assert minimal.knowledge_source_id == ""

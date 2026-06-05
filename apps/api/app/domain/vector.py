@@ -33,6 +33,13 @@ class VectorUpsertInput:
     document_id: str
     content_hash: str
     embedding_model: str
+    content: str = ""
+    title: str = ""
+    section_path: tuple[str, ...] = ()
+    citation_locator: str = ""
+    access_groups: tuple[str, ...] = ()
+    confidentiality_rank: int = 1
+    knowledge_source_id: str = ""
 
 
 @dataclass(frozen=True)

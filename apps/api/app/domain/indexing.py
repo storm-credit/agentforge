@@ -11,10 +11,10 @@ from datetime import UTC, datetime
 from sqlalchemy.orm import Session
 
 from app.core.principal import Principal
-from app.domain.acl import document_can_be_indexed
+from app.domain.acl import confidentiality_rank, document_can_be_indexed
 from app.domain.models import Document, DocumentChunk, IndexJob
 from app.domain.parsers import parse_txt_md_document
-from app.domain.vector import FakeVectorStore, VectorUpsertInput
+from app.domain.vector import VectorUpsertInput, get_vector_store
 from app.infra.audit import write_audit_event
 
 
@@ -94,17 +94,38 @@ def run_index_job(
         "access_groups": document.access_groups,
         "knowledge_source_id": document.knowledge_source_id,
     }
-    upsert_results = FakeVectorStore().upsert_chunks(
-        tuple(
-            VectorUpsertInput(
-                chunk_id=parsed_chunk.chunk_id,
-                document_id=document.id,
-                content_hash=parsed_chunk.content_hash,
-                embedding_model=embedding_model,
+    try:
+        confidentiality_rank_value = confidentiality_rank(document.confidentiality_level)
+        upsert_results = get_vector_store().upsert_chunks(
+            tuple(
+                VectorUpsertInput(
+                    chunk_id=parsed_chunk.chunk_id,
+                    document_id=document.id,
+                    content_hash=parsed_chunk.content_hash,
+                    embedding_model=embedding_model,
+                    content=parsed_chunk.content,
+                    title=document.title,
+                    section_path=tuple(parsed_chunk.section_path),
+                    citation_locator=parsed_chunk.citation_locator,
+                    access_groups=tuple(document.access_groups),
+                    confidentiality_rank=confidentiality_rank_value,
+                    knowledge_source_id=document.knowledge_source_id,
+                )
+                for parsed_chunk in parsed_chunks
             )
-            for parsed_chunk in parsed_chunks
         )
-    )
+    except Exception as exc:  # noqa: BLE001 - fail the job, never store half-indexed chunks
+        job.status = "failed"
+        job.error_code = "VECTOR_UPSERT_FAILED"
+        job.error_message = str(exc)
+        job.finished_at = datetime.now(UTC)
+        document.status = "index_failed"
+        write_audit_event(
+            db, principal=principal, event_type="document.index_failed",
+            target_type="document", target_id=document.id,
+            payload={"index_job_id": job.id, "error_code": job.error_code},
+        )
+        return
     vector_refs = {result.chunk_id: result.vector_ref for result in upsert_results}
 
     job.stage = "chunk"

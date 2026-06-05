@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -206,6 +206,7 @@ class RunCreate(BaseModel):
     debug: bool = False
     knowledge_source_ids: list[str] = Field(default_factory=list)
     top_k: int = Field(default=5, ge=1, le=20)
+    language: Literal["auto", "ko", "en"] = "auto"
 
 
 class RunCitationRead(BaseModel):

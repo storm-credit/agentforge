@@ -110,7 +110,7 @@ def test_runtime_run_records_steps_hits_and_acl_trace(client):
     assert run["guardrail"]["citation_count"] == 1
     assert run["citations"][0]["document_id"] == public_document["id"]
     assert run["citations"][0]["chunk_id"]
-    assert run["answer"] == "Synthetic runtime response based on 1 authorized citation(s)."
+    assert run["answer"]  # fallback or LLM answer — non-empty
 
     detail_response = client.get(f"/api/v1/runs/{run['id']}")
 
@@ -212,7 +212,7 @@ def test_runtime_run_fails_citation_validation_without_authorized_context(client
     assert run["guardrail"]["citation_validation_pass"] is False
     assert run["guardrail"]["citation_validation_error_code"] == "NO_CITATION"
     assert run["guardrail"]["security_finalcheck_pass"] is False
-    assert run["answer"] == "No authorized context was available for this runtime run."
+    assert run["answer"]  # refusal answer — non-empty
 
     steps_response = client.get(f"/api/v1/runs/{run['id']}/steps")
 
@@ -316,3 +316,80 @@ def _create_and_publish_version(client, *, agent_id: str, source_id: str) -> dic
     )
     assert publish_response.status_code == 200
     return publish_response.json()
+
+
+def _seed_agent_with_indexed_doc(client):
+    """Seed a source, agent, published version, and an indexed document. Returns ids dict."""
+    source = _create_source(client)
+    agent = _create_agent(client)
+    version = _create_and_publish_version(client, agent_id=agent["id"], source_id=source["id"])  # noqa: F841
+    doc = _register_document(
+        client,
+        source_id=source["id"],
+        title="Holiday Policy",
+        object_uri="object://holiday.md",
+        checksum="sha256-holiday",
+        access_groups=["all-employees"],
+    )
+    _index_document(
+        client,
+        document_id=doc["id"],
+        source_text="# 휴가\n\n연 5일 유급 휴가가 제공됩니다.",
+    )
+    return {"agent_id": agent["id"], "source_id": source["id"]}
+
+
+def test_run_uses_llm_answer_when_gateway_returns(client, monkeypatch):
+    from app.services import llm_gateway
+
+    def fake_generate(self, *, question, context, language):
+        assert len(context) >= 1
+        return llm_gateway.GeneratedAnswer(text=f"[{language}] answer", used_llm=True, fallback_used=False)
+
+    monkeypatch.setattr(llm_gateway.LLMGateway, "generate", fake_generate)
+    ids = _seed_agent_with_indexed_doc(client)
+    resp = client.post(
+        "/api/v1/runs",
+        json={
+            "agent_id": ids["agent_id"],
+            "input": {"message": "휴가 며칠?"},
+            "knowledge_source_ids": [ids["source_id"]],
+            "language": "auto",
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["answer"] == "[ko] answer"
+    assert len(body["citations"]) >= 1
+
+
+def test_run_refuses_when_no_authorized_context(client):
+    ids = _seed_agent_with_indexed_doc(client)
+    resp = client.post(
+        "/api/v1/runs",
+        headers={"X-Agent-Forge-Groups": "nobody", "X-Agent-Forge-Clearance": "public"},
+        json={
+            "agent_id": ids["agent_id"],
+            "input": {"message": "휴가 며칠?"},
+            "knowledge_source_ids": [ids["source_id"]],
+            "language": "ko",
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["citations"] == []
+    assert "문서" in resp.json()["answer"]
+
+
+def test_run_falls_back_when_llm_unconfigured(client):
+    ids = _seed_agent_with_indexed_doc(client)
+    resp = client.post(
+        "/api/v1/runs",
+        json={
+            "agent_id": ids["agent_id"],
+            "input": {"message": "leave days?"},
+            "knowledge_source_ids": [ids["source_id"]],
+            "language": "en",
+        },
+    )
+    assert resp.status_code == 201
+    assert resp.json()["answer"]

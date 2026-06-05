@@ -236,6 +236,10 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Unignore Next.js app/lib source (the root lib/ rule above is Python-only)
+!apps/web/app/lib/
+!apps/web/app/lib/**
+
 # Local compose volumes and generated artifacts
 *.local
 

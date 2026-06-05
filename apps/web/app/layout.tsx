@@ -11,6 +11,7 @@ const navItems = [
   { href: "/", label: "Overview" },
   { href: "/agents", label: "Agents" },
   { href: "/knowledge", label: "Knowledge" },
+  { href: "/chat", label: "Chat" },
   { href: "/eval", label: "Eval" },
   { href: "/audit", label: "Audit" },
   { href: "/admin/settings", label: "Settings" },

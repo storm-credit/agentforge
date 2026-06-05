@@ -401,3 +401,54 @@ def test_run_falls_back_when_llm_unconfigured(client):
     steps = steps_response.json()
     generator_step = next(s for s in steps if s["step_type"] == "generator")
     assert generator_step["output_summary"]["mode"] == "fallback"
+
+
+def test_run_falls_back_to_fake_when_vector_store_errors(client, monkeypatch):
+    import app.api.v1.runs as runs_module
+
+    # Set up source + indexed document + published agent (real factory, so indexing works normally)
+    source = _create_source(client)
+    doc = _register_document(
+        client,
+        source_id=source["id"],
+        title="Remote Work Policy",
+        object_uri="object://synthetic/ops/remote-work-fallback.md",
+        checksum="sha256-remote-work-fallback",
+        access_groups=["all-employees"],
+        confidentiality_level="internal",
+    )
+    _index_document(
+        client,
+        document_id=doc["id"],
+        source_text="# Remote Work\n\nEmployees may request remote work after manager approval.",
+    )
+    agent = _create_agent(client)
+    version = _create_and_publish_version(client, agent_id=agent["id"], source_id=source["id"])
+
+    # Patch the factory AFTER indexing, so only the run's search call gets the broken store
+    class _Boom:
+        def search(self, **kwargs):
+            raise RuntimeError("qdrant down")
+
+    monkeypatch.setattr(runs_module, "get_vector_store", lambda: _Boom())
+
+    resp = client.post(
+        "/api/v1/runs",
+        headers={
+            "X-Agent-Forge-User": "ops-user",
+            "X-Agent-Forge-Department": "Operations",
+            "X-Agent-Forge-Clearance": "internal",
+        },
+        json={
+            "agent_id": agent["id"],
+            "agent_version_id": version["id"],
+            "input": {"message": "remote work policy"},
+        },
+    )
+    assert resp.status_code == 201
+    run = resp.json()
+
+    steps = client.get(f"/api/v1/runs/{run['id']}/steps").json()
+    retriever = next(s for s in steps if s["step_type"] == "retriever")
+    assert retriever["output_summary"]["vector_adapter"] == "fake_fallback"
+    assert retriever["output_summary"]["degraded"] is True

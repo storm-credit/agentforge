@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from time import perf_counter
 
@@ -18,9 +19,11 @@ from app.domain.schemas import (
     RunStepRead,
 )
 from app.domain.language import resolve_language
-from app.domain.vector import FakeVectorStore, VectorQuery, VectorSearchResult, build_acl_filter
+from app.domain.vector import FakeVectorStore, VectorQuery, VectorSearchResult, build_acl_filter, get_vector_store
 from app.infra.audit import write_audit_event
 from app.services.llm_gateway import ContextBlock, get_gateway
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -78,7 +81,7 @@ def create_run(
         started_at=started_at,
     )
 
-    vector_result = _search_authorized_context(
+    vector_result, vector_adapter, vector_degraded = _search_authorized_context(
         db=db,
         query_text=payload.input.message,
         knowledge_source_ids=knowledge_source_ids,
@@ -98,7 +101,8 @@ def create_run(
         output_summary={
             "hit_count": len(vector_result.hits),
             "denied_count": vector_result.denied_count,
-            "vector_adapter": "fake",
+            "vector_adapter": vector_adapter,
+            "degraded": vector_degraded,
         },
     )
 
@@ -123,7 +127,7 @@ def create_run(
                     "subjects": list(acl_filter.subjects),
                     "clearance_level": acl_filter.clearance_level,
                     "knowledge_source_ids": knowledge_source_ids,
-                    "vector_adapter": "fake",
+                    "vector_adapter": vector_adapter,
                 },
             )
         )
@@ -317,7 +321,7 @@ def _search_authorized_context(
     knowledge_source_ids: list[str],
     top_k: int,
     acl_filter,
-) -> VectorSearchResult:
+) -> tuple[VectorSearchResult, str, bool]:
     documents = list(
         db.scalars(
             select(Document)
@@ -325,15 +329,20 @@ def _search_authorized_context(
             .order_by(Document.created_at.desc())
         )
     )
-    return FakeVectorStore().search(
-        query=VectorQuery(
-            query_text=query_text,
-            knowledge_source_ids=tuple(knowledge_source_ids),
-            top_k=top_k,
-        ),
-        documents=documents,
-        acl_filter=acl_filter,
+    query = VectorQuery(
+        query_text=query_text,
+        knowledge_source_ids=tuple(knowledge_source_ids),
+        top_k=top_k,
     )
+    store = get_vector_store()
+    label = "fake" if isinstance(store, FakeVectorStore) else "qdrant"
+    try:
+        result = store.search(query=query, documents=documents, acl_filter=acl_filter)
+        return result, label, False
+    except Exception as exc:  # noqa: BLE001 - stay answerable, ACL-safe, but mark degraded
+        logger.warning("vector search failed (%s); falling back to FakeVectorStore", exc)
+        result = FakeVectorStore().search(query=query, documents=documents, acl_filter=acl_filter)
+        return result, "fake_fallback", True
 
 
 def _add_step(

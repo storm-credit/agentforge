@@ -36,3 +36,6 @@ def test_payload_allows_matches_acl_semantics():
     assert payload_allows({**ok, "confidentiality_rank": 2}, acl) is False
     # not indexed -> deny
     assert payload_allows({**ok, "status": "registered"}, acl) is False
+    # confidential (rank 3) excluded even for a confidential-clearance principal
+    conf_acl = build_acl_filter(_principal(clearance="confidential"))
+    assert payload_allows({**ok, "confidentiality_rank": 3}, conf_acl) is False

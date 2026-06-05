@@ -87,6 +87,20 @@ def test_qdrant_search_excludes_unauthorized_groups():
     assert "hr" not in ids
 
 
+def test_qdrant_group_filter_excludes_even_when_clearance_allows():
+    # rank 1 (internal) doc the principal COULD read by clearance, but the group
+    # does not intersect -> must be excluded by the in-query group filter alone.
+    store = _store()
+    _upsert(store, chunk_id="hr2:1", document_id="hr2", content="finance policy",
+            groups=("department:HR",), rank=1, title="HRInternal")
+    result = store.search(
+        query=VectorQuery(query_text="finance policy", top_k=10),
+        documents=[],
+        acl_filter=build_acl_filter(_principal()),
+    )
+    assert result.hits == ()
+
+
 def test_qdrant_empty_groups_denied_by_default():
     store = _store()
     _upsert(store, chunk_id="draft:1", document_id="draft", content="policy", groups=())

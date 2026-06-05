@@ -1,27 +1,34 @@
-const stages = [
-  "Draft agent metadata",
-  "Create versioned runtime config",
-  "Run policy and evaluation gates",
-  "Publish approved versions",
-];
+"use client";
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { listAgents, type AgentSummary } from "../lib/api";
 
 export default function AgentsPage() {
+  const [agents, setAgents] = useState<AgentSummary[]>([]);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    listAgents().then(setAgents).catch((e) => setError(String(e)));
+  }, []);
+
   return (
     <section className="page">
       <div>
         <p className="eyebrow">Builder</p>
         <h1>Agents</h1>
-        <p>Define agent purpose, ownership, versioned configuration, and release status.</p>
+        <p>에이전트를 만들고 게시한 뒤 바로 테스트하세요.</p>
       </div>
-      <div className="cardGrid">
-        {stages.map((stage, index) => (
-          <article className="card" key={stage}>
-            <h3>{index + 1}. {stage}</h3>
-            <p>Backed by the Sprint 0 agent and agent version metadata tables.</p>
+      <Link className="button" href="/agents/new">새 에이전트 만들기</Link>
+      {error && <p style={{ color: "#b91c1c" }}>{error}</p>}
+      <div className="cardGrid" style={{ marginTop: "16px" }}>
+        {agents.map((a) => (
+          <article className="card" key={a.id}>
+            <h3>{a.name}</h3>
+            <p>{a.purpose}</p>
+            <p><span className="badge">{a.status}</span> · {a.owner_department}</p>
           </article>
         ))}
       </div>
     </section>
   );
 }
-

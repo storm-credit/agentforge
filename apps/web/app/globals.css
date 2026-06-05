@@ -223,6 +223,9 @@ p {
   color: var(--warn);
 }
 
+.field { display:block; width:100%; padding:8px 10px; margin-bottom:8px;
+  border:1px solid var(--line, #cbd5e1); border-radius:6px; font-size:14px; }
+
 @media (max-width: 860px) {
   body {
     grid-template-columns: 1fr;

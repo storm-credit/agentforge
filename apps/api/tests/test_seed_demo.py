@@ -49,3 +49,16 @@ def test_seed_creates_published_agent_and_indexed_chunks(db_session):
     assert result["agent_version_id"]
     assert result["source_id"]
     assert result["chunk_count"] >= 1
+
+
+def test_seed_demo_rich_creates_sources_docs_and_published_agent(db_session):
+    from app.domain.models import Document
+    from app.seed_demo_rich import seed_demo_rich
+
+    result = seed_demo_rich(db_session)
+    assert result["agent_id"]
+    assert len(result["knowledge_source_ids"]) == 2
+    assert result["document_count"] == 4
+    # all four demo documents were indexed (status set by run_index_job)
+    indexed = db_session.query(Document).filter(Document.status == "indexed").count()
+    assert indexed == 4

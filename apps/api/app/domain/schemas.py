@@ -269,6 +269,7 @@ class RetrievalHitRead(BaseModel):
     used_in_context: bool
     used_as_citation: bool
     acl_filter_snapshot: dict[str, Any]
+    content: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

@@ -452,3 +452,47 @@ def test_run_falls_back_to_fake_when_vector_store_errors(client, monkeypatch):
     retriever = next(s for s in steps if s["step_type"] == "retriever")
     assert retriever["output_summary"]["vector_adapter"] == "fake_fallback"
     assert retriever["output_summary"]["degraded"] is True
+
+
+def test_retrieval_hits_include_chunk_content(client):
+    source = _create_source(client)
+    doc = _register_document(
+        client,
+        source_id=source["id"],
+        title="Remote Work Policy",
+        object_uri="object://synthetic/ops/remote-work-content.md",
+        checksum="sha256-remote-work-content",
+        access_groups=["all-employees"],
+        confidentiality_level="internal",
+    )
+    _index_document(
+        client,
+        document_id=doc["id"],
+        source_text="remote work is allowed two days per week",
+    )
+    agent = _create_agent(client)
+    version = _create_and_publish_version(client, agent_id=agent["id"], source_id=source["id"])
+
+    run_response = client.post(
+        "/api/v1/runs",
+        headers={
+            "X-Agent-Forge-User": "ops-user",
+            "X-Agent-Forge-Department": "Operations",
+            "X-Agent-Forge-Clearance": "internal",
+        },
+        json={
+            "agent_id": agent["id"],
+            "agent_version_id": version["id"],
+            "input": {"message": "remote work policy"},
+        },
+    )
+    assert run_response.status_code == 201
+    run = run_response.json()
+
+    hits_response = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits")
+    assert hits_response.status_code == 200
+    hits = hits_response.json()
+
+    assert hits, "expected at least one retrieval hit"
+    assert "content" in hits[0]
+    assert any(h.get("content") for h in hits)

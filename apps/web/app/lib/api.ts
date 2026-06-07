@@ -180,3 +180,55 @@ export async function indexDocument(input: {
   if (!r.ok) throw new Error(`index failed: ${r.status}`);
   return r.json();
 }
+
+export type RunSummary = {
+  id: string;
+  input: { message?: string };
+  status: string;
+  latency_ms: number;
+  started_at: string | null;
+  answer: string;
+  citations: Array<{ title: string; citation_locator: string | null }>;
+  guardrail: Record<string, unknown>;
+};
+
+export type RunStep = {
+  step_order: number;
+  step_type: string;
+  status: string;
+  input_summary: Record<string, unknown>;
+  output_summary: Record<string, unknown>;
+  latency_ms: number;
+  error_code: string | null;
+  error_message: string | null;
+};
+
+export type RetrievalHit = {
+  rank_original: number;
+  title: string;
+  citation_locator: string | null;
+  score_vector: number;
+  used_in_context: boolean;
+  used_as_citation: boolean;
+  chunk_id: string | null;
+  content?: string | null;
+  acl_filter_snapshot: Record<string, unknown>;
+};
+
+export async function listRuns(): Promise<RunSummary[]> {
+  const r = await fetch(`${API_BASE}/runs`);
+  if (!r.ok) throw new Error(`list runs failed: ${r.status}`);
+  return r.json();
+}
+
+export async function getRunSteps(runId: string): Promise<RunStep[]> {
+  const r = await fetch(`${API_BASE}/runs/${runId}/steps`);
+  if (!r.ok) throw new Error(`get steps failed: ${r.status}`);
+  return r.json();
+}
+
+export async function getRunHits(runId: string): Promise<RetrievalHit[]> {
+  const r = await fetch(`${API_BASE}/runs/${runId}/retrieval-hits`);
+  if (!r.ok) throw new Error(`get hits failed: ${r.status}`);
+  return r.json();
+}

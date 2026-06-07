@@ -119,3 +119,64 @@ export async function publishVersion(versionId: string): Promise<{ id: string; s
   if (!r.ok) throw new Error(`publish failed: ${r.status}`);
   return r.json();
 }
+
+export type DocumentSummary = {
+  id: string; knowledge_source_id: string; title: string; status: string;
+};
+
+export async function listDocuments(): Promise<DocumentSummary[]> {
+  const r = await fetch(`${API_BASE}/knowledge/documents`);
+  if (!r.ok) throw new Error(`list documents failed: ${r.status}`);
+  return r.json();
+}
+
+export async function sha256Hex(text: string): Promise<string> {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+export async function createSource(input: {
+  name: string; owner_department: string;
+}): Promise<{ id: string }> {
+  const r = await fetch(`${API_BASE}/knowledge/sources`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...OPERATOR },
+    body: JSON.stringify(input),
+  });
+  if (!r.ok) throw new Error(`create source failed: ${r.status}`);
+  return r.json();
+}
+
+export async function registerDocument(input: {
+  knowledge_source_id: string;
+  title: string;
+  mime_type: string;
+  confidentiality_level: string;
+  access_groups: string[];
+  object_uri: string;
+  checksum: string;
+}): Promise<{ id: string }> {
+  const r = await fetch(`${API_BASE}/knowledge/documents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...OPERATOR },
+    body: JSON.stringify({ ...input, status: "registered" }),
+  });
+  if (!r.ok) throw new Error(`register document failed: ${r.status}`);
+  return r.json();
+}
+
+export async function indexDocument(input: {
+  document_id: string; source_text: string;
+}): Promise<{ status: string; chunk_count: number; error_code: string | null; error_message: string | null }> {
+  const r = await fetch(`${API_BASE}/knowledge/documents/${input.document_id}/index-jobs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...OPERATOR },
+    body: JSON.stringify({
+      parser_profile: "default-txt-md",
+      embedding_model: "bge-m3",
+      source_text: input.source_text,
+    }),
+  });
+  if (!r.ok) throw new Error(`index failed: ${r.status}`);
+  return r.json();
+}

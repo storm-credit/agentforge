@@ -257,18 +257,29 @@ def list_run_steps(run_id: str, db: Session = Depends(get_db)) -> list[RunStep]:
 
 
 @router.get("/{run_id}/retrieval-hits", response_model=list[RetrievalHitRead])
-def list_run_retrieval_hits(run_id: str, db: Session = Depends(get_db)) -> list[RetrievalHit]:
+def list_run_retrieval_hits(run_id: str, db: Session = Depends(get_db)) -> list[RetrievalHitRead]:
     run = db.get(Run, run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
 
-    return list(
+    hits = list(
         db.scalars(
             select(RetrievalHit)
             .where(RetrievalHit.run_id == run_id)
             .order_by(RetrievalHit.rank_original)
         )
     )
+    chunk_ids = [hit.chunk_id for hit in hits if hit.chunk_id]
+    contents: dict[str, str] = {}
+    if chunk_ids:
+        rows = db.scalars(select(DocumentChunk).where(DocumentChunk.id.in_(chunk_ids)))
+        contents = {row.id: row.content for row in rows}
+    return [
+        RetrievalHitRead.model_validate(hit).model_copy(
+            update={"content": contents.get(hit.chunk_id or "")}
+        )
+        for hit in hits
+    ]
 
 
 def _resolve_agent_version(

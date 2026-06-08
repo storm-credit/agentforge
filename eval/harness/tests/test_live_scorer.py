@@ -63,3 +63,22 @@ def test_aggregate_percentages():
     assert rep["acl_pass_pct"] == 100.0
     assert rep["citation_pct"] == 100.0
     assert rep["useful_answer_pct"] == 100.0
+
+
+def test_corpus_live_parses_and_is_consistent():
+    import json
+    import pathlib
+
+    p = pathlib.Path(__file__).resolve().parents[2] / "synthetic-corpus" / "cases-live-v0.1.json"
+    data = json.loads(p.read_text(encoding="utf-8"))
+    doc_ids = {d["doc_id"] for d in data["documents"]}
+    assert len(doc_ids) == len(data["documents"])
+    for d in data["documents"]:
+        assert d["body"].strip()
+        assert d["access_groups"]
+    for c in data["cases"]:
+        assert c["expected_behavior"] in {"answer", "policy_denied", "refuse"}
+        if c["expected_citation_doc"]:
+            assert c["expected_citation_doc"] in doc_ids
+        if c["forbidden_doc"]:
+            assert c["forbidden_doc"] in doc_ids

@@ -162,6 +162,11 @@ venv.bak/
 data/
 # understand-anything knowledge graph cache (regenerate via /understand)
 .understand-anything/
+# Claude Code local config (launch.json etc.) and superpowers brainstorm sessions
+.claude/
+.superpowers/
+# Next.js incremental typecheck cache
+apps/web/tsconfig.tsbuildinfo
 
 # Spyder project settings
 .spyderproject

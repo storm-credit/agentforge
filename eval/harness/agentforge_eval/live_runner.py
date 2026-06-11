@@ -102,6 +102,7 @@ def run_live_eval(corpus_path: Path, base_url: str, prefix: str) -> dict:
         ).raise_for_status()
 
         scores = []
+        top_scores: dict[str, float] = {}
         for case in corpus["cases"]:
             run = client.post(
                 "/runs",
@@ -111,6 +112,9 @@ def run_live_eval(corpus_path: Path, base_url: str, prefix: str) -> dict:
             run.raise_for_status()
             rj = run.json()
             hits = client.get(f"/runs/{rj['id']}/retrieval-hits").json()
+            top_scores[case["case_id"]] = max(
+                (h.get("score_vector") or 0.0 for h in hits), default=0.0
+            )
             run_result = {
                 "answer": rj.get("answer", ""),
                 "citations": rj.get("citations", []),
@@ -119,5 +123,7 @@ def run_live_eval(corpus_path: Path, base_url: str, prefix: str) -> dict:
             scores.append(score_case(case, run_result, doc_id_map))
 
     report = aggregate(scores)
+    for case_row in report["cases"]:
+        case_row["top_score"] = round(top_scores.get(case_row["case_id"], 0.0), 4)
     report["corpus_id"] = corpus["corpus_id"]
     return report

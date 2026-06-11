@@ -103,6 +103,8 @@ def run_live_eval(corpus_path: Path, base_url: str, prefix: str) -> dict:
 
         scores = []
         top_scores: dict[str, float] = {}
+        grounding_scores: dict[str, float | None] = {}
+        guard_tripped: dict[str, bool] = {}
         for case in corpus["cases"]:
             run = client.post(
                 "/runs",
@@ -115,6 +117,11 @@ def run_live_eval(corpus_path: Path, base_url: str, prefix: str) -> dict:
             top_scores[case["case_id"]] = max(
                 (h.get("score_vector") or 0.0 for h in hits), default=0.0
             )
+            steps = client.get(f"/runs/{rj['id']}/steps").json()
+            guard = next((s for s in steps if s["step_type"] == "guard_output"), None)
+            guard_out = (guard or {}).get("output_summary", {})
+            grounding_scores[case["case_id"]] = guard_out.get("grounding_score")
+            guard_tripped[case["case_id"]] = bool(guard_out.get("guard_tripped"))
             run_result = {
                 "answer": rj.get("answer", ""),
                 "citations": rj.get("citations", []),
@@ -124,6 +131,9 @@ def run_live_eval(corpus_path: Path, base_url: str, prefix: str) -> dict:
 
     report = aggregate(scores)
     for case_row in report["cases"]:
-        case_row["top_score"] = round(top_scores.get(case_row["case_id"], 0.0), 4)
+        cid = case_row["case_id"]
+        case_row["top_score"] = round(top_scores.get(cid, 0.0), 4)
+        case_row["grounding_score"] = grounding_scores.get(cid)
+        case_row["guard_tripped"] = guard_tripped.get(cid, False)
     report["corpus_id"] = corpus["corpus_id"]
     return report

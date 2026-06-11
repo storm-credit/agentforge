@@ -1,6 +1,13 @@
 import httpx
 
-from app.services.llm_gateway import ContextBlock, LLMGateway, _refusal, build_messages
+from app.services.llm_gateway import (
+    ContextBlock,
+    LLMGateway,
+    _refusal,
+    build_messages,
+    clamp_temperature,
+    clamp_top_p,
+)
 
 CTX = (ContextBlock(title="Holiday Policy", locator="Holiday Policy / lines 1-3", content="Five days paid leave per year."),)
 
@@ -80,3 +87,52 @@ def test_build_messages_hardens_against_injection():
 def test_health_not_configured():
     result = LLMGateway(base_url=None, model="m", timeout_seconds=5).health()
     assert result["configured"] is False
+
+
+def test_clamp_temperature_bounds():
+    assert clamp_temperature(1.5) == 0.7   # capped (grounded RAG)
+    assert clamp_temperature(-0.5) == 0.0
+    assert clamp_temperature(0.3) == 0.3
+
+
+def test_clamp_top_p_bounds_and_none():
+    assert clamp_top_p(2.0) == 1.0
+    assert clamp_top_p(0.0) == 0.1
+    assert clamp_top_p(0.9) == 0.9
+    assert clamp_top_p(None) is None
+
+
+def test_generate_applies_clamped_temperature_and_top_p(monkeypatch):
+    captured = {}
+
+    def fake_post(self, url, json, **kwargs):
+        captured["json"] = json
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "ok"}}]},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    gw = LLMGateway(base_url="http://x/v1", model="m", timeout_seconds=5)
+    gw.generate(question="q", context=CTX, language="en", temperature=1.9, top_p=2.0)
+    assert captured["json"]["temperature"] == 0.7   # clamped
+    assert captured["json"]["top_p"] == 1.0          # clamped + included
+
+
+def test_generate_omits_top_p_when_none(monkeypatch):
+    captured = {}
+
+    def fake_post(self, url, json, **kwargs):
+        captured["json"] = json
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "ok"}}]},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    gw = LLMGateway(base_url="http://x/v1", model="m", timeout_seconds=5)
+    gw.generate(question="q", context=CTX, language="en")
+    assert "top_p" not in captured["json"]
+    assert captured["json"]["temperature"] == 0.2   # default

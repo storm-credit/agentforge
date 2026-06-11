@@ -22,7 +22,7 @@ from app.domain.schemas import (
 from app.domain.language import resolve_language
 from app.domain.vector import FakeVectorStore, VectorQuery, VectorSearchResult, build_acl_filter, get_vector_store
 from app.infra.audit import write_audit_event
-from app.services.llm_gateway import ContextBlock, get_gateway
+from app.services.llm_gateway import ContextBlock, clamp_temperature, clamp_top_p, get_gateway
 
 logger = logging.getLogger(__name__)
 
@@ -145,8 +145,17 @@ def create_run(
 
     answer_language = resolve_language(payload.language, payload.input.message)
     context_blocks = _load_context_blocks(db, vector_result.hits)
+    gen_settings = get_settings()
+    gen_temperature = clamp_temperature(
+        agent_version.config.get("temperature", gen_settings.llm_temperature)
+    )
+    gen_top_p = clamp_top_p(agent_version.config.get("top_p", gen_settings.llm_top_p))
     generated = get_gateway().generate(
-        question=payload.input.message, context=context_blocks, language=answer_language
+        question=payload.input.message,
+        context=context_blocks,
+        language=answer_language,
+        temperature=gen_temperature,
+        top_p=gen_top_p,
     )
     run.answer = generated.text
     run.citations = citations
@@ -178,6 +187,8 @@ def create_run(
             "citation_count": len(citations),
             "mode": "llm" if generated.used_llm else ("fallback" if generated.fallback_used else "refused"),
             "language": answer_language,
+            "temperature": gen_temperature,
+            "top_p": gen_top_p,
         },
     )
     _add_step(

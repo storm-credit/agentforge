@@ -342,7 +342,7 @@ def _seed_agent_with_indexed_doc(client):
 def test_run_uses_llm_answer_when_gateway_returns(client, monkeypatch):
     from app.services import llm_gateway
 
-    def fake_generate(self, *, question, context, language):
+    def fake_generate(self, *, question, context, language, temperature=0.2, top_p=None):
         assert len(context) >= 1
         return llm_gateway.GeneratedAnswer(text=f"[{language}] answer", used_llm=True, fallback_used=False)
 

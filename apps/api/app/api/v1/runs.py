@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.principal import Principal, get_principal
 from app.domain.citations import CitationValidationResult, validate_run_citations
@@ -344,6 +345,7 @@ def _search_authorized_context(
         query_text=query_text,
         knowledge_source_ids=tuple(knowledge_source_ids),
         top_k=top_k,
+        min_score=get_settings().retrieval_min_score,
     )
     store = get_vector_store()
     label = "fake" if isinstance(store, FakeVectorStore) else "qdrant"

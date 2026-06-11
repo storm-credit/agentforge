@@ -112,6 +112,25 @@ def test_qdrant_empty_groups_denied_by_default():
     assert result.hits == ()
 
 
+def test_qdrant_min_score_gates_low_relevance():
+    store = _store()
+    _upsert(store, chunk_id="d:1", document_id="d", content="finance policy", title="Finance")
+    # impossible-high threshold (cosine max is 1.0) -> all hits gated out
+    gated = store.search(
+        query=VectorQuery(query_text="finance", top_k=5, min_score=1.5),
+        documents=[],
+        acl_filter=build_acl_filter(_principal()),
+    )
+    assert gated.hits == ()
+    # zero threshold (default) -> hit retained
+    open_ = store.search(
+        query=VectorQuery(query_text="finance", top_k=5, min_score=0.0),
+        documents=[],
+        acl_filter=build_acl_filter(_principal()),
+    )
+    assert open_.hits
+
+
 def test_qdrant_delete_document_removes_hits():
     store = _store()
     _upsert(store, chunk_id="d:1", document_id="d", content="policy")

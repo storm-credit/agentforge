@@ -52,8 +52,10 @@ AGENT_FORGE_EMBEDDING_MODEL=bge-m3
 AGENT_FORGE_EMBEDDING_DIM=1024
 AGENT_FORGE_LLM_BASE_URL=http://localhost:11434/v1
 AGENT_FORGE_LLM_MODEL=qwen3:1.7b
+AGENT_FORGE_RETRIEVAL_MIN_SCORE=0.53   # 관련도 게이팅(bge-m3 보정값); 미만 점수 hit 제외→무관 질문 거부
 AGENT_FORGE_CORS_ORIGINS=["http://localhost:3000"]
 ```
+- `RETRIEVAL_MIN_SCORE` 기본값은 0.0(off). `eval/harness/run_live_eval.py`로 임베딩 모델·코퍼스에 맞게 재보정한다(`docs/eval-results-live-v0.1.md` 참고: 0.53에서 acl_pass 70%→100%, useful/citation 100% 유지).
 - `VECTOR_BACKEND` 기본값은 `fake`(키워드) — env로 `qdrant` 켜야 진짜 의미검색.
 - 인증은 현재 **헤더 스텁**(operator/mock 사용자). 실제 SSO는 배포 전 작업.
 

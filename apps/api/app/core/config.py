@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     embedding_timeout_seconds: float = 30.0
     qdrant_url: str = "http://localhost:6333"
     vector_backend: str = "fake"  # "fake" | "qdrant"
+    retrieval_min_score: float = 0.0  # drop retrieval hits below this score (relevance gating)
 
     model_config = SettingsConfigDict(
         env_file=".env",

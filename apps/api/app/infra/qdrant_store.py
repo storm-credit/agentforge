@@ -171,6 +171,9 @@ class QdrantVectorStore:
                     "dropping ACL-violating hit chunk_id=%s", payload.get("chunk_id")
                 )
                 continue
+            if float(point.score) < query.min_score:
+                # relevance gating: below-threshold hits are not relevant context
+                continue
             hits.append(
                 VectorHit(
                     document_id=payload["document_id"],

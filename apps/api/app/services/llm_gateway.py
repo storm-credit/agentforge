@@ -15,6 +15,19 @@ _LANG_NAME = {"ko": "한국어", "en": "English"}
 _TEMPERATURE = 0.2
 _CONTEXT_BEGIN = "----- BEGIN CONTEXT (untrusted data) -----"
 _CONTEXT_END = "----- END CONTEXT -----"
+# Grounded RAG keeps generation conservative: temperature is capped low to limit hallucination.
+_TEMP_MIN, _TEMP_MAX = 0.0, 0.7
+_TOP_P_MIN, _TOP_P_MAX = 0.1, 1.0
+
+
+def clamp_temperature(value: float) -> float:
+    return max(_TEMP_MIN, min(_TEMP_MAX, float(value)))
+
+
+def clamp_top_p(value: float | None) -> float | None:
+    if value is None:
+        return None
+    return max(_TOP_P_MIN, min(_TOP_P_MAX, float(value)))
 
 
 @dataclass(frozen=True)
@@ -95,21 +108,31 @@ class LLMGateway:
             return {"configured": True, "status": "unreachable", "error": str(exc)}
 
     def generate(
-        self, *, question: str, context: tuple[ContextBlock, ...], language: str
+        self,
+        *,
+        question: str,
+        context: tuple[ContextBlock, ...],
+        language: str,
+        temperature: float = _TEMPERATURE,
+        top_p: float | None = None,
     ) -> GeneratedAnswer:
         if not context:
             return GeneratedAnswer(text=_refusal(language), used_llm=False, fallback_used=False)
         if not self.base_url:
             return GeneratedAnswer(text=_fallback(context, language), used_llm=False, fallback_used=True)
         try:
+            payload: dict = {
+                "model": self.model,
+                "temperature": clamp_temperature(temperature),
+                "messages": build_messages(question=question, context=context, language=language),
+            }
+            clamped_top_p = clamp_top_p(top_p)
+            if clamped_top_p is not None:
+                payload["top_p"] = clamped_top_p
             with httpx.Client(timeout=self.timeout_seconds) as client:
                 r = client.post(
                     f"{self.base_url}/chat/completions",
-                    json={
-                        "model": self.model,
-                        "temperature": _TEMPERATURE,
-                        "messages": build_messages(question=question, context=context, language=language),
-                    },
+                    json=payload,
                 )
                 r.raise_for_status()
                 content = r.json()["choices"][0]["message"]["content"]

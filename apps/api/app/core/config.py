@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     llm_base_url: str | None = None
     llm_model: str = "qwen3:8b"
     llm_timeout_seconds: float = 30.0
+    llm_temperature: float = 0.2
+    llm_top_p: float | None = None
     embedding_base_url: str | None = None
     embedding_model: str = "bge-m3"
     embedding_dim: int = 1024

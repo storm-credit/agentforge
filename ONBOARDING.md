@@ -53,6 +53,7 @@ AGENT_FORGE_EMBEDDING_DIM=1024
 AGENT_FORGE_LLM_BASE_URL=http://localhost:11434/v1
 AGENT_FORGE_LLM_MODEL=qwen3:1.7b
 AGENT_FORGE_RETRIEVAL_MIN_SCORE=0.53   # 관련도 게이팅(bge-m3 보정값); 미만 점수 hit 제외→무관 질문 거부
+AGENT_FORGE_GROUNDING_MIN=0.1          # 출력 가드(거친 안전망): grounding<0.1 답변 거부(노골적 인젝션 납치 차단)
 AGENT_FORGE_CORS_ORIGINS=["http://localhost:3000"]
 ```
 - `RETRIEVAL_MIN_SCORE` 기본값은 0.0(off). `eval/harness/run_live_eval.py`로 임베딩 모델·코퍼스에 맞게 재보정한다(`docs/eval-results-live-v0.1.md` 참고: 0.53에서 acl_pass 70%→100%, useful/citation 100% 유지).
@@ -84,4 +85,4 @@ cd ../../apps/web && npx playwright test    # 프론트 렌더 스모크
 - 인증: SSO 미연동(헤더 스텁) — 배포 전 필수.
 - 문서: TXT/MD만. PDF/DOCX 파싱 + MinIO 원본 저장은 다음 슬라이스(파서가 mime별 교체 구조라 확장 용이).
 - `/runs` 등 GET은 현재 무인증 — SSO 도입 시 principal 스코프 제한 필요.
-- **프롬프트 인젝션**: LLM 프롬프트는 컨텍스트를 "지시 아닌 데이터"로 다루도록 하드닝돼 있으나(`llm_gateway.build_messages`), **이것만으론 약한 모델(로컬 qwen3:1.7b)을 완전히 막지 못함**(악성 문서가 답변을 납치할 수 있음). 운영급 모델(Qwen3.6:35B)은 훨씬 견디며, 견고한 방어는 운영 모델 + 향후 출력 가드/인제스트 필터로 보강해야 함. 문서 업로드가 무인증인 점과 함께 배포 전 점검 대상.
+- **프롬프트 인젝션**: 2층 방어 — ① 프롬프트 하드닝(`llm_gateway.build_messages`, 컨텍스트=데이터) ② 출력 grounding 가드(`AGENT_FORGE_GROUNDING_MIN`, 컨텍스트 무관 답변 거부). 단 **둘 다 거친 방어**: 하드닝은 약한 모델서 비결정적으로 뚫리고, grounding 메트릭은 노이즈가 커 임계값을 낮게(0.1)만 둘 수 있어 grounding≈0인 노골적 납치만 잡는다(`docs/eval-results-live-v0.1.md` 참고). 정밀 방어는 운영급 모델(Qwen3.6:35B) + LLM-judge 가드 필요. 문서 업로드 무인증과 함께 배포 전 점검 대상.

@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"
     vector_backend: str = "fake"  # "fake" | "qdrant"
     retrieval_min_score: float = 0.0  # drop retrieval hits below this score (relevance gating)
+    grounding_min: float = 0.0  # refuse answers grounded below this score (injection/hallucination guard)
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -363,6 +363,39 @@ def test_run_uses_llm_answer_when_gateway_returns(client, monkeypatch):
     assert len(body["citations"]) >= 1
 
 
+def test_output_guard_refuses_ungrounded_answer(client, monkeypatch):
+    from app.core.config import get_settings
+    from app.services import llm_gateway
+
+    monkeypatch.setenv("AGENT_FORGE_GROUNDING_MIN", "0.99")
+    get_settings.cache_clear()
+
+    def fake_generate(self, *, question, context, language, temperature=0.2, top_p=None):
+        return llm_gateway.GeneratedAnswer(text="PWNED", used_llm=True, fallback_used=False)
+
+    monkeypatch.setattr(llm_gateway.LLMGateway, "generate", fake_generate)
+    try:
+        ids = _seed_agent_with_indexed_doc(client)
+        resp = client.post(
+            "/api/v1/runs",
+            json={
+                "agent_id": ids["agent_id"],
+                "input": {"message": "휴가 며칠?"},
+                "knowledge_source_ids": [ids["source_id"]],
+                "language": "auto",
+            },
+        )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert "PWNED" not in body["answer"]  # hijacked answer was replaced
+        assert body["citations"] == []
+        steps = client.get(f"/api/v1/runs/{body['id']}/steps").json()
+        guard = next(s for s in steps if s["step_type"] == "guard_output")
+        assert guard["output_summary"]["guard_tripped"] is True
+    finally:
+        get_settings.cache_clear()
+
+
 def test_run_refuses_when_no_authorized_context(client):
     ids = _seed_agent_with_indexed_doc(client)
     resp = client.post(

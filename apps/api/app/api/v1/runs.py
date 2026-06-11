@@ -12,6 +12,7 @@ from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.principal import Principal, get_principal
 from app.domain.citations import CitationValidationResult, validate_run_citations
+from app.domain.grounding import grounding_score
 from app.domain.models import Agent, AgentVersion, Document, DocumentChunk, RetrievalHit, Run, RunStep
 from app.domain.schemas import (
     RetrievalHitRead,
@@ -31,6 +32,12 @@ router = APIRouter()
 
 def _hit_locator(hit) -> str | None:
     return hit.citation_locator or hit.citation
+
+
+def _guard_refusal(language: str) -> str:
+    if language == "en":
+        return "I can't answer this from the available documents."
+    return "근거가 부족하여 답변할 수 없습니다."
 
 
 @router.get("", response_model=list[RunRead])
@@ -160,6 +167,21 @@ def create_run(
     run.answer = generated.text
     run.citations = citations
     run.retrieval_denied_count = vector_result.denied_count
+
+    # Output guard: an LLM answer that is not grounded in the retrieved context
+    # (e.g. a prompt-injection hijack) is replaced with a safe refusal.
+    grounding = None
+    guard_tripped = False
+    if generated.used_llm and context_blocks:
+        grounding = grounding_score(
+            run.answer, "\n".join(block.content for block in context_blocks)
+        )
+        if grounding < gen_settings.grounding_min:
+            guard_tripped = True
+            run.answer = _guard_refusal(answer_language)
+            citations = []
+            run.citations = citations
+
     citation_required = bool(agent_version.config.get("citation_required", True))
     citation_validation = validate_run_citations(
         citations,
@@ -214,6 +236,8 @@ def create_run(
         output_summary={
             "security_finalcheck_pass": citation_validation.passed,
             "citation_count": len(citations),
+            "grounding_score": grounding,
+            "guard_tripped": guard_tripped,
         },
         status="succeeded" if citation_validation.passed else "failed",
         error_code=citation_validation.error_code,

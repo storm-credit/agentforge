@@ -147,6 +147,13 @@ class IndexJobRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DocumentUploadRead(BaseModel):
+    document: DocumentRead
+    index_job: IndexJobRead
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DocumentChunkRead(BaseModel):
     id: str
     document_id: str

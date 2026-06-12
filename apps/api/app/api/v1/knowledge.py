@@ -1,6 +1,8 @@
+import hashlib
 from datetime import UTC, datetime
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -8,11 +10,20 @@ from app.core.database import get_db
 from app.core.principal import Principal, get_principal
 from app.domain.indexing import run_index_job
 from app.domain.models import Document, DocumentChunk, IndexJob, KnowledgeSource
+from app.domain.parsers import (
+    DOCX_MIME_TYPE,
+    MAX_EXTRACT_BYTES,
+    PDF_MIME_TYPE,
+    SUPPORTED_BINARY_MIME_TYPES,
+    SUPPORTED_DOCUMENT_MIME_TYPES,
+    SUPPORTED_TEXT_MIME_TYPES,
+)
 from app.domain.vector import FakeVectorStore, VectorQuery, build_acl_filter
 from app.domain.schemas import (
     DocumentCreate,
     DocumentChunkRead,
     DocumentRead,
+    DocumentUploadRead,
     IndexJobCreate,
     IndexJobProcess,
     IndexJobRead,
@@ -87,6 +98,95 @@ def register_document(
     db.commit()
     db.refresh(document)
     return document
+
+
+@router.post(
+    "/documents/upload",
+    response_model=DocumentUploadRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def upload_document_and_index(
+    knowledge_source_id: str = Form(...),
+    title: str = Form(...),
+    confidentiality_level: str = Form("internal"),
+    access_groups: str = Form("all-employees"),
+    effective_date: str | None = Form(None),
+    embedding_model: str = Form("bge-m3"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> dict[str, Document | IndexJob]:
+    source = db.get(KnowledgeSource, knowledge_source_id)
+    if source is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge source not found")
+
+    filename = _safe_upload_filename(file.filename)
+    raw = file.file.read()
+    if len(raw) > MAX_EXTRACT_BYTES:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail="File too large")
+
+    mime_type = _upload_mime_type(file.content_type, filename)
+    if mime_type not in SUPPORTED_DOCUMENT_MIME_TYPES:
+        raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Unsupported file type")
+
+    document = Document(
+        knowledge_source_id=source.id,
+        title=title.strip() or Path(filename).stem or filename,
+        object_uri=f"upload://{filename}",
+        checksum="sha256-" + hashlib.sha256(raw).hexdigest(),
+        mime_type=mime_type,
+        confidentiality_level=confidentiality_level,
+        access_groups=_parse_access_groups(access_groups),
+        status="registered",
+        effective_date=effective_date,
+    )
+    db.add(document)
+    db.flush()
+    write_audit_event(
+        db,
+        principal=principal,
+        event_type="document.registered",
+        target_type="document",
+        target_id=document.id,
+        payload={
+            "knowledge_source_id": document.knowledge_source_id,
+            "title": document.title,
+            "confidentiality_level": document.confidentiality_level,
+            "upload_mime_type": document.mime_type,
+        },
+    )
+
+    job = IndexJob(
+        document_id=document.id,
+        status="queued",
+        stage="parse",
+        config={
+            "parser_profile": "upload-extract-text",
+            "chunking": {"strategy": "line-heading", "chunk_size": 900, "chunk_overlap": 0},
+            "embedding_model": embedding_model,
+            "force_reindex": False,
+            "source": "uploaded_file",
+            "original_mime_type": mime_type,
+            "original_filename": filename,
+        },
+        created_by=principal.user_id,
+    )
+    db.add(job)
+    db.flush()
+
+    run_index_job(
+        db=db,
+        document=document,
+        job=job,
+        principal=principal,
+        source_text=_decode_uploaded_text(raw) if mime_type in SUPPORTED_TEXT_MIME_TYPES else None,
+        source_bytes=raw if mime_type in SUPPORTED_BINARY_MIME_TYPES else None,
+    )
+
+    db.commit()
+    db.refresh(document)
+    db.refresh(job)
+    return {"document": document, "index_job": job}
 
 
 @router.post(
@@ -288,3 +388,38 @@ def _index_job_config(payload: IndexJobCreate) -> dict:
         "force_reindex": payload.force_reindex,
         "source": "synthetic_text" if payload.source_text is not None else "object_store",
     }
+
+
+def _parse_access_groups(value: str) -> list[str]:
+    groups = [group.strip() for group in value.split(",") if group.strip()]
+    return groups or ["all-employees"]
+
+
+def _safe_upload_filename(filename: str | None) -> str:
+    if not filename:
+        return "uploaded-document"
+    return filename.replace("\\", "/").split("/")[-1] or "uploaded-document"
+
+
+def _upload_mime_type(content_type: str | None, filename: str) -> str:
+    normalized_content_type = (content_type or "").split(";")[0].strip().lower()
+    if normalized_content_type in SUPPORTED_DOCUMENT_MIME_TYPES:
+        return normalized_content_type
+
+    extension = Path(filename).suffix.casefold()
+    if extension == ".pdf":
+        return PDF_MIME_TYPE
+    if extension == ".docx":
+        return DOCX_MIME_TYPE
+    if extension == ".md":
+        return "text/markdown"
+    if extension == ".txt":
+        return "text/plain"
+    return normalized_content_type or "application/octet-stream"
+
+
+def _decode_uploaded_text(content: bytes) -> str:
+    try:
+        return content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        return content.decode("utf-8", errors="replace")

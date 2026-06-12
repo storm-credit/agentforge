@@ -165,6 +165,37 @@ export async function registerDocument(input: {
   return r.json();
 }
 
+export async function uploadDocument(input: {
+  knowledge_source_id: string;
+  title: string;
+  file: File;
+  confidentiality_level: string;
+  access_groups: string[];
+}): Promise<{
+  document: { id: string; status: string };
+  index_job: {
+    status: string;
+    chunk_count: number;
+    error_code: string | null;
+    error_message: string | null;
+  };
+}> {
+  const form = new FormData();
+  form.set("knowledge_source_id", input.knowledge_source_id);
+  form.set("title", input.title);
+  form.set("confidentiality_level", input.confidentiality_level);
+  form.set("access_groups", input.access_groups.join(","));
+  form.set("file", input.file);
+
+  const r = await fetch(`${API_BASE}/knowledge/documents/upload`, {
+    method: "POST",
+    headers: { ...OPERATOR },
+    body: form,
+  });
+  if (!r.ok) throw new Error(`upload failed: ${r.status}`);
+  return r.json();
+}
+
 export async function indexDocument(input: {
   document_id: string; source_text: string;
 }): Promise<{ status: string; chunk_count: number; error_code: string | null; error_message: string | null }> {

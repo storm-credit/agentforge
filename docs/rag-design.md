@@ -46,6 +46,8 @@ default_acl:
 
 파싱 confidence가 낮거나 ACL을 확인할 수 없는 문서는 quarantine 처리한다.
 
+MVP 구현 메모: 수동 업로드는 TXT/MD 텍스트 경로와 PDF/DOCX 서버 추출 경로를 지원한다. PDF는 `pypdf`, DOCX는 `python-docx`로 텍스트를 추출한 뒤 기존 TXT 청커에 투입하므로 현재 citation locator는 line range 기반이다. 원본 파일 보관(MinIO), XLSX, page/table-level locator는 후속 슬라이스 범위다.
+
 ## Chunking
 
 | 항목 | 기준 |

@@ -9,7 +9,14 @@ class Settings(BaseSettings):
     environment: str = "local"
     database_url: str = "postgresql+psycopg://agentforge:agentforge@localhost:5432/agentforge"
     readiness_check_database: bool = False
-    cors_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
+    cors_origins: list[str] = Field(
+        default_factory=lambda: [
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://localhost:3300",
+            "http://127.0.0.1:3300",
+        ]
+    )
     llm_base_url: str | None = None
     llm_model: str = "qwen3:8b"
     llm_timeout_seconds: float = 30.0

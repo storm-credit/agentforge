@@ -1,6 +1,7 @@
 import pytest
+from docx import Document
 
-from app.domain.parsers import parse_txt_md_document
+from app.domain.parsers import DocumentExtractionError, extract_text, parse_txt_md_document
 
 
 def test_markdown_parser_preserves_heading_path_and_line_locator():
@@ -55,3 +56,100 @@ def test_parser_rejects_unsupported_mime_type():
             mime_type="application/pdf",
             source_text="not parsed in Sprint 1",
         )
+
+
+def test_pdf_extractor_reads_text_layer():
+    text = extract_text(
+        mime_type="application/pdf",
+        file_bytes=_minimal_pdf_bytes(
+            [
+                "Remote work requires manager approval.",
+                "Travel stipend is fifty dollars.",
+            ]
+        ),
+    )
+
+    assert "Remote work requires manager approval." in text
+    assert "Travel stipend is fifty dollars." in text
+
+
+def test_pdf_extractor_enforces_page_limit():
+    with pytest.raises(DocumentExtractionError) as exc:
+        extract_text(
+            mime_type="application/pdf",
+            file_bytes=_minimal_pdf_bytes(["one page"]),
+            max_pdf_pages=0,
+        )
+
+    assert exc.value.error_code == "PDF_PAGE_LIMIT_EXCEEDED"
+
+
+def test_docx_extractor_reads_paragraphs_and_tables():
+    document = Document()
+    document.add_heading("Remote Work", level=1)
+    document.add_paragraph("Employees may request remote work after manager approval.")
+    table = document.add_table(rows=1, cols=2)
+    table.cell(0, 0).text = "Travel"
+    table.cell(0, 1).text = "Fifty dollars per day"
+
+    text = extract_text(
+        mime_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        file_bytes=_docx_bytes(document),
+    )
+
+    assert "Remote Work" in text
+    assert "Employees may request remote work after manager approval." in text
+    assert "Travel | Fifty dollars per day" in text
+
+
+def test_extractor_rejects_unsupported_mime_type():
+    with pytest.raises(DocumentExtractionError) as exc:
+        extract_text(mime_type="application/octet-stream", file_bytes=b"unknown")
+
+    assert exc.value.error_code == "UNSUPPORTED_MIME_TYPE"
+
+
+def _docx_bytes(document: Document) -> bytes:
+    from io import BytesIO
+
+    buffer = BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
+def _minimal_pdf_bytes(lines: list[str]) -> bytes:
+    text_ops = ["BT", "/F1 18 Tf", "72 720 Td"]
+    for index, line in enumerate(lines):
+        if index:
+            text_ops.append("0 -24 Td")
+        safe_line = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        text_ops.append(f"({safe_line}) Tj")
+    text_ops.append("ET")
+    stream = "\n".join(text_ops).encode("latin-1")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n"
+        + stream
+        + b"\nendstream",
+    ]
+    output = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for object_index, obj in enumerate(objects, start=1):
+        offsets.append(len(output))
+        output.extend(f"{object_index} 0 obj\n".encode("ascii"))
+        output.extend(obj)
+        output.extend(b"\nendobj\n")
+    xref_at = len(output)
+    output.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    output.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        output.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    output.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref_at}\n%%EOF\n".encode("ascii")
+    )
+    return bytes(output)

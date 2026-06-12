@@ -1,11 +1,28 @@
 import hashlib
 import re
 from dataclasses import dataclass
+from io import BytesIO
 
 
 PARSER_VERSION = "txt-md-parser/0.1.0"
 CHUNKER_VERSION = "line-heading-chunker/0.1.0"
 SUPPORTED_TEXT_MIME_TYPES = {"text/plain", "text/markdown", "text/x-markdown"}
+PDF_MIME_TYPE = "application/pdf"
+DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+SUPPORTED_BINARY_MIME_TYPES = {PDF_MIME_TYPE, DOCX_MIME_TYPE}
+SUPPORTED_DOCUMENT_MIME_TYPES = SUPPORTED_TEXT_MIME_TYPES | SUPPORTED_BINARY_MIME_TYPES
+MAX_EXTRACT_BYTES = 10 * 1024 * 1024
+MAX_PDF_PAGES = 50
+
+
+class DocumentExtractionError(ValueError):
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+    @property
+    def error_code(self) -> str:
+        return self.code
 
 
 @dataclass(frozen=True)
@@ -94,6 +111,70 @@ def parse_txt_md_document(
     return chunks
 
 
+def extract_text_from_bytes(
+    *,
+    mime_type: str,
+    content: bytes,
+    max_bytes: int = MAX_EXTRACT_BYTES,
+    max_pdf_pages: int = MAX_PDF_PAGES,
+) -> str:
+    """Extract plain text from trusted-size upload bytes.
+
+    The result intentionally feeds the existing text/markdown chunker, so PDF/DOCX
+    parsing does not alter the downstream embedding, ACL, or Qdrant payload path.
+    """
+    if not content:
+        raise DocumentExtractionError("EMPTY_FILE", "Uploaded file is empty.")
+    if len(content) > max_bytes:
+        raise DocumentExtractionError(
+            "FILE_TOO_LARGE",
+            f"Uploaded file exceeds the {max_bytes} byte extraction limit.",
+        )
+
+    if mime_type in SUPPORTED_TEXT_MIME_TYPES:
+        text = _decode_text(content)
+    elif mime_type == PDF_MIME_TYPE:
+        text = _extract_pdf_text(content, max_pdf_pages=max_pdf_pages)
+    elif mime_type == DOCX_MIME_TYPE:
+        text = _extract_docx_text(content)
+    else:
+        raise DocumentExtractionError(
+            "UNSUPPORTED_MIME_TYPE",
+            f"Unsupported upload MIME type: {mime_type}",
+        )
+
+    normalized_text = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+    if not normalized_text:
+        raise DocumentExtractionError(
+            "EMPTY_EXTRACTED_TEXT",
+            "Uploaded file did not contain extractable text.",
+        )
+    return normalized_text
+
+
+def extract_text(
+    *,
+    mime_type: str,
+    file_bytes: bytes,
+    max_bytes: int = MAX_EXTRACT_BYTES,
+    max_pdf_pages: int = MAX_PDF_PAGES,
+) -> str:
+    return extract_text_from_bytes(
+        mime_type=mime_type,
+        content=file_bytes,
+        max_bytes=max_bytes,
+        max_pdf_pages=max_pdf_pages,
+    )
+
+
+def chunker_mime_type_for(mime_type: str) -> str:
+    if mime_type in SUPPORTED_TEXT_MIME_TYPES:
+        return mime_type
+    if mime_type in SUPPORTED_BINARY_MIME_TYPES:
+        return "text/plain"
+    raise ValueError(f"Unsupported text parser MIME type: {mime_type}")
+
+
 def _build_chunk(
     *,
     document_id: str,
@@ -166,3 +247,73 @@ def _split_oversized_content(content: str, chunk_size: int) -> list[str]:
     if remaining:
         segments.append(remaining)
     return segments
+
+
+def _decode_text(content: bytes) -> str:
+    try:
+        return content.decode("utf-8")
+    except UnicodeDecodeError:
+        return content.decode("utf-8", errors="replace")
+
+
+def _extract_pdf_text(content: bytes, *, max_pdf_pages: int) -> str:
+    try:
+        from pypdf import PdfReader
+    except ImportError as exc:  # pragma: no cover - dependency is declared
+        raise DocumentExtractionError(
+            "PARSER_DEPENDENCY_MISSING", "pypdf is required for PDF extraction."
+        ) from exc
+
+    try:
+        reader = PdfReader(BytesIO(content))
+    except Exception as exc:  # noqa: BLE001 - untrusted file input
+        raise DocumentExtractionError("PDF_PARSE_FAILED", str(exc)) from exc
+
+    if reader.is_encrypted:
+        try:
+            reader.decrypt("")
+        except Exception as exc:  # noqa: BLE001 - untrusted file input
+            raise DocumentExtractionError("PDF_ENCRYPTED", "Encrypted PDF cannot be parsed.") from exc
+        if reader.is_encrypted:
+            raise DocumentExtractionError("PDF_ENCRYPTED", "Encrypted PDF cannot be parsed.")
+
+    if len(reader.pages) > max_pdf_pages:
+        raise DocumentExtractionError(
+            "PDF_PAGE_LIMIT_EXCEEDED",
+            f"PDF has {len(reader.pages)} pages; limit is {max_pdf_pages}.",
+        )
+
+    page_texts: list[str] = []
+    for page_number, page in enumerate(reader.pages, start=1):
+        try:
+            page_text = page.extract_text() or ""
+        except Exception as exc:  # noqa: BLE001 - fail closed per page parse issue
+            raise DocumentExtractionError(
+                "PDF_PARSE_FAILED", f"Failed to extract text from page {page_number}: {exc}"
+            ) from exc
+        if page_text.strip():
+            page_texts.append(page_text.strip())
+    return "\n\n".join(page_texts)
+
+
+def _extract_docx_text(content: bytes) -> str:
+    try:
+        from docx import Document as DocxDocument
+    except ImportError as exc:  # pragma: no cover - dependency is declared
+        raise DocumentExtractionError(
+            "PARSER_DEPENDENCY_MISSING", "python-docx is required for DOCX extraction."
+        ) from exc
+
+    try:
+        document = DocxDocument(BytesIO(content))
+    except Exception as exc:  # noqa: BLE001 - untrusted file input
+        raise DocumentExtractionError("DOCX_PARSE_FAILED", str(exc)) from exc
+
+    parts: list[str] = []
+    parts.extend(paragraph.text for paragraph in document.paragraphs if paragraph.text.strip())
+    for table in document.tables:
+        for row in table.rows:
+            cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
+            if cells:
+                parts.append(" | ".join(cells))
+    return "\n\n".join(parts)

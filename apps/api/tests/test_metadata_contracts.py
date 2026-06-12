@@ -353,6 +353,122 @@ def test_index_job_creates_txt_md_chunks_and_preview_uses_chunk_citations(client
     assert hit["citation_locator"] == chunks[1]["citation_locator"]
 
 
+def test_pdf_upload_extracts_text_and_indexes_chunks(client):
+    source = client.post(
+        "/api/v1/knowledge/sources",
+        json={
+            "name": "Binary Upload Corpus",
+            "description": "PDF and DOCX upload corpus.",
+            "owner_department": "Operations",
+        },
+    ).json()
+
+    response = client.post(
+        "/api/v1/knowledge/documents/upload",
+        data={
+            "knowledge_source_id": source["id"],
+            "title": "Remote Work PDF",
+            "confidentiality_level": "internal",
+            "access_groups": "all-employees",
+            "effective_date": "2026-06-12",
+        },
+        files={
+            "file": (
+                "remote-work.pdf",
+                _minimal_pdf_bytes(["Remote work requires manager approval."]),
+                "application/pdf",
+            )
+        },
+        headers={"X-Agent-Forge-User": "binary-uploader"},
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    document = payload["document"]
+    job = payload["index_job"]
+    assert document["mime_type"] == "application/pdf"
+    assert document["status"] == "indexed"
+    assert document["checksum"].startswith("sha256-")
+    assert document["object_uri"] == "upload://remote-work.pdf"
+    assert job["status"] == "succeeded"
+    assert job["chunk_count"] == 1
+    assert job["config"]["source"] == "uploaded_file"
+    assert job["created_by"] == "binary-uploader"
+
+    chunks = client.get(f"/api/v1/knowledge/documents/{document['id']}/chunks").json()
+    assert len(chunks) == 1
+    assert chunks[0]["acl_snapshot"]["access_groups"] == ["all-employees"]
+    assert "lines" in chunks[0]["citation_locator"]
+
+
+def test_docx_upload_extracts_text_and_indexes_chunks(client):
+    source = client.post(
+        "/api/v1/knowledge/sources",
+        json={
+            "name": "DOCX Upload Corpus",
+            "description": "DOCX upload corpus.",
+            "owner_department": "Operations",
+        },
+    ).json()
+
+    response = client.post(
+        "/api/v1/knowledge/documents/upload",
+        data={
+            "knowledge_source_id": source["id"],
+            "title": "Travel Policy DOCX",
+            "confidentiality_level": "internal",
+            "access_groups": "all-employees",
+        },
+        files={
+            "file": (
+                "travel-policy.docx",
+                _docx_bytes("Travel Policy", "Travel stipend is fifty dollars per day."),
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            )
+        },
+    )
+
+    assert response.status_code == 201
+    payload = response.json()
+    document = payload["document"]
+    job = payload["index_job"]
+    assert document["mime_type"] == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    )
+    assert document["status"] == "indexed"
+    assert job["status"] == "succeeded"
+    assert job["chunk_count"] >= 1
+
+    chunks = client.get(f"/api/v1/knowledge/documents/{document['id']}/chunks").json()
+    assert len(chunks) >= 1
+    assert chunks[0]["citation_locator"].startswith("Travel Policy DOCX /")
+
+
+def test_binary_upload_rejects_unsupported_mime_type(client):
+    source = client.post(
+        "/api/v1/knowledge/sources",
+        json={
+            "name": "Unsupported Upload Corpus",
+            "description": "Unsupported upload corpus.",
+            "owner_department": "Operations",
+        },
+    ).json()
+
+    response = client.post(
+        "/api/v1/knowledge/documents/upload",
+        data={
+            "knowledge_source_id": source["id"],
+            "title": "Unsupported",
+            "confidentiality_level": "internal",
+            "access_groups": "all-employees",
+        },
+        files={"file": ("unknown.bin", b"unknown", "application/octet-stream")},
+    )
+
+    assert response.status_code == 415
+    assert response.json()["detail"] == "Unsupported file type"
+
+
 def test_index_job_fails_closed_for_missing_acl(client):
     source_response = client.post(
         "/api/v1/knowledge/sources",
@@ -517,3 +633,54 @@ def test_document_registration_rejects_unknown_source(client):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Knowledge source not found"
+
+
+def _docx_bytes(heading: str, paragraph: str) -> bytes:
+    from io import BytesIO
+
+    from docx import Document
+
+    document = Document()
+    document.add_heading(heading, level=1)
+    document.add_paragraph(paragraph)
+    buffer = BytesIO()
+    document.save(buffer)
+    return buffer.getvalue()
+
+
+def _minimal_pdf_bytes(lines: list[str]) -> bytes:
+    text_ops = ["BT", "/F1 18 Tf", "72 720 Td"]
+    for index, line in enumerate(lines):
+        if index:
+            text_ops.append("0 -24 Td")
+        safe_line = line.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
+        text_ops.append(f"({safe_line}) Tj")
+    text_ops.append("ET")
+    stream = "\n".join(text_ops).encode("latin-1")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
+        b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n"
+        + stream
+        + b"\nendstream",
+    ]
+    output = bytearray(b"%PDF-1.4\n")
+    offsets = [0]
+    for object_index, obj in enumerate(objects, start=1):
+        offsets.append(len(output))
+        output.extend(f"{object_index} 0 obj\n".encode("ascii"))
+        output.extend(obj)
+        output.extend(b"\nendobj\n")
+    xref_at = len(output)
+    output.extend(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    output.extend(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        output.extend(f"{offset:010d} 00000 n \n".encode("ascii"))
+    output.extend(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\n"
+        f"startxref\n{xref_at}\n%%EOF\n".encode("ascii")
+    )
+    return bytes(output)

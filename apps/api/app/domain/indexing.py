@@ -13,7 +13,13 @@ from sqlalchemy.orm import Session
 from app.core.principal import Principal
 from app.domain.acl import confidentiality_rank, document_can_be_indexed
 from app.domain.models import Document, DocumentChunk, IndexJob
-from app.domain.parsers import parse_txt_md_document
+from app.domain.parsers import (
+    SUPPORTED_BINARY_MIME_TYPES,
+    DocumentExtractionError,
+    chunker_mime_type_for,
+    extract_text_from_bytes,
+    parse_txt_md_document,
+)
 from app.domain.vector import VectorUpsertInput, get_vector_store
 from app.infra.audit import write_audit_event
 
@@ -23,8 +29,9 @@ def run_index_job(
     db: Session,
     document: Document,
     job: IndexJob,
-    source_text: str,
     principal: Principal,
+    source_text: str | None = None,
+    source_bytes: bytes | None = None,
 ) -> None:
     """Execute the index job pipeline and record its state transitions.
 
@@ -60,18 +67,54 @@ def run_index_job(
         return
 
     try:
+        text_for_chunking = _source_text_for_index(
+            document=document,
+            source_text=source_text,
+            source_bytes=source_bytes,
+        )
         parsed_chunks = parse_txt_md_document(
             document_id=document.id,
             document_version=document.effective_date or "v0",
             title=document.title,
-            mime_type=document.mime_type,
-            source_text=source_text or "",
+            mime_type=chunker_mime_type_for(document.mime_type),
+            source_text=text_for_chunking,
             chunk_size=int(chunking.get("chunk_size", 900)),
         )
+    except DocumentExtractionError as exc:
+        job.status = "failed"
+        job.error_code = exc.code
+        job.error_message = str(exc)
+        job.finished_at = datetime.now(UTC)
+        document.status = "index_failed"
+        write_audit_event(
+            db,
+            principal=principal,
+            event_type="document.index_failed",
+            target_type="document",
+            target_id=document.id,
+            payload={"index_job_id": job.id, "error_code": job.error_code},
+        )
+        return
     except ValueError as exc:
         job.status = "failed"
         job.error_code = "UNSUPPORTED_MIME_TYPE"
         job.error_message = str(exc)
+        job.finished_at = datetime.now(UTC)
+        document.status = "index_failed"
+        write_audit_event(
+            db,
+            principal=principal,
+            event_type="document.index_failed",
+            target_type="document",
+            target_id=document.id,
+            payload={"index_job_id": job.id, "error_code": job.error_code},
+        )
+        return
+
+    if not parsed_chunks:
+        job.status = "failed"
+        job.error_code = "EMPTY_EXTRACTED_TEXT"
+        job.error_message = "Document content did not produce any indexable chunks."
         job.finished_at = datetime.now(UTC)
         document.status = "index_failed"
         write_audit_event(
@@ -166,3 +209,17 @@ def run_index_job(
         target_id=document.id,
         payload={"index_job_id": job.id, "chunk_count": job.chunk_count},
     )
+
+
+def _source_text_for_index(
+    *,
+    document: Document,
+    source_text: str | None,
+    source_bytes: bytes | None,
+) -> str:
+    if document.mime_type in SUPPORTED_BINARY_MIME_TYPES:
+        return extract_text_from_bytes(
+            mime_type=document.mime_type,
+            content=source_bytes or b"",
+        )
+    return source_text or ""

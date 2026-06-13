@@ -43,8 +43,72 @@ def test_plain_text_parser_is_deterministic():
 
     assert [chunk.chunk_id for chunk in first] == [chunk.chunk_id for chunk in second]
     assert [chunk.content_hash for chunk in first] == [chunk.content_hash for chunk in second]
-    assert first[0].citation_locator == "Holiday Policy / body / lines 1-1"
-    assert first[1].citation_locator == "Holiday Policy / body / lines 3-3"
+    # Small paragraphs in the same (body) section now accumulate into one chunk up
+    # to the token target, spanning the merged line range.
+    assert len(first) == 1
+    assert first[0].citation_locator == "Holiday Policy / body / lines 1-3"
+    assert "First paragraph." in first[0].content
+    assert "Second paragraph for citation." in first[0].content
+
+
+def test_token_window_overlaps_adjacent_chunks_within_section():
+    # 12 single-word lines in one body section; small target/overlap forces multiple
+    # windows that must share boundary words.
+    words = [f"w{n}" for n in range(1, 13)]
+    source_text = "\n".join(words)
+    chunks = parse_txt_md_document(
+        document_id="doc-overlap",
+        document_version="v0",
+        title="Window Doc",
+        mime_type="text/plain",
+        source_text=source_text,
+        target_tokens=5,
+        overlap_tokens=2,
+    )
+
+    assert len(chunks) > 1
+    # step = target - overlap = 3, so chunk0 = w1..w5, chunk1 = w4..w8 -> w4,w5 shared.
+    first_words = chunks[0].content.split()
+    second_words = chunks[1].content.split()
+    shared = set(first_words) & set(second_words)
+    assert shared, "adjacent chunks must share overlap words"
+    assert {"w4", "w5"} <= shared
+
+
+def test_chunker_does_not_overlap_across_heading_boundary():
+    chunks = parse_txt_md_document(
+        document_id="doc-bound",
+        document_version="v0",
+        title="Bounded Doc",
+        mime_type="text/markdown",
+        source_text="# A\n\nalpha beta gamma\n\n# B\n\ndelta epsilon zeta",
+        target_tokens=2,
+        overlap_tokens=1,
+    )
+
+    a_words = {"alpha", "beta", "gamma"}
+    b_words = {"delta", "epsilon", "zeta"}
+    for chunk in chunks:
+        cw = set(chunk.content.split())
+        assert not (cw & a_words and cw & b_words), "overlap leaked across heading boundary"
+
+
+def test_oversized_section_splits_into_windows():
+    source_text = " ".join(f"t{n}" for n in range(1, 31))  # 30 words on one line
+    kwargs = {
+        "document_id": "doc-big",
+        "document_version": "v0",
+        "title": "Big Doc",
+        "mime_type": "text/plain",
+        "source_text": source_text,
+        "target_tokens": 10,
+        "overlap_tokens": 2,
+    }
+    chunks = parse_txt_md_document(**kwargs)
+
+    assert len(chunks) >= 3
+    again = parse_txt_md_document(**kwargs)
+    assert [c.chunk_id for c in chunks] == [c.chunk_id for c in again]
 
 
 def test_parser_rejects_unsupported_mime_type():

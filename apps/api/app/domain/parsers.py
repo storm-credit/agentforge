@@ -5,7 +5,7 @@ from io import BytesIO
 
 
 PARSER_VERSION = "txt-md-parser/0.1.0"
-CHUNKER_VERSION = "line-heading-chunker/0.1.0"
+CHUNKER_VERSION = "token-window-overlap-chunker/0.2.0"
 SUPPORTED_TEXT_MIME_TYPES = {"text/plain", "text/markdown", "text/x-markdown"}
 PDF_MIME_TYPE = "application/pdf"
 DOCX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -48,8 +48,18 @@ def parse_txt_md_document(
     title: str,
     mime_type: str,
     source_text: str,
-    chunk_size: int = 900,
+    chunk_size: int = 900,  # deprecated: retained for call-site compatibility, unused
+    target_tokens: int = 320,
+    overlap_tokens: int = 50,
 ) -> list[ParsedChunk]:
+    """Chunk text with a heading-bounded sliding token (eojeol) window.
+
+    Words within one heading section accumulate up to ``target_tokens``; adjacent
+    chunks overlap by ``overlap_tokens`` so evidence is not lost at boundaries. The
+    window never crosses a heading boundary, preserving ``section_path`` and the
+    line-range citation locator. Token counts use the whitespace-word proxy
+    (``len(text.split())``) — see the chunk-overlap design doc for the caveat.
+    """
     if mime_type not in SUPPORTED_TEXT_MIME_TYPES:
         raise ValueError(f"Unsupported text parser MIME type: {mime_type}")
 
@@ -58,57 +68,76 @@ def parse_txt_md_document(
     is_markdown = mime_type in {"text/markdown", "text/x-markdown"}
     chunks: list[ParsedChunk] = []
     heading_path: list[str] = []
-    block_lines: list[str] = []
-    block_start = 0
-    block_heading_path: tuple[str, ...] = ()
+    section_words: list[tuple[str, int]] = []
+    section_heading_path: tuple[str, ...] = ()
 
-    def flush_block(end_line: int) -> None:
-        nonlocal block_lines, block_start, block_heading_path
-        content = "\n".join(line.strip() for line in block_lines).strip()
-        if not content:
-            block_lines = []
-            block_start = 0
-            block_heading_path = ()
-            return
-
-        for segment in _split_oversized_content(content, chunk_size):
-            chunk_index = len(chunks)
-            chunks.append(
-                _build_chunk(
-                    document_id=document_id,
-                    document_version=document_version,
-                    title=title,
-                    chunk_index=chunk_index,
-                    content=segment,
-                    line_start=block_start,
-                    line_end=end_line,
-                    section_path=block_heading_path,
-                )
-            )
-
-        block_lines = []
-        block_start = 0
-        block_heading_path = ()
+    def flush_section() -> None:
+        nonlocal section_words
+        _emit_window_chunks(
+            chunks=chunks,
+            document_id=document_id,
+            document_version=document_version,
+            title=title,
+            section_path=section_heading_path,
+            words=section_words,
+            target_tokens=target_tokens,
+            overlap_tokens=overlap_tokens,
+        )
+        section_words = []
 
     for line_number, raw_line in enumerate(lines, start=1):
         heading = _parse_markdown_heading(raw_line) if is_markdown else None
         if heading is not None:
-            flush_block(line_number - 1)
+            flush_section()
             level, text = heading
             heading_path = heading_path[: level - 1] + [text]
             continue
 
         if not raw_line.strip():
-            flush_block(line_number - 1)
             continue
 
-        if not block_lines:
-            block_start = line_number
-            block_heading_path = tuple(heading_path)
-        block_lines.append(raw_line)
+        if not section_words:
+            section_heading_path = tuple(heading_path)
+        section_words.extend((word, line_number) for word in raw_line.split())
 
-    flush_block(len(lines))
+    flush_section()
     return chunks
+
+
+def _emit_window_chunks(
+    *,
+    chunks: list[ParsedChunk],
+    document_id: str,
+    document_version: str,
+    title: str,
+    section_path: tuple[str, ...],
+    words: list[tuple[str, int]],
+    target_tokens: int,
+    overlap_tokens: int,
+) -> None:
+    n = len(words)
+    if n == 0:
+        return
+    target = max(1, target_tokens)
+    step = max(1, target - max(0, overlap_tokens))
+    i = 0
+    while i < n:
+        window = words[i : i + target]
+        chunks.append(
+            _build_chunk(
+                document_id=document_id,
+                document_version=document_version,
+                title=title,
+                chunk_index=len(chunks),
+                content=" ".join(word for word, _ in window),
+                line_start=window[0][1],
+                line_end=window[-1][1],
+                section_path=section_path,
+            )
+        )
+        if i + target >= n:
+            break
+        i += step
 
 
 def extract_text_from_bytes(
@@ -229,24 +258,6 @@ def _parse_markdown_heading(line: str) -> tuple[int, str] | None:
 
 def _sha256(value: str) -> str:
     return "sha256-" + hashlib.sha256(value.encode("utf-8")).hexdigest()
-
-
-def _split_oversized_content(content: str, chunk_size: int) -> list[str]:
-    if len(content) <= chunk_size:
-        return [content]
-
-    segments: list[str] = []
-    remaining = content
-    while len(remaining) > chunk_size:
-        split_at = remaining.rfind(" ", 0, chunk_size)
-        if split_at < max(chunk_size // 2, 1):
-            split_at = chunk_size
-        segments.append(remaining[:split_at].strip())
-        remaining = remaining[split_at:].strip()
-
-    if remaining:
-        segments.append(remaining)
-    return segments
 
 
 def _decode_text(content: bytes) -> str:

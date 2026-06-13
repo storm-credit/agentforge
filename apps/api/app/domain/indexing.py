@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.core.principal import Principal
 from app.domain.acl import confidentiality_rank, document_can_be_indexed
 from app.domain.models import Document, DocumentChunk, IndexJob
@@ -39,10 +40,14 @@ def run_index_job(
     ``job.config`` (populated at creation time) so the worker is independent of the
     request payload.
     """
+    settings = get_settings()
     config = job.config or {}
     chunking = config.get("chunking") or {}
     embedding_model = config.get("embedding_model", "none-smoke")
     force_reindex = bool(config.get("force_reindex", False))
+    target_tokens = int(chunking.get("target_tokens", settings.chunk_target_tokens))
+    overlap_tokens = int(chunking.get("overlap_tokens", settings.chunk_overlap_tokens))
+    overlap_tokens = max(0, min(overlap_tokens, target_tokens - 1))
 
     job.started_at = datetime.now(UTC)
     job.status = "running"
@@ -78,7 +83,8 @@ def run_index_job(
             title=document.title,
             mime_type=chunker_mime_type_for(document.mime_type),
             source_text=text_for_chunking,
-            chunk_size=int(chunking.get("chunk_size", 900)),
+            target_tokens=target_tokens,
+            overlap_tokens=overlap_tokens,
         )
     except DocumentExtractionError as exc:
         job.status = "failed"

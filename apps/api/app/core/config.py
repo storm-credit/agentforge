@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     vector_backend: str = "fake"  # "fake" | "qdrant"
     retrieval_min_score: float = 0.0  # drop retrieval hits below this score (relevance gating)
     grounding_min: float = 0.0  # refuse answers grounded below this score (injection/hallucination guard)
+    chunk_target_tokens: int = 320  # heading-bounded chunk size (eojeol proxy; ~650 subword tokens)
+    chunk_overlap_tokens: int = 50  # sliding-window overlap between chunks (eojeol proxy; ~100 subword)
 
     model_config = SettingsConfigDict(
         env_file=".env",

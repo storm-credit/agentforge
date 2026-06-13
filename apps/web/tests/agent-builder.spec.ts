@@ -6,4 +6,7 @@ test("builder renders guided sections and disables publish until valid", async (
   await expect(page.getByPlaceholder("이름 (예: 사내 도우미)")).toBeVisible();
   await expect(page.getByTestId("publish")).toBeDisabled();
   await expect(page.getByText("게시하면 활성화")).toBeVisible();
+  // generation-parameter (temperature) slider, default 0.2
+  await expect(page.getByTestId("temperature")).toBeVisible();
+  await expect(page.getByTestId("temperature-value")).toHaveText("0.2");
 });

@@ -94,8 +94,13 @@ export async function createAgent(input: {
 }
 
 export async function createVersion(input: {
-  agent_id: string; knowledge_source_ids: string[];
+  agent_id: string; knowledge_source_ids: string[]; temperature?: number;
 }): Promise<{ id: string }> {
+  const config: Record<string, unknown> = {
+    citation_required: true,
+    knowledge_source_ids: input.knowledge_source_ids,
+  };
+  if (input.temperature !== undefined) config.temperature = input.temperature;
   const r = await fetch(`${API_BASE}/agents/versions`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...OPERATOR },
@@ -103,7 +108,7 @@ export async function createVersion(input: {
       agent_id: input.agent_id,
       version: 1,
       status: "draft",
-      config: { citation_required: true, knowledge_source_ids: input.knowledge_source_ids },
+      config,
     }),
   });
   if (!r.ok) throw new Error(`create version failed: ${r.status}`);

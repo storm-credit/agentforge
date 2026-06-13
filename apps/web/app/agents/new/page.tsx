@@ -15,6 +15,7 @@ export default function NewAgentPage() {
   const [name, setName] = useState("");
   const [purpose, setPurpose] = useState("");
   const [department, setDepartment] = useState("");
+  const [temperature, setTemperature] = useState(0.2);
 
   const [sources, setSources] = useState<KnowledgeSource[]>([]);
   const [docCounts, setDocCounts] = useState<Record<string, number>>({});
@@ -63,7 +64,7 @@ export default function NewAgentPage() {
       }
       let vid = versionId;
       if (!vid) {
-        vid = (await createVersion({ agent_id: aid, knowledge_source_ids: [...selected] })).id;
+        vid = (await createVersion({ agent_id: aid, knowledge_source_ids: [...selected], temperature })).id;
         setVersionId(vid);
       }
       await publishVersion(vid);
@@ -131,7 +132,23 @@ export default function NewAgentPage() {
             })}
           </ul>
 
-          <h3 style={{ marginTop: "16px" }}>③ 게시</h3>
+          <h3 style={{ marginTop: "16px" }}>③ 생성 설정</h3>
+          <label style={{ display: "block", fontSize: "14px" }}>
+            답변 성향: <strong data-testid="temperature-value">{temperature.toFixed(1)}</strong>{" "}
+            <span style={{ color: "#64748b" }}>(정확 ↔ 다양)</span>
+            <input
+              type="range" data-testid="temperature" min={0} max={0.7} step={0.1}
+              value={temperature}
+              onChange={(e) => setTemperature(parseFloat(e.target.value))}
+              disabled={published}
+              style={{ display: "block", width: "100%", marginTop: "6px" }}
+            />
+          </label>
+          <p style={{ fontSize: "12px", color: "#64748b", margin: "4px 0 0" }}>
+            근거형 RAG 권장: 낮게(0.2). 상한 0.7로 제한됩니다(환각 통제).
+          </p>
+
+          <h3 style={{ marginTop: "16px" }}>④ 게시</h3>
           <button className="button" data-testid="publish" onClick={onPublish} disabled={!canPublish}>
             {publishing ? "게시 중…" : published ? "게시됨 ✓" : "게시하기"}
           </button>

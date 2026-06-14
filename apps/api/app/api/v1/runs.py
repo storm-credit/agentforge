@@ -21,6 +21,7 @@ from app.domain.schemas import (
     RunStepRead,
 )
 from app.domain.language import resolve_language
+from app.domain.pii import mask_pii
 from app.domain.vector import FakeVectorStore, VectorQuery, VectorSearchResult, build_acl_filter, get_vector_store
 from app.infra.audit import write_audit_event
 from app.services.llm_gateway import ContextBlock, clamp_temperature, clamp_top_p, get_gateway
@@ -204,6 +205,23 @@ def create_run(
                 citations = []
                 run.citations = citations
 
+    # PII masking (defense-in-depth, opt-in): redact known PII patterns from the
+    # final answer before it is persisted/returned. Regex-based and conservative —
+    # deterministic but not exhaustive (natural-language PII is not caught).
+    pii_masked = False
+    if gen_settings.pii_masking_enabled:
+        run.answer, pii_masked = mask_pii(run.answer)
+        # Citation title/locator are derived from document headings and can carry the
+        # same PII — mask them too, or the redaction leaks through a sibling field.
+        masked_citations = []
+        for citation in citations:
+            title, title_changed = mask_pii(citation.get("title"))
+            locator, locator_changed = mask_pii(citation.get("citation_locator"))
+            pii_masked = pii_masked or title_changed or locator_changed
+            masked_citations.append({**citation, "title": title, "citation_locator": locator})
+        citations = masked_citations
+        run.citations = citations
+
     citation_required = bool(agent_version.config.get("citation_required", True))
     citation_validation = validate_run_citations(
         citations,
@@ -216,7 +234,7 @@ def create_run(
         "citation_validation_pass": citation_validation.passed,
         "citation_validation_error_code": citation_validation.error_code,
         "citation_validation_missing_fields": list(citation_validation.missing_fields),
-        "pii_masked": False,
+        "pii_masked": pii_masked,
         "security_finalcheck_pass": citation_validation.passed,
     }
 
@@ -334,12 +352,20 @@ def list_run_retrieval_hits(run_id: str, db: Session = Depends(get_db)) -> list[
     if chunk_ids:
         rows = db.scalars(select(DocumentChunk).where(DocumentChunk.id.in_(chunk_ids)))
         contents = {row.id: row.content for row in rows}
-    return [
-        RetrievalHitRead.model_validate(hit).model_copy(
-            update={"content": contents.get(hit.chunk_id or "")}
-        )
-        for hit in hits
-    ]
+    mask_enabled = get_settings().pii_masking_enabled
+
+    def _read(hit: RetrievalHit) -> RetrievalHitRead:
+        content = contents.get(hit.chunk_id or "")
+        update: dict = {"content": content}
+        if mask_enabled:
+            # Mask content AND the title/locator (heading-derived) so PII does not
+            # leak through a sibling field while content is redacted.
+            update["content"] = mask_pii(content)[0] if content else content
+            update["title"] = mask_pii(hit.title)[0]
+            update["citation_locator"] = mask_pii(hit.citation_locator)[0]
+        return RetrievalHitRead.model_validate(hit).model_copy(update=update)
+
+    return [_read(hit) for hit in hits]
 
 
 def _resolve_agent_version(

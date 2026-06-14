@@ -396,6 +396,169 @@ def test_output_guard_refuses_ungrounded_answer(client, monkeypatch):
         get_settings.cache_clear()
 
 
+def test_run_masks_pii_in_answer_when_enabled(client, monkeypatch):
+    from app.core.config import get_settings
+    from app.services import llm_gateway
+
+    monkeypatch.setenv("AGENT_FORGE_PII_MASKING_ENABLED", "true")
+    get_settings.cache_clear()
+
+    def fake_generate(self, *, question, context, language, temperature=0.2, top_p=None):
+        return llm_gateway.GeneratedAnswer(
+            text="담당자 hong@corp.com 010-1234-5678 로 문의하세요.",
+            used_llm=True,
+            fallback_used=False,
+        )
+
+    monkeypatch.setattr(llm_gateway.LLMGateway, "generate", fake_generate)
+    try:
+        ids = _seed_agent_with_indexed_doc(client)
+        resp = client.post(
+            "/api/v1/runs",
+            json={
+                "agent_id": ids["agent_id"],
+                "input": {"message": "휴가 며칠?"},
+                "knowledge_source_ids": [ids["source_id"]],
+            },
+        )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert "hong@corp.com" not in body["answer"]
+        assert "010-1234-5678" not in body["answer"]
+        assert "[REDACTED:EMAIL]" in body["answer"]
+        assert body["guardrail"]["pii_masked"] is True
+    finally:
+        get_settings.cache_clear()
+
+
+def test_run_does_not_mask_pii_when_disabled(client, monkeypatch):
+    from app.core.config import get_settings
+    from app.services import llm_gateway
+
+    get_settings.cache_clear()  # ensure no leaked masking flag from another test
+
+    def fake_generate(self, *, question, context, language, temperature=0.2, top_p=None):
+        return llm_gateway.GeneratedAnswer(
+            text="담당자 hong@corp.com 로 문의하세요.", used_llm=True, fallback_used=False
+        )
+
+    monkeypatch.setattr(llm_gateway.LLMGateway, "generate", fake_generate)
+    ids = _seed_agent_with_indexed_doc(client)
+    resp = client.post(
+        "/api/v1/runs",
+        json={
+            "agent_id": ids["agent_id"],
+            "input": {"message": "휴가 며칠?"},
+            "knowledge_source_ids": [ids["source_id"]],
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert "hong@corp.com" in body["answer"]
+    assert body["guardrail"]["pii_masked"] is False
+
+
+def test_retrieval_hit_content_masked_when_enabled(client, monkeypatch):
+    from app.core.config import get_settings
+    from app.services import llm_gateway
+
+    monkeypatch.setenv("AGENT_FORGE_PII_MASKING_ENABLED", "true")
+    get_settings.cache_clear()
+
+    def fake_generate(self, *, question, context, language, temperature=0.2, top_p=None):
+        return llm_gateway.GeneratedAnswer(text="확인했습니다.", used_llm=False, fallback_used=True)
+
+    monkeypatch.setattr(llm_gateway.LLMGateway, "generate", fake_generate)
+    try:
+        source = _create_source(client)
+        agent = _create_agent(client)
+        _create_and_publish_version(client, agent_id=agent["id"], source_id=source["id"])
+        doc = _register_document(
+            client,
+            source_id=source["id"],
+            title="연락처 안내",
+            object_uri="object://contact.md",
+            checksum="sha256-contact",
+            access_groups=["all-employees"],
+        )
+        _index_document(
+            client,
+            document_id=doc["id"],
+            source_text="# 연락처\n\n담당자 이메일 hong@corp.com 으로 문의하세요.",
+        )
+        run = client.post(
+            "/api/v1/runs",
+            json={
+                "agent_id": agent["id"],
+                "input": {"message": "연락처 이메일"},
+                "knowledge_source_ids": [source["id"]],
+            },
+        ).json()
+        hits = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits").json()
+        assert hits
+        joined = " ".join((h.get("content") or "") for h in hits)
+        assert "hong@corp.com" not in joined
+        assert "[REDACTED:EMAIL]" in joined
+    finally:
+        get_settings.cache_clear()
+
+
+def test_pii_masked_in_citation_metadata_when_enabled(client, monkeypatch):
+    # Regression for the residual-leak finding: when masking is on, the answer is
+    # masked but PII in the citation title/locator (derived from doc headings) must
+    # be masked too — on both the POST response and the retrieval-hits endpoint.
+    from app.core.config import get_settings
+    from app.services import llm_gateway
+
+    monkeypatch.setenv("AGENT_FORGE_PII_MASKING_ENABLED", "true")
+    get_settings.cache_clear()
+
+    def fake_generate(self, *, question, context, language, temperature=0.2, top_p=None):
+        return llm_gateway.GeneratedAnswer(text="확인했습니다.", used_llm=False, fallback_used=True)
+
+    monkeypatch.setattr(llm_gateway.LLMGateway, "generate", fake_generate)
+    try:
+        source = _create_source(client)
+        agent = _create_agent(client)
+        _create_and_publish_version(client, agent_id=agent["id"], source_id=source["id"])
+        doc = _register_document(
+            client,
+            source_id=source["id"],
+            title="담당자 hong@corp.com 연락처",
+            object_uri="object://contact-pii.md",
+            checksum="sha256-contact-pii",
+            access_groups=["all-employees"],
+        )
+        _index_document(
+            client,
+            document_id=doc["id"],
+            source_text="# 담당자 010-1234-5678\n\n문의 바랍니다.",
+        )
+        run = client.post(
+            "/api/v1/runs",
+            json={
+                "agent_id": agent["id"],
+                "input": {"message": "담당자 연락처"},
+                "knowledge_source_ids": [source["id"]],
+            },
+        ).json()
+        assert run["citations"], "expected at least one citation"
+        cite_blob = " ".join(
+            f"{c.get('title', '')} {c.get('citation_locator', '')}" for c in run["citations"]
+        )
+        assert "hong@corp.com" not in cite_blob
+        assert "010-1234-5678" not in cite_blob
+
+        hits = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits").json()
+        hit_blob = " ".join(
+            f"{h.get('title', '')} {h.get('citation_locator', '')}" for h in hits
+        )
+        assert "hong@corp.com" not in hit_blob
+        assert "010-1234-5678" not in hit_blob
+    finally:
+        get_settings.cache_clear()
+
+
 def test_answer_confidence_gate_refuses_low_score(client, monkeypatch):
     from app.core.config import get_settings
     from app.services import llm_gateway

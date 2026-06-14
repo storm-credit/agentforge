@@ -302,20 +302,22 @@ export type RetrievalHit = {
   acl_filter_snapshot: Record<string, unknown>;
 };
 
+// The Runs page is an operator/admin monitoring view; run reads are owner/admin-scoped
+// server-side, so send the operator identity to see all runs.
 export async function listRuns(): Promise<RunSummary[]> {
-  const r = await fetch(`${API_BASE}/runs`);
+  const r = await fetch(`${API_BASE}/runs`, { headers: { ...OPERATOR } });
   if (!r.ok) throw new Error(`list runs failed: ${r.status}`);
   return r.json();
 }
 
 export async function getRunSteps(runId: string): Promise<RunStep[]> {
-  const r = await fetch(`${API_BASE}/runs/${runId}/steps`);
+  const r = await fetch(`${API_BASE}/runs/${runId}/steps`, { headers: { ...OPERATOR } });
   if (!r.ok) throw new Error(`get steps failed: ${r.status}`);
   return r.json();
 }
 
 export async function getRunHits(runId: string): Promise<RetrievalHit[]> {
-  const r = await fetch(`${API_BASE}/runs/${runId}/retrieval-hits`);
+  const r = await fetch(`${API_BASE}/runs/${runId}/retrieval-hits`, { headers: { ...OPERATOR } });
   if (!r.ok) throw new Error(`get hits failed: ${r.status}`);
   return r.json();
 }

@@ -112,12 +112,16 @@ def test_runtime_run_records_steps_hits_and_acl_trace(client):
     assert run["citations"][0]["chunk_id"]
     assert run["answer"]  # fallback or LLM answer — non-empty
 
-    detail_response = client.get(f"/api/v1/runs/{run['id']}")
+    detail_response = client.get(
+        f"/api/v1/runs/{run['id']}", headers={"X-Agent-Forge-User": "finance-user"}
+    )
 
     assert detail_response.status_code == 200
     assert detail_response.json()["id"] == run["id"]
 
-    steps_response = client.get(f"/api/v1/runs/{run['id']}/steps")
+    steps_response = client.get(
+        f"/api/v1/runs/{run['id']}/steps", headers={"X-Agent-Forge-User": "finance-user"}
+    )
 
     assert steps_response.status_code == 200
     steps = steps_response.json()
@@ -133,7 +137,9 @@ def test_runtime_run_records_steps_hits_and_acl_trace(client):
     assert steps[3]["status"] == "succeeded"
     assert steps[3]["output_summary"]["passed"] is True
 
-    hits_response = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits")
+    hits_response = client.get(
+        f"/api/v1/runs/{run['id']}/retrieval-hits", headers={"X-Agent-Forge-User": "finance-user"}
+    )
 
     assert hits_response.status_code == 200
     hits = hits_response.json()
@@ -214,7 +220,9 @@ def test_runtime_run_fails_citation_validation_without_authorized_context(client
     assert run["guardrail"]["security_finalcheck_pass"] is False
     assert run["answer"]  # refusal answer — non-empty
 
-    steps_response = client.get(f"/api/v1/runs/{run['id']}/steps")
+    steps_response = client.get(
+        f"/api/v1/runs/{run['id']}/steps", headers={"X-Agent-Forge-User": "finance-user"}
+    )
 
     assert steps_response.status_code == 200
     steps = steps_response.json()
@@ -224,7 +232,9 @@ def test_runtime_run_fails_citation_validation_without_authorized_context(client
     assert citation_step["error_code"] == "NO_CITATION"
     assert citation_step["output_summary"]["passed"] is False
 
-    hits_response = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits")
+    hits_response = client.get(
+        f"/api/v1/runs/{run['id']}/retrieval-hits", headers={"X-Agent-Forge-User": "finance-user"}
+    )
 
     assert hits_response.status_code == 200
     assert hits_response.json() == []
@@ -394,6 +404,45 @@ def test_output_guard_refuses_ungrounded_answer(client, monkeypatch):
         assert guard["output_summary"]["guard_tripped"] is True
     finally:
         get_settings.cache_clear()
+
+
+def test_run_read_scoped_to_owner_or_admin(client):
+    ids = _seed_agent_with_indexed_doc(client)
+    alice = {
+        "X-Agent-Forge-User": "alice",
+        "X-Agent-Forge-Department": "Finance",
+        "X-Agent-Forge-Groups": "all-employees",
+        "X-Agent-Forge-Clearance": "internal",
+    }
+    run = client.post(
+        "/api/v1/runs",
+        headers=alice,
+        json={
+            "agent_id": ids["agent_id"],
+            "input": {"message": "휴가 며칠?"},
+            "knowledge_source_ids": [ids["source_id"]],
+        },
+    ).json()
+    rid = run["id"]
+
+    bob = {"X-Agent-Forge-User": "bob", "X-Agent-Forge-Roles": "employee"}
+    admin = {"X-Agent-Forge-User": "ops", "X-Agent-Forge-Roles": "admin"}
+
+    # owner can read its own run + trace
+    assert client.get(f"/api/v1/runs/{rid}", headers=alice).status_code == 200
+    # a different non-admin user cannot
+    assert client.get(f"/api/v1/runs/{rid}", headers=bob).status_code == 403
+    assert client.get(f"/api/v1/runs/{rid}/steps", headers=bob).status_code == 403
+    assert client.get(f"/api/v1/runs/{rid}/retrieval-hits", headers=bob).status_code == 403
+    # admin can read anyone's run
+    assert client.get(f"/api/v1/runs/{rid}", headers=admin).status_code == 200
+    assert client.get(f"/api/v1/runs/{rid}/retrieval-hits", headers=admin).status_code == 200
+
+    # list is scoped: bob doesn't see alice's run; admin does
+    bob_ids = [r["id"] for r in client.get("/api/v1/runs", headers=bob).json()]
+    admin_ids = [r["id"] for r in client.get("/api/v1/runs", headers=admin).json()]
+    assert rid not in bob_ids
+    assert rid in admin_ids
 
 
 def test_run_masks_pii_in_answer_when_enabled(client, monkeypatch):
@@ -677,7 +726,9 @@ def test_run_falls_back_to_fake_when_vector_store_errors(client, monkeypatch):
     assert resp.status_code == 201
     run = resp.json()
 
-    steps = client.get(f"/api/v1/runs/{run['id']}/steps").json()
+    steps = client.get(
+        f"/api/v1/runs/{run['id']}/steps", headers={"X-Agent-Forge-User": "ops-user"}
+    ).json()
     retriever = next(s for s in steps if s["step_type"] == "retriever")
     assert retriever["output_summary"]["vector_adapter"] == "fake_fallback"
     assert retriever["output_summary"]["degraded"] is True
@@ -718,7 +769,9 @@ def test_retrieval_hits_include_chunk_content(client):
     assert run_response.status_code == 201
     run = run_response.json()
 
-    hits_response = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits")
+    hits_response = client.get(
+        f"/api/v1/runs/{run['id']}/retrieval-hits", headers={"X-Agent-Forge-User": "ops-user"}
+    )
     assert hits_response.status_code == 200
     hits = hits_response.json()
 

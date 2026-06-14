@@ -157,30 +157,52 @@ def create_run(
         agent_version.config.get("temperature", gen_settings.llm_temperature)
     )
     gen_top_p = clamp_top_p(agent_version.config.get("top_p", gen_settings.llm_top_p))
-    generated = get_gateway().generate(
-        question=payload.input.message,
-        context=context_blocks,
-        language=answer_language,
-        temperature=gen_temperature,
-        top_p=gen_top_p,
-    )
-    run.answer = generated.text
-    run.citations = citations
-    run.retrieval_denied_count = vector_result.denied_count
 
-    # Output guard: an LLM answer that is not grounded in the retrieved context
-    # (e.g. a prompt-injection hijack) is replaced with a safe refusal.
+    # Answer-confidence gate (refusal discipline): if the best retrieval score is below
+    # answer_min_score, the retrieved context is too weak to answer on — refuse instead of
+    # answering from a loosely-related accessible document. Separate from retrieval_min_score
+    # (which controls what enters context). Default 0.0 = off (no behaviour change).
+    top_score = max((hit.score for hit in vector_result.hits), default=0.0)
+    confidence_ok = top_score >= gen_settings.answer_min_score
     grounding = None
     guard_tripped = False
-    if generated.used_llm and context_blocks:
-        grounding = grounding_score(
-            run.answer, "\n".join(block.content for block in context_blocks)
+    confidence_gate_tripped = False
+
+    if not confidence_ok:
+        confidence_gate_tripped = True
+        run.answer = _guard_refusal(answer_language)
+        citations = []
+        run.citations = citations
+        run.retrieval_denied_count = vector_result.denied_count
+
+        class _Refused:
+            used_llm = False
+            fallback_used = False
+
+        generated = _Refused()
+    else:
+        generated = get_gateway().generate(
+            question=payload.input.message,
+            context=context_blocks,
+            language=answer_language,
+            temperature=gen_temperature,
+            top_p=gen_top_p,
         )
-        if grounding < gen_settings.grounding_min:
-            guard_tripped = True
-            run.answer = _guard_refusal(answer_language)
-            citations = []
-            run.citations = citations
+        run.answer = generated.text
+        run.citations = citations
+        run.retrieval_denied_count = vector_result.denied_count
+
+        # Output guard: an LLM answer that is not grounded in the retrieved context
+        # (e.g. a prompt-injection hijack) is replaced with a safe refusal.
+        if generated.used_llm and context_blocks:
+            grounding = grounding_score(
+                run.answer, "\n".join(block.content for block in context_blocks)
+            )
+            if grounding < gen_settings.grounding_min:
+                guard_tripped = True
+                run.answer = _guard_refusal(answer_language)
+                citations = []
+                run.citations = citations
 
     citation_required = bool(agent_version.config.get("citation_required", True))
     citation_validation = validate_run_citations(
@@ -238,6 +260,8 @@ def create_run(
             "citation_count": len(citations),
             "grounding_score": grounding,
             "guard_tripped": guard_tripped,
+            "top_score": round(top_score, 4),
+            "confidence_gate_tripped": confidence_gate_tripped,
         },
         status="succeeded" if citation_validation.passed else "failed",
         error_code=citation_validation.error_code,

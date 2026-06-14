@@ -72,9 +72,14 @@ def _pct(numerator: int, denominator: int) -> float:
 
 def aggregate(scores: list[CaseScore]) -> dict:
     answer_cases = [s for s in scores if s.expected_behavior == "answer"]
+    deny_cases = [s for s in scores if s.expected_behavior in ("policy_denied", "refuse")]
     return {
         "total": len(scores),
+        # acl_pass_pct conflates security (no leak) with refusal discipline (no over-answer);
+        # keep it for continuity but report the two split metrics below.
         "acl_pass_pct": _pct(sum(1 for s in scores if s.acl_ok), len(scores)),
+        "leak_free_pct": _pct(sum(1 for s in scores if s.no_leak), len(scores)),
+        "refusal_discipline_pct": _pct(sum(1 for s in deny_cases if s.behavior_ok), len(deny_cases)),
         "citation_pct": _pct(sum(1 for s in answer_cases if s.citation_ok), len(answer_cases)),
         "useful_answer_pct": _pct(sum(1 for s in answer_cases if s.useful), len(answer_cases)),
         "cases": [

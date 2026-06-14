@@ -7,8 +7,10 @@
 1. **한 슬라이스 단위로 진행**: brainstorming → writing-plans → subagent-driven-development(TDD) → finishing-a-development-branch(push + PR + merge). 슬라이스는 작게, 백엔드/프론트 무관 영향 최소.
 2. **매 작업(슬라이스)이 끝날 때마다, 턴 마지막에 "다음 작업 핸드오프 프롬프트"를 작성한다.** 새 세션에 그대로 붙여 실행 가능한 자기완결형이어야 하고 다음을 포함:
    - 배경(머지된 PR 요약)·목표·범위(YAGNI)·완료 기준
+   - **남은 작업 체크**: 코드로 닫을 수 있는 유한 백로그 목록 + 진행률(예: "남은 코드 슬라이스 3/4"), 그리고 비코드 의존(SSO·실문서·폐쇄망·사내모델 등 내가 못 끝내는 것) 구분.
    - 활용할 도구: superpowers 스킬 체인, agentmemory MCP(recall/remember), 필요 시 subagent/Workflow 하네스, security-review·requesting-code-review, WebSearch 리서치, eval 하네스 재측정
    - 아래 "환경/겟차" 전부
+   - **완결 조건**: 코드로 닫을 수 있는 백로그가 비면 다음 프롬프트를 만들지 말고 **"코드 완결"을 선언**한다(남은 건 비코드 의존이라고 명시). 무한히 새 작업을 만들어내지 않는다.
 3. **정직 우선**: 테스트·검증 결과를 있는 그대로. 측정 안 한 건 "안 했다"고. 약점/한계 명시.
 4. **품질을 측정으로 입증**: 검색·답변 품질 변경은 `eval/harness/run_live_eval.py`로 before/after 수치. 보안 변경은 라이브 재현 + 가능하면 적대적 스윕.
 

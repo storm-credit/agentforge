@@ -92,3 +92,28 @@ PATCH .../{doc}/acl {access_groups:[department:HR], confidentiality_level:intern
 - `audit_event`에 acl 변경 기록(reason).
 - pytest 풀스위트 그린(.env 옆으로; baseline 81). ruff 클린. security-review(ACL 경로).
 - 라이브: 회수 전/후 retrieval-hits 차이 + 감사 기록 확인.
+
+## Live verification (2026-06-14, 실 Qdrant + bge-m3)
+
+스택: `agentforge-ollama` + `compose-postgres-1`(agentforge_mvp2) + `compose-qdrant-1`,
+`.env` = qdrant + bge-m3 + `AGENT_FORGE_RETRIEVAL_MIN_SCORE=0.53`. API 재기동(--reload 없음).
+
+**시나리오:** 문서 `Quarterly Reimbursement Policy` 등록→색인(1 chunk, all-employees, internal).
+질의 `"travel reimbursement receipts"`로 retrieval/preview.
+
+| 단계 | principal | hits | denied_count |
+|------|-----------|------|--------------|
+| 회수 전 | 기본(group `all-employees`) | `[Quarterly Reimbursement Policy]` | 0 |
+| `PATCH .../acl` → `["department:HR"]`, reason 기록 | acl-admin | access_groups=`["department:HR"]` | — |
+| 회수 후 | 기본(group `all-employees`) | `[]` | **1** |
+| 회수 후 | HR(group `department:HR`) | `[Quarterly Reimbursement Policy]` | 0 |
+
+**결론(정직):** 같은 사용자가 회수 즉시 검색/인용에서 제외(0→denied), HR 사용자는 새로 노출 —
+삭제가 아니라 실제 Qdrant payload의 ACL 교체임이 입증됨. in-query payload 필터라 재임베딩 불필요.
+검색 신호는 결정적이라 신뢰 가능.
+
+**감사 기록(Postgres `audit_events`):**
+`document.acl_changed` | actor=`acl-admin` | reason=`"Live verify: revoke from all-employees to HR-only"` |
+before=`["all-employees"]` → after=`["department:HR"]` | `chunks_synced=1`.
+
+**측정 범위:** 단일 문서/단일 chunk 라이브 1회 + 인메모리 계약/단위테스트(qdrant `:memory:`). 적대적 스윕은 미수행.

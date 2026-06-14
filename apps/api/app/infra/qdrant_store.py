@@ -230,3 +230,38 @@ class QdrantVectorStore:
                 )
             ),
         )
+
+    def set_document_acl(
+        self, document_id: str, *, access_groups: tuple[str, ...], confidentiality_rank: int
+    ) -> int:
+        """Update the ACL payload fields for every chunk of a document.
+
+        ACL is enforced as an in-query payload filter, so a payload update takes
+        effect on the next search with no re-embedding. Returns the number of
+        affected points.
+        """
+        if not self._client.collection_exists(self._collection):
+            return 0
+        selector = qm.Filter(
+            must=[
+                qm.FieldCondition(
+                    key="document_id", match=qm.MatchValue(value=document_id)
+                )
+            ]
+        )
+        affected = self._client.count(
+            collection_name=self._collection,
+            count_filter=selector,
+            exact=True,
+        ).count
+        if affected == 0:
+            return 0
+        self._client.set_payload(
+            collection_name=self._collection,
+            payload={
+                "access_groups": list(access_groups),
+                "confidentiality_rank": confidentiality_rank,
+            },
+            points=selector,
+        )
+        return affected

@@ -143,6 +143,39 @@ def test_qdrant_delete_document_removes_hits():
     assert result.hits == ()
 
 
+def test_set_document_acl_updates_payload_and_revokes_access():
+    store = _store()
+    _upsert(store, chunk_id="d:1", document_id="d", content="finance policy",
+            title="Finance", groups=("all-employees",), rank=1)
+
+    # visible before revocation
+    before = store.search(
+        query=VectorQuery(query_text="finance policy", top_k=10),
+        documents=[],
+        acl_filter=build_acl_filter(_principal()),
+    )
+    assert [h.document_id for h in before.hits] == ["d"]
+
+    # revoke: replace groups with one the principal is not in
+    updated = store.set_document_acl(
+        "d", access_groups=("department:HR",), confidentiality_rank=1
+    )
+    assert updated == 1
+
+    after = store.search(
+        query=VectorQuery(query_text="finance policy", top_k=10),
+        documents=[],
+        acl_filter=build_acl_filter(_principal()),
+    )
+    assert after.hits == ()
+
+
+def test_set_document_acl_missing_collection_returns_zero():
+    client = QdrantClient(":memory:")
+    store = QdrantVectorStore(client=client, embed=_stub_embed, dim=4, collection="chunks_active")
+    assert store.set_document_acl("nope", access_groups=("x",), confidentiality_rank=1) == 0
+
+
 def test_qdrant_returns_citation_and_chunk_metadata():
     store = _store()
     _upsert(store, chunk_id="d:1", document_id="d", content="finance policy", title="Finance")

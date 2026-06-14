@@ -88,12 +88,18 @@ class VectorStore(Protocol):
     def delete_document(self, document_id: str) -> None:
         ...
 
+    def set_document_acl(
+        self, document_id: str, *, access_groups: tuple[str, ...], confidentiality_rank: int
+    ) -> int:
+        ...
+
 
 class FakeVectorStore:
     """Deterministic lexical adapter used until a real vector backend is wired."""
 
     def __init__(self) -> None:
         self._deleted_document_ids: set[str] = set()
+        self._acl_updates: dict[str, tuple[tuple[str, ...], int]] = {}
 
     def upsert_chunks(self, chunks: Sequence[VectorUpsertInput]) -> tuple[VectorUpsertResult, ...]:
         return tuple(
@@ -140,6 +146,15 @@ class FakeVectorStore:
 
     def delete_document(self, document_id: str) -> None:
         self._deleted_document_ids.add(document_id)
+
+    def set_document_acl(
+        self, document_id: str, *, access_groups: tuple[str, ...], confidentiality_rank: int
+    ) -> int:
+        # The fake reads the live Document for search, so this only records the
+        # call so callers/tests can assert it fired. The affected chunk count is
+        # unknown to the fake, so it reports 0 (live Postgres state is authoritative).
+        self._acl_updates[document_id] = (tuple(access_groups), confidentiality_rank)
+        return 0
 
 
 def build_acl_filter(principal: Principal) -> AclFilter:

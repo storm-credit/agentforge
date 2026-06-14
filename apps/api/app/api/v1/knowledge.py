@@ -18,8 +18,10 @@ from app.domain.parsers import (
     SUPPORTED_DOCUMENT_MIME_TYPES,
     SUPPORTED_TEXT_MIME_TYPES,
 )
-from app.domain.vector import FakeVectorStore, VectorQuery, build_acl_filter
+from app.domain.acl import CONFIDENTIALITY_RANK, confidentiality_rank
+from app.domain.vector import FakeVectorStore, VectorQuery, build_acl_filter, get_vector_store
 from app.domain.schemas import (
+    DocumentAclUpdate,
     DocumentCreate,
     DocumentChunkRead,
     DocumentRead,
@@ -93,6 +95,71 @@ def register_document(
             "knowledge_source_id": document.knowledge_source_id,
             "title": document.title,
             "confidentiality_level": document.confidentiality_level,
+        },
+    )
+    db.commit()
+    db.refresh(document)
+    return document
+
+
+@router.patch("/documents/{document_id}/acl", response_model=DocumentRead)
+def update_document_acl(
+    document_id: str,
+    payload: DocumentAclUpdate,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> Document:
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    if payload.confidentiality_level.lower() not in CONFIDENTIALITY_RANK:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Unknown confidentiality_level",
+        )
+
+    before = {
+        "access_groups": list(document.access_groups),
+        "confidentiality_level": document.confidentiality_level,
+    }
+    new_groups = list(dict.fromkeys(g.strip() for g in payload.access_groups if g.strip()))
+    if not new_groups:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="access_groups must not be empty",
+        )
+
+    document.access_groups = new_groups
+    document.confidentiality_level = payload.confidentiality_level.lower()
+    rank = confidentiality_rank(document.confidentiality_level)
+
+    for chunk in document.chunks:
+        snapshot = dict(chunk.acl_snapshot or {})
+        snapshot["access_groups"] = new_groups
+        snapshot["confidentiality_level"] = document.confidentiality_level
+        chunk.acl_snapshot = snapshot
+
+    db.flush()
+    # Fail-closed: if Qdrant sync raises, the whole request rolls back.
+    chunks_synced = get_vector_store().set_document_acl(
+        document.id, access_groups=tuple(new_groups), confidentiality_rank=rank
+    )
+
+    write_audit_event(
+        db,
+        principal=principal,
+        event_type="document.acl_changed",
+        target_type="document",
+        target_id=document.id,
+        reason=payload.reason,
+        payload={
+            "before": before,
+            "after": {
+                "access_groups": new_groups,
+                "confidentiality_level": document.confidentiality_level,
+            },
+            "chunks_synced": chunks_synced,
         },
     )
     db.commit()

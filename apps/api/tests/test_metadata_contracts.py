@@ -138,6 +138,31 @@ def test_agent_and_version_contract(client):
     assert listed_agents[0]["status"] == "published"
 
 
+def test_agent_versions_autonumber_on_create(client):
+    agent = client.post(
+        "/api/v1/agents",
+        json={
+            "name": "Versioned Assistant",
+            "purpose": "Auto-number versions.",
+            "owner_department": "Operations",
+        },
+    ).json()
+
+    first = client.post(
+        "/api/v1/agents/versions",
+        json={"agent_id": agent["id"], "config": {"citation_required": True}},
+    )
+    second = client.post(
+        "/api/v1/agents/versions",
+        json={"agent_id": agent["id"], "config": {"citation_required": True}},
+    )
+
+    assert first.status_code == 201
+    assert second.status_code == 201
+    assert first.json()["version"] == 1
+    assert second.json()["version"] == 2
+
+
 def test_knowledge_source_and_document_contract(client):
     source_response = client.post(
         "/api/v1/knowledge/sources",

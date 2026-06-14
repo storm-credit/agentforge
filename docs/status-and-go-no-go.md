@@ -46,7 +46,7 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 | Agent Registry(API/DB) | ✅ | `agents.py`, 버전 라이프사이클 draft→validated→published |
 | Model Gateway | ✅ | `llm_gateway.py` OpenAI 호환(env로 사내 vLLM 이식) |
 | Runtime Orchestrator | ✅ | `runs.py`: 질문→검색→생성→검증→로그, 트레이스 |
-| Agent Studio UI | 🟡 | 생성/연결/게시/테스트 + 버전 validate/publish UI(PR #23). **"새 버전 생성(v2)" 미구현** |
+| Agent Studio UI | ✅ | 생성/연결/게시/테스트 + 버전 validate/publish + **새 버전 생성(자동 채번 v2,v3…)** (PR #23, #28) |
 | Audit Log | ✅ | 실행/정책 이벤트 기록 |
 
 ### WS5 QA/파일럿/운영
@@ -72,11 +72,11 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 | 사내 모델(Qwen3.6:35B) + cross-encoder 가용 | 인프라/AI | rerank·LLM-judge·query rewrite → **거부 규율 66.7%→개선**, useful 재측정. 옵션·추천: [research-reranking-options.md](research-reranking-options.md) |
 | 폐쇄망 staging 환경(EP-07) | DevOps | 실배포·운영 전환 |
 
-## 내가 결정 없이 코드로 닫을 수 있는 것 (🔧)
-1. **버전 자동증가 + "새 버전 생성" UI** — 빌더의 명백한 구멍(현재 v2 불가). 작음.
-2. **GET 엔드포인트 인가(principal 스코프)** — `/runs` 등 무인증. SSO 없이 코드로 가능.
+## 내가 결정 없이 코드로 닫을 수 있는 것 (🔧) — 진행률 1/4
+1. ✅ **버전 자동증가 + "새 버전 생성" UI** (PR #28) — 서버가 max+1 채번, 상세 페이지에서 새 draft 생성. 완료.
+2. **GET 엔드포인트 인가(principal 스코프)** — `/runs` 등 무인증. SSO 없이 코드로 가능. ← 다음
 3. MinIO 객체저장소 배선 + 비동기 인제스트(AF-009) — 컨테이너 이미 있음.
-4. 롤백/버전 디프 뷰 · 프롬프트 인젝션 하드닝 보강 · rerank "인터페이스/스텁"(품질은 모델 의존).
+4. 롤백/버전 디프 뷰 · 프롬프트 인젝션 하드닝 보강 · rerank "인터페이스/스텁"(품질은 모델 의존 — [research-reranking-options.md](research-reranking-options.md)).
 
 ## Go/No-Go 권고
 - **기술 MVP: GO 가능** — 핵심 가치(권한 기반 인용 답변 + 누출 0)가 코드·eval로 성립.

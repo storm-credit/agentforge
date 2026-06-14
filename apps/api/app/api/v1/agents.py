@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -91,7 +91,20 @@ def create_agent_version(
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
-    version = AgentVersion(**payload.model_dump(), created_by=principal.user_id)
+    # Server assigns the next version number (max+1) so callers can't collide on the
+    # (agent_id, version) unique constraint. Any client-supplied version is ignored.
+    current_max = db.scalar(
+        select(func.max(AgentVersion.version)).where(AgentVersion.agent_id == agent.id)
+    )
+    next_version = (current_max or 0) + 1
+
+    version = AgentVersion(
+        agent_id=agent.id,
+        version=next_version,
+        status=payload.status,
+        config=payload.config,
+        created_by=principal.user_id,
+    )
     db.add(version)
     db.flush()
     write_audit_event(

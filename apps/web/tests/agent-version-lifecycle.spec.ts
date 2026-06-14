@@ -18,4 +18,9 @@ test("agent detail shows version lifecycle with validate/publish actions", async
   // a seeded agent has at least one version with a status badge
   await expect(page.getByTestId("version-row").first()).toBeVisible();
   await expect(page.getByTestId("version-status").first()).toBeVisible();
+
+  // creating a new version adds a row (auto-numbered server-side)
+  const before = await page.getByTestId("version-row").count();
+  await page.getByTestId("new-version").click();
+  await expect(page.getByTestId("version-row")).toHaveCount(before + 1);
 });

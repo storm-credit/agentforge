@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     grounding_min: float = 0.0  # refuse answers grounded below this score (injection/hallucination guard)
     chunk_target_tokens: int = 320  # heading-bounded chunk size (eojeol proxy; ~650 subword tokens)
     chunk_overlap_tokens: int = 50  # sliding-window overlap between chunks (eojeol proxy; ~100 subword)
+    pii_masking_enabled: bool = False  # regex-redact PII in answer + returned chunk content (default off)
 
     model_config = SettingsConfigDict(
         env_file=".env",

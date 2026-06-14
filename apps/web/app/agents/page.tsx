@@ -22,11 +22,12 @@ export default function AgentsPage() {
       {error && <p style={{ color: "#b91c1c" }}>{error}</p>}
       <div className="cardGrid" style={{ marginTop: "16px" }}>
         {agents.map((a) => (
-          <article className="card" key={a.id}>
+          <Link className="card" data-testid="agent-card" key={a.id} href={`/agents/${a.id}`}
+            style={{ textDecoration: "none", color: "inherit" }}>
             <h3>{a.name}</h3>
             <p>{a.purpose}</p>
             <p><span className="badge">{a.status}</span> · {a.owner_department}</p>
-          </article>
+          </Link>
         ))}
       </div>
     </section>

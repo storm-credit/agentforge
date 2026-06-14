@@ -32,7 +32,8 @@ class AgentRead(BaseModel):
 
 class AgentVersionCreate(BaseModel):
     agent_id: str
-    version: int = Field(ge=1)
+    # Server-assigned: next number for the agent (max+1). Ignored if supplied.
+    version: int | None = Field(default=None, ge=1)
     status: str = "draft"
     config: dict[str, Any] = Field(default_factory=dict)
 

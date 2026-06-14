@@ -2,6 +2,7 @@
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
 import {
+  createDraftVersion,
   getAgent,
   listVersions,
   publishVersion,
@@ -32,6 +33,21 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
   }
 
   useEffect(refresh, [id]);
+
+  async function onCreateVersion() {
+    setBusyId("new");
+    setError("");
+    try {
+      // Clone the latest version's config as a sensible base for the new draft.
+      const base = versions[0]?.config ?? { citation_required: true };
+      await createDraftVersion(id, base);
+      refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setBusyId(null);
+    }
+  }
 
   async function act(versionId: string, action: "validate" | "publish") {
     setBusyId(versionId);
@@ -66,8 +82,18 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
       {error && <p style={{ color: "#b91c1c" }}>{error}</p>}
 
       <div className="panel">
-        <h3>버전 라이프사이클</h3>
-        <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 12px" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
+          <h3 style={{ margin: 0 }}>버전 라이프사이클</h3>
+          <button
+            className="button secondary"
+            data-testid="new-version"
+            disabled={busyId === "new"}
+            onClick={onCreateVersion}
+          >
+            {busyId === "new" ? "생성 중…" : "새 버전 생성"}
+          </button>
+        </div>
+        <p style={{ fontSize: "13px", color: "#64748b", margin: "8px 0 12px" }}>
           draft → validated → published. 게시하면 기존 게시 버전은 superseded 됩니다.
         </p>
         {versions.length === 0 && <p data-testid="no-versions">버전이 없습니다.</p>}

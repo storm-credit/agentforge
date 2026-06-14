@@ -106,7 +106,6 @@ export async function createVersion(input: {
     headers: { "Content-Type": "application/json", ...OPERATOR },
     body: JSON.stringify({
       agent_id: input.agent_id,
-      version: 1,
       status: "draft",
       config,
     }),
@@ -136,7 +135,21 @@ export type AgentVersionSummary = {
   created_by: string;
   created_at: string;
   published_at: string | null;
+  config: Record<string, unknown>;
 };
+
+export async function createDraftVersion(
+  agentId: string,
+  config: Record<string, unknown> = { citation_required: true },
+): Promise<AgentVersionSummary> {
+  const r = await fetch(`${API_BASE}/agents/versions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...OPERATOR },
+    body: JSON.stringify({ agent_id: agentId, status: "draft", config }),
+  });
+  if (!r.ok) throw new Error(`create version failed: ${r.status}`);
+  return r.json();
+}
 
 export async function getAgent(agentId: string): Promise<AgentSummary> {
   const r = await fetch(`${API_BASE}/agents/${agentId}`);

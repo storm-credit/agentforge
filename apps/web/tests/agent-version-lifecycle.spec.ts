@@ -23,4 +23,7 @@ test("agent detail shows version lifecycle with validate/publish actions", async
   const before = await page.getByTestId("version-row").count();
   await page.getByTestId("new-version").click();
   await expect(page.getByTestId("version-row")).toHaveCount(before + 1);
+
+  // the new draft shows a config diff vs the current published version
+  await expect(page.getByTestId("version-diff").first()).toBeVisible();
 });

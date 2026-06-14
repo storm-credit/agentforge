@@ -396,6 +396,39 @@ def test_output_guard_refuses_ungrounded_answer(client, monkeypatch):
         get_settings.cache_clear()
 
 
+def test_answer_confidence_gate_refuses_low_score(client, monkeypatch):
+    from app.core.config import get_settings
+    from app.services import llm_gateway
+
+    # answer_min above any achievable score -> always refuse without calling the LLM.
+    monkeypatch.setenv("AGENT_FORGE_ANSWER_MIN_SCORE", "1.01")
+    get_settings.cache_clear()
+
+    def boom_generate(self, *, question, context, language, temperature=0.2, top_p=None):
+        raise AssertionError("LLM must not be called when confidence gate trips")
+
+    monkeypatch.setattr(llm_gateway.LLMGateway, "generate", boom_generate)
+    try:
+        ids = _seed_agent_with_indexed_doc(client)
+        resp = client.post(
+            "/api/v1/runs",
+            json={
+                "agent_id": ids["agent_id"],
+                "input": {"message": "휴가 며칠?"},
+                "knowledge_source_ids": [ids["source_id"]],
+                "language": "auto",
+            },
+        )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["citations"] == []
+        steps = client.get(f"/api/v1/runs/{body['id']}/steps").json()
+        guard = next(s for s in steps if s["step_type"] == "guard_output")
+        assert guard["output_summary"]["confidence_gate_tripped"] is True
+    finally:
+        get_settings.cache_clear()
+
+
 def test_run_refuses_when_no_authorized_context(client):
     ids = _seed_agent_with_indexed_doc(client)
     resp = client.post(

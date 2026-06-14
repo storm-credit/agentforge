@@ -65,6 +65,28 @@ def test_aggregate_percentages():
     assert rep["useful_answer_pct"] == 100.0
 
 
+def test_metric_split_separates_leak_from_discipline():
+    # An answer case that is fine, plus a policy_denied case that over-answers from an
+    # accessible doc: no leak (security ok) but refusal discipline fails.
+    over_answer = score_case(
+        _case(case_id="deny", expected_behavior="policy_denied", expected_citation_doc=None,
+              forbidden_doc="sec-export", answer_points=[]),
+        _run(answer="접근 가능한 보안 지침으로 답합니다.", citation_docs=("real-hr-1",), hit_docs=("real-hr-1",)),
+        DOC_MAP,
+    )
+    good = score_case(_case(case_id="ok"), _run(), DOC_MAP)
+    rep = aggregate([good, over_answer])
+    assert rep["leak_free_pct"] == 100.0          # no forbidden doc surfaced anywhere
+    assert rep["refusal_discipline_pct"] == 0.0   # the one deny case answered -> discipline fail
+    assert rep["acl_pass_pct"] == 50.0            # combined metric masks that leaks are 0
+
+
+def test_refusal_discipline_is_100_when_no_deny_cases():
+    rep = aggregate([score_case(_case(), _run(), DOC_MAP)])
+    assert rep["refusal_discipline_pct"] == 100.0
+    assert rep["leak_free_pct"] == 100.0
+
+
 def test_corpus_live_parses_and_is_consistent():
     import json
     import pathlib

@@ -18,6 +18,23 @@ const STATUS_BADGE: Record<string, string> = {
   superseded: "badge",
 };
 
+// Keys whose JSON value differs between the current published config and another version.
+function diffConfig(
+  current: Record<string, unknown>,
+  other: Record<string, unknown>,
+): string[] {
+  const cur = current ?? {};
+  const oth = other ?? {};
+  const keys = Array.from(new Set([...Object.keys(cur), ...Object.keys(oth)])).sort();
+  const out: string[] = [];
+  for (const k of keys) {
+    const a = JSON.stringify(cur[k]);
+    const b = JSON.stringify(oth[k]);
+    if (a !== b) out.push(`${k}: ${a ?? "∅"} → ${b ?? "∅"}`);
+  }
+  return out;
+}
+
 export default function AgentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const [agent, setAgent] = useState<AgentSummary | null>(null);
@@ -98,7 +115,11 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
         </p>
         {versions.length === 0 && <p data-testid="no-versions">버전이 없습니다.</p>}
         <ul data-testid="version-list" className="statusList" style={{ listStyle: "none", padding: 0, margin: 0 }}>
-          {versions.map((v) => (
+          {versions.map((v) => {
+            const published = versions.find((x) => x.status === "published");
+            const showDiff = published && published.id !== v.id;
+            const diff = showDiff ? diffConfig(published!.config, v.config) : [];
+            return (
             <li key={v.id} data-testid="version-row" style={{ padding: "12px 0" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
                 <strong>v{v.version}</strong>
@@ -107,7 +128,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
                   by {v.created_by}{v.published_at ? ` · 게시 ${v.published_at.slice(0, 10)}` : ""}
                 </span>
               </div>
-              {(v.status === "draft" || v.status === "validated") && (
+              {(v.status === "draft" || v.status === "validated" || v.status === "superseded") && (
                 <div className="buttonRow" style={{ marginTop: "8px" }}>
                   <input
                     className="field"
@@ -126,18 +147,44 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
                       {busyId === v.id ? "검증 중…" : "검증"}
                     </button>
                   )}
-                  <button
-                    className="button"
-                    data-testid="publish"
-                    disabled={busyId === v.id}
-                    onClick={() => act(v.id, "publish")}
-                  >
-                    {busyId === v.id ? "게시 중…" : "게시"}
-                  </button>
+                  {v.status === "superseded" ? (
+                    <button
+                      className="button secondary"
+                      data-testid="rollback"
+                      disabled={busyId === v.id}
+                      onClick={() => act(v.id, "publish")}
+                    >
+                      {busyId === v.id ? "롤백 중…" : "이 버전으로 롤백(재게시)"}
+                    </button>
+                  ) : (
+                    <button
+                      className="button"
+                      data-testid="publish"
+                      disabled={busyId === v.id}
+                      onClick={() => act(v.id, "publish")}
+                    >
+                      {busyId === v.id ? "게시 중…" : "게시"}
+                    </button>
+                  )}
                 </div>
               )}
+              {showDiff && (
+                <details data-testid="version-diff" style={{ marginTop: "6px", fontSize: "12px" }}>
+                  <summary>현재 게시본(v{published!.version})과 차이 {diff.length ? `(${diff.length})` : "(동일)"}</summary>
+                  {diff.length === 0 ? (
+                    <p style={{ color: "#64748b", margin: "4px 0 0" }}>config 동일</p>
+                  ) : (
+                    <ul style={{ margin: "4px 0 0" }}>
+                      {diff.map((d, i) => (
+                        <li key={i}><code>{d}</code></li>
+                      ))}
+                    </ul>
+                  )}
+                </details>
+              )}
             </li>
-          ))}
+            );
+          })}
         </ul>
       </div>
     </section>

@@ -163,6 +163,34 @@ def test_agent_versions_autonumber_on_create(client):
     assert second.json()["version"] == 2
 
 
+def test_rollback_republishes_older_version(client):
+    agent = client.post(
+        "/api/v1/agents",
+        json={"name": "Rollback Agent", "purpose": "rollback.", "owner_department": "Operations"},
+    ).json()
+    v1 = client.post(
+        "/api/v1/agents/versions", json={"agent_id": agent["id"], "config": {}}
+    ).json()
+    v2 = client.post(
+        "/api/v1/agents/versions", json={"agent_id": agent["id"], "config": {}}
+    ).json()
+
+    client.post(f"/api/v1/agents/versions/{v1['id']}/publish", json={"reason": "publish v1"})
+    client.post(f"/api/v1/agents/versions/{v2['id']}/publish", json={"reason": "publish v2"})
+
+    # rollback = re-publish the older version; it supersedes the current one
+    rollback = client.post(
+        f"/api/v1/agents/versions/{v1['id']}/publish", json={"reason": "rollback to v1"}
+    )
+    assert rollback.status_code == 200
+    assert rollback.json()["status"] == "published"
+
+    versions = client.get(f"/api/v1/agents/{agent['id']}/versions").json()
+    status_by_version = {v["version"]: v["status"] for v in versions}
+    assert status_by_version[1] == "published"
+    assert status_by_version[2] == "superseded"
+
+
 def test_knowledge_source_and_document_contract(client):
     source_response = client.post(
         "/api/v1/knowledge/sources",

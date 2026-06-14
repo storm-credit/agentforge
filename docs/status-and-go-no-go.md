@@ -69,7 +69,7 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 |---|---|---|
 | 파일럿 부서 1곳 + 실문서 30~100건 | 경영/PM/문서소유자 | 9~12주 파일럿 전체, 실데이터 품질 측정 |
 | SSO IdP 선택(SAML/OIDC) + 자격증명 | 보안/인프라 | 실 인증·권한 신뢰 기반(헤더 스텁 대체), 배포 전 필수 |
-| 사내 모델(Qwen3.6:35B) + cross-encoder 가용 | 인프라/AI | rerank·LLM-judge·query rewrite → **거부 규율 66.7%→개선**, useful 재측정 |
+| 사내 모델(Qwen3.6:35B) + cross-encoder 가용 | 인프라/AI | rerank·LLM-judge·query rewrite → **거부 규율 66.7%→개선**, useful 재측정. 옵션·추천: [research-reranking-options.md](research-reranking-options.md) |
 | 폐쇄망 staging 환경(EP-07) | DevOps | 실배포·운영 전환 |
 
 ## 내가 결정 없이 코드로 닫을 수 있는 것 (🔧)

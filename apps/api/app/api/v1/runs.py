@@ -25,6 +25,7 @@ from app.domain.pii import mask_pii
 from app.domain.vector import FakeVectorStore, VectorQuery, VectorSearchResult, build_acl_filter, get_vector_store
 from app.infra.audit import write_audit_event
 from app.services.llm_gateway import ContextBlock, clamp_temperature, clamp_top_p, get_gateway
+from app.services.reranker import get_reranker
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,10 @@ def create_run(
         top_k=payload.top_k,
         acl_filter=acl_filter,
     )
+    # Rerank hook: order-preserving no-op by default; a cross-encoder backend plugs in
+    # here once an in-house reranker is available (see research-reranking-options.md).
+    reranker = get_reranker()
+    ranked_hits = reranker.rerank(payload.input.message, vector_result.hits)
     _add_step(
         db,
         run=run,
@@ -123,15 +128,16 @@ def create_run(
             "top_k": payload.top_k,
         },
         output_summary={
-            "hit_count": len(vector_result.hits),
+            "hit_count": len(ranked_hits),
             "denied_count": vector_result.denied_count,
             "vector_adapter": vector_adapter,
             "degraded": vector_degraded,
+            "reranker": reranker.name,
         },
     )
 
     citations = []
-    for rank, hit in enumerate(vector_result.hits, start=1):
+    for rank, hit in enumerate(ranked_hits, start=1):
         citation_locator = _hit_locator(hit)
         usable_as_citation = bool(hit.chunk_id and citation_locator)
         db.add(
@@ -167,7 +173,7 @@ def create_run(
             )
 
     answer_language = resolve_language(payload.language, payload.input.message)
-    context_blocks = _load_context_blocks(db, vector_result.hits)
+    context_blocks = _load_context_blocks(db, ranked_hits)
     gen_settings = get_settings()
     gen_temperature = clamp_temperature(
         agent_version.config.get("temperature", gen_settings.llm_temperature)

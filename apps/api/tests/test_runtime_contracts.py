@@ -406,6 +406,21 @@ def test_output_guard_refuses_ungrounded_answer(client, monkeypatch):
         get_settings.cache_clear()
 
 
+def test_run_records_reranker_in_trace(client):
+    ids = _seed_agent_with_indexed_doc(client)
+    run = client.post(
+        "/api/v1/runs",
+        json={
+            "agent_id": ids["agent_id"],
+            "input": {"message": "휴가 며칠?"},
+            "knowledge_source_ids": [ids["source_id"]],
+        },
+    ).json()
+    steps = client.get(f"/api/v1/runs/{run['id']}/steps").json()
+    retriever = next(s for s in steps if s["step_type"] == "retriever")
+    assert retriever["output_summary"]["reranker"] == "none"
+
+
 def test_run_read_scoped_to_owner_or_admin(client):
     ids = _seed_agent_with_indexed_doc(client)
     alice = {

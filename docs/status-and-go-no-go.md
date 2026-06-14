@@ -75,11 +75,16 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 | 사내 모델(Qwen3.6:35B) + cross-encoder 가용 | 인프라/AI | rerank·LLM-judge·query rewrite → **거부 규율 66.7%→개선**, useful 재측정. 옵션·추천: [research-reranking-options.md](research-reranking-options.md) |
 | 폐쇄망 staging 환경(EP-07) | DevOps | 실배포·운영 전환 |
 
-## 내가 결정 없이 코드로 닫을 수 있는 것 (🔧) — 진행률 3/4
+## 내가 결정 없이 코드로 닫을 수 있는 것 (🔧)
 1. ✅ **버전 자동증가 + "새 버전 생성" UI** (PR #28).
 2. ✅ **run 조회 인가(owner/admin 스코프)** (PR #29). (문서목록 메타 스코프는 빌더 영향+정책 미정으로 의도적 보류.)
-3. ✅ **MinIO 객체저장소 배선 + 객체스토어 fetch 인제스트(AF-009)** (PR #30) — 업로드 원본 저장 + 큐 잡이 스토어에서 fetch. opt-in(기본 none). 실 MinIO 라이브 검증. ([object-storage-af009.md](object-storage-af009.md)) (풀 async 큐/워커 분리는 보류.)
-4. **롤백/버전 디프 뷰 · 프롬프트 인젝션 하드닝 보강 · rerank "인터페이스/스텁"**(품질은 모델 의존 — [research-reranking-options.md](research-reranking-options.md)) ← 다음(택1)
+3. ✅ **MinIO 객체저장소 배선 + 객체스토어 fetch 인제스트(AF-009)** (PR #30). opt-in(기본 none), 실 MinIO 라이브 검증. ([object-storage-af009.md](object-storage-af009.md))
+4. ✅ **rerank 인터페이스/스텁** (PR #31) — runs.py rerank 훅(noop 기본, env 게이트), 실제 cross-encoder는 사내 모델 가용 시 연결. ([research-reranking-options.md](research-reranking-options.md))
+
+### 아직 코드로 닫을 수 있으나 미착수 (🔧 남음 — "완결" 아님)
+- **롤백 / 버전 디프 뷰**(WS4) — published→이전 버전 롤백, 버전 config 비교 UI.
+- **프롬프트 인젝션 하드닝 보강**(WS2) — 프롬프트 템플릿/가드 강화(강건성 상한은 모델 의존이나 개선 여지 있음).
+- (문서목록 GET 메타 스코프 — 의도적 보류, 정책 정해지면.)
 
 ## Go/No-Go 권고
 - **기술 MVP: GO 가능** — 핵심 가치(권한 기반 인용 답변 + 누출 0)가 코드·eval로 성립.

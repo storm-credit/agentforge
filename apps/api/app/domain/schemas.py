@@ -104,6 +104,12 @@ class DocumentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class DocumentAclUpdate(BaseModel):
+    access_groups: list[str] = Field(min_length=1)
+    confidentiality_level: str = Field(min_length=1, max_length=40)
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class IndexJobCreate(BaseModel):
     parser_profile: str = "default-txt-md"
     chunking: dict[str, Any] = Field(

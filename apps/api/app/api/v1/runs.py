@@ -41,9 +41,24 @@ def _guard_refusal(language: str) -> str:
     return "근거가 부족하여 답변할 수 없습니다."
 
 
+def _can_read_run(principal: Principal, run: Run) -> bool:
+    """A run's answer/trace is readable by its owner or an admin/operator.
+
+    Header-stub identity for now (SSO not wired) — but this still enforces that one
+    user cannot read another user's run output via the GET endpoints.
+    """
+    return run.user_id == principal.user_id or "admin" in principal.roles
+
+
 @router.get("", response_model=list[RunRead])
-def list_runs(db: Session = Depends(get_db)) -> list[Run]:
-    return list(db.scalars(select(Run).order_by(Run.created_at.desc())))
+def list_runs(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> list[Run]:
+    statement = select(Run).order_by(Run.created_at.desc())
+    if "admin" not in principal.roles:
+        statement = statement.where(Run.user_id == principal.user_id)
+    return list(db.scalars(statement))
 
 
 @router.post("", response_model=RunRead, status_code=status.HTTP_201_CREATED)
@@ -314,18 +329,30 @@ def create_run(
 
 
 @router.get("/{run_id}", response_model=RunRead)
-def get_run(run_id: str, db: Session = Depends(get_db)) -> Run:
+def get_run(
+    run_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> Run:
     run = db.get(Run, run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    if not _can_read_run(principal, run):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this run")
     return run
 
 
 @router.get("/{run_id}/steps", response_model=list[RunStepRead])
-def list_run_steps(run_id: str, db: Session = Depends(get_db)) -> list[RunStep]:
+def list_run_steps(
+    run_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> list[RunStep]:
     run = db.get(Run, run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    if not _can_read_run(principal, run):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this run")
 
     return list(
         db.scalars(
@@ -335,10 +362,16 @@ def list_run_steps(run_id: str, db: Session = Depends(get_db)) -> list[RunStep]:
 
 
 @router.get("/{run_id}/retrieval-hits", response_model=list[RetrievalHitRead])
-def list_run_retrieval_hits(run_id: str, db: Session = Depends(get_db)) -> list[RetrievalHitRead]:
+def list_run_retrieval_hits(
+    run_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> list[RetrievalHitRead]:
     run = db.get(Run, run_id)
     if run is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Run not found")
+    if not _can_read_run(principal, run):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this run")
 
     hits = list(
         db.scalars(

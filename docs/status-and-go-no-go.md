@@ -28,6 +28,8 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 | 문서 ACL 편집·회수 | ✅ | `PATCH /documents/{id}/acl` (PR #21), 라이브 입증 |
 | audit log + PII 마스킹 | ✅ | `write_audit_event` 전역, 옵트인 PII 마스킹(PR #24) |
 | 보안 차단 테스트(누출 0건) | ✅ | **leak_free 100%** 라이브(v0.3) + 계약테스트 |
+| run 조회 인가(타 사용자 trace 차단) | ✅ | GET `/runs`·`/{id}`·`/steps`·`/retrieval-hits`가 owner/admin 스코프(PR #29). 라이브: 일반 0건/admin 전체 |
+| 문서목록 GET 메타 스코프 | 🔧 | 미적용(메타만·원문 없음, 빌더 소스픽커 영향) — operator-sees-all 정책 정해지면 |
 | 권한 테스트 "실계정" | ⛔ | 현재 헤더 스텁/목 사용자 — 실 IdP 대기 |
 
 ### WS3 데이터/RAG
@@ -72,10 +74,10 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 | 사내 모델(Qwen3.6:35B) + cross-encoder 가용 | 인프라/AI | rerank·LLM-judge·query rewrite → **거부 규율 66.7%→개선**, useful 재측정. 옵션·추천: [research-reranking-options.md](research-reranking-options.md) |
 | 폐쇄망 staging 환경(EP-07) | DevOps | 실배포·운영 전환 |
 
-## 내가 결정 없이 코드로 닫을 수 있는 것 (🔧) — 진행률 1/4
-1. ✅ **버전 자동증가 + "새 버전 생성" UI** (PR #28) — 서버가 max+1 채번, 상세 페이지에서 새 draft 생성. 완료.
-2. **GET 엔드포인트 인가(principal 스코프)** — `/runs` 등 무인증. SSO 없이 코드로 가능. ← 다음
-3. MinIO 객체저장소 배선 + 비동기 인제스트(AF-009) — 컨테이너 이미 있음.
+## 내가 결정 없이 코드로 닫을 수 있는 것 (🔧) — 진행률 2/4
+1. ✅ **버전 자동증가 + "새 버전 생성" UI** (PR #28).
+2. ✅ **run 조회 인가(owner/admin 스코프)** (PR #29) — `/runs`·`/{id}`·`/steps`·`/retrieval-hits`. (문서목록 메타 스코프는 빌더 영향+정책 미정으로 의도적 보류.)
+3. **MinIO 객체저장소 배선 + 비동기 인제스트(AF-009)** — 컨테이너 이미 있음. ← 다음
 4. 롤백/버전 디프 뷰 · 프롬프트 인젝션 하드닝 보강 · rerank "인터페이스/스텁"(품질은 모델 의존 — [research-reranking-options.md](research-reranking-options.md)).
 
 ## Go/No-Go 권고

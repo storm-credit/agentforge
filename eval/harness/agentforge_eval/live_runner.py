@@ -113,11 +113,13 @@ def run_live_eval(corpus_path: Path, base_url: str, prefix: str) -> dict:
             )
             run.raise_for_status()
             rj = run.json()
-            hits = client.get(f"/runs/{rj['id']}/retrieval-hits").json()
+            # Reading the run trace is owner/admin-scoped; the eval harness is an
+            # admin/operator tool, so read hits/steps with the operator identity.
+            hits = client.get(f"/runs/{rj['id']}/retrieval-hits", headers=_OPERATOR).json()
             top_scores[case["case_id"]] = max(
                 (h.get("score_vector") or 0.0 for h in hits), default=0.0
             )
-            steps = client.get(f"/runs/{rj['id']}/steps").json()
+            steps = client.get(f"/runs/{rj['id']}/steps", headers=_OPERATOR).json()
             guard = next((s for s in steps if s["step_type"] == "guard_output"), None)
             guard_out = (guard or {}).get("output_summary", {})
             grounding_scores[case["case_id"]] = guard_out.get("grounding_score")

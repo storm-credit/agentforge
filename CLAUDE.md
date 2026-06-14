@@ -7,7 +7,7 @@
 1. **한 슬라이스 단위로 진행**: brainstorming → writing-plans → subagent-driven-development(TDD) → finishing-a-development-branch(push + PR + merge). 슬라이스는 작게, 백엔드/프론트 무관 영향 최소.
 2. **매 작업(슬라이스)이 끝날 때마다, 턴 마지막에 "다음 작업 핸드오프 프롬프트"를 작성한다.** 새 세션에 그대로 붙여 실행 가능한 자기완결형이어야 하고 다음을 포함:
    - 배경(머지된 PR 요약)·목표·범위(YAGNI)·완료 기준
-   - **남은 작업 체크**: 코드로 닫을 수 있는 유한 백로그 목록 + 진행률(예: "남은 코드 슬라이스 3/4"), 그리고 비코드 의존(SSO·실문서·폐쇄망·사내모델 등 내가 못 끝내는 것) 구분.
+   - **남은 작업 체크는 반드시 WBS에서 도출한다**: `notes/01_PM/WBS.md`의 워크스트림/게이트 + 실제 상태 단일 출처 [docs/status-and-go-no-go.md](docs/status-and-go-no-go.md)를 기준으로, 임의 리스트를 만들지 말 것. 각 항목에 해당 WBS 워크스트림(WS1~5)/주차 게이트를 명시하고, **코드로 닫을 수 있는 것(🔧)** 과 **조직·인프라 결정 대기(⛔, SSO·실문서·폐쇄망·사내모델 등 내가 못 끝내는 것)** 를 구분. 진행률은 "코드 가능 백로그 N/M"로.
    - 활용할 도구: superpowers 스킬 체인, agentmemory MCP(recall/remember), 필요 시 subagent/Workflow 하네스, security-review·requesting-code-review, WebSearch 리서치, eval 하네스 재측정
    - 아래 "환경/겟차" 전부
    - **완결 조건**: 코드로 닫을 수 있는 백로그가 비면 다음 프롬프트를 만들지 말고 **"코드 완결"을 선언**한다(남은 건 비코드 의존이라고 명시). 무한히 새 작업을 만들어내지 않는다.

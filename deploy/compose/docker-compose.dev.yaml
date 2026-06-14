@@ -15,6 +15,8 @@ services:
       timeout: 3s
       retries: 10
 
+  # 미배선 스캐폴딩 — 현재 런타임 소비자 없음(앱은 업로드를 동기 인메모리로 처리).
+  # 객체저장소 연동(AF-009)에서 사용 예정. 라이브 스택(docker start ...)에는 포함되지 않음.
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"

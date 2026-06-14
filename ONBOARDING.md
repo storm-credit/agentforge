@@ -70,7 +70,7 @@ AGENT_FORGE_CORS_ORIGINS=["http://localhost:3000","http://localhost:3300"]
 cd apps/api
 # .env가 있으면 실LLM/실DB가 일부 테스트에 새므로, 풀 스위트는 .env를 잠시 옆으로:
 #   mv .env .env.live ; .venv/Scripts/python -m pytest -q ; mv .env.live .env
-.venv/Scripts/python -m pytest -q          # 백엔드 (현재 77 passed)
+.venv/Scripts/python -m pytest -q          # 백엔드 (현재 91 passed)
 cd ../../eval/harness && python -m pytest tests   # eval 하네스
 cd ../../apps/web && npx playwright test    # 프론트 렌더 스모크
 ```
@@ -83,6 +83,7 @@ cd ../../apps/web && npx playwright test    # 프론트 렌더 스모크
 ## 알려진 한계 / 다음
 
 - 인증: SSO 미연동(헤더 스텁) — 배포 전 필수.
-- 문서: TXT/MD는 브라우저 텍스트 경로, PDF/DOCX는 서버에서 텍스트를 추출해 같은 청킹·임베딩 파이프라인으로 색인한다. 원본 파일의 MinIO 보관, XLSX 파싱, 대용량 비동기 인제스트는 다음 슬라이스.
+- 문서: TXT/MD는 브라우저 텍스트 경로, PDF/DOCX는 서버에서 텍스트를 추출해 같은 청킹·임베딩 파이프라인으로 색인한다. 원본 파일의 MinIO 보관, XLSX 파싱, 대용량 비동기 인제스트는 다음 슬라이스(AF-009; compose의 minio 서비스는 아직 미배선 스캐폴딩).
+- ACL: 문서 권한(access_groups/confidentiality_level) 편집·회수는 구현됨 — `PATCH /api/v1/knowledge/documents/{id}/acl`(reason 필수, Qdrant payload 동기화로 회수 즉시 검색 제외, 감사 기록).
 - `/runs` 등 GET은 현재 무인증 — SSO 도입 시 principal 스코프 제한 필요.
 - **프롬프트 인젝션**: 2층 방어 — ① 프롬프트 하드닝(`llm_gateway.build_messages`, 컨텍스트=데이터) ② 출력 grounding 가드(`AGENT_FORGE_GROUNDING_MIN`, 컨텍스트 무관 답변 거부). 단 **둘 다 거친 방어**: 하드닝은 약한 모델서 비결정적으로 뚫리고, grounding 메트릭은 노이즈가 커 임계값을 낮게(0.1)만 둘 수 있어 grounding≈0인 노골적 납치만 잡는다(`docs/eval-results-live-v0.1.md` 참고). 정밀 방어는 운영급 모델(Qwen3.6:35B) + LLM-judge 가드 필요. 문서 업로드 무인증과 함께 배포 전 점검 대상.

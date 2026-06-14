@@ -1,15 +1,25 @@
 # Eval Harness
 
-This harness is the first deterministic scorer for Agent Forge synthetic corpus cases.
+Two complementary harnesses live here:
 
-It does not call an LLM. It checks whether the corpus, ACL expectations, and citation
-expectations are internally consistent enough to become D3 evidence.
+- **Live harness — `run_live_eval.py` (current, release-gate).** Drives the running API end to end
+  (sources → documents → index → agent → runs) against the real pipeline (Qdrant + bge-m3 + LLM) and
+  scores live behavior: `acl_pass_pct`, `citation_pct`, `useful_answer_pct`, `leak_free_pct`,
+  `refusal_discipline_pct`. This is what CLAUDE.md means by "before/after 수치". Default corpus
+  `eval/synthetic-corpus/cases-live-v0.1.json` (override with `AGENT_FORGE_EVAL_CORPUS`, e.g. v0.2).
+- **Synthetic structure scorer — `run_synthetic_eval.py` (deterministic, no LLM).** Checks whether the
+  synthetic corpus (`cases-v0.1.json`), ACL expectations, and citation expectations are internally
+  consistent enough to become D3 evidence. It does not exercise retrieval or generation.
 
 ## Run
 
 From the repository root:
 
 ```powershell
+# Live eval (requires the API + Qdrant + model stack running)
+python eval/harness/run_live_eval.py
+
+# Synthetic structure scorer (hermetic, no services)
 python eval/harness/run_synthetic_eval.py
 python -m unittest discover eval/harness/tests
 ```

@@ -115,13 +115,51 @@ export async function createVersion(input: {
   return r.json();
 }
 
-export async function publishVersion(versionId: string): Promise<{ id: string; status: string }> {
+export async function publishVersion(
+  versionId: string,
+  reason = "published via Agent Studio",
+): Promise<AgentVersionSummary> {
   const r = await fetch(`${API_BASE}/agents/versions/${versionId}/publish`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...OPERATOR },
-    body: JSON.stringify({ reason: "published via Agent Studio" }),
+    body: JSON.stringify({ reason }),
   });
   if (!r.ok) throw new Error(`publish failed: ${r.status}`);
+  return r.json();
+}
+
+export type AgentVersionSummary = {
+  id: string;
+  agent_id: string;
+  version: number;
+  status: string;
+  created_by: string;
+  created_at: string;
+  published_at: string | null;
+};
+
+export async function getAgent(agentId: string): Promise<AgentSummary> {
+  const r = await fetch(`${API_BASE}/agents/${agentId}`);
+  if (!r.ok) throw new Error(`get agent failed: ${r.status}`);
+  return r.json();
+}
+
+export async function listVersions(agentId: string): Promise<AgentVersionSummary[]> {
+  const r = await fetch(`${API_BASE}/agents/${agentId}/versions`);
+  if (!r.ok) throw new Error(`list versions failed: ${r.status}`);
+  return r.json();
+}
+
+export async function validateVersion(
+  versionId: string,
+  reason: string,
+): Promise<AgentVersionSummary> {
+  const r = await fetch(`${API_BASE}/agents/versions/${versionId}/validate`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...OPERATOR },
+    body: JSON.stringify({ reason }),
+  });
+  if (!r.ok) throw new Error(`validate failed: ${r.status}`);
   return r.json();
 }
 

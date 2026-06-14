@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     chunk_target_tokens: int = 320  # heading-bounded chunk size (eojeol proxy; ~650 subword tokens)
     chunk_overlap_tokens: int = 50  # sliding-window overlap between chunks (eojeol proxy; ~100 subword)
     pii_masking_enabled: bool = False  # regex-redact PII in answer + returned chunk content (default off)
+    object_store_backend: str = "none"  # none | memory | minio (AF-009: original upload bytes)
+    object_store_endpoint: str | None = None
+    object_store_access_key: str = "agentforge"
+    object_store_secret_key: str = "agentforge-local"
+    object_store_bucket: str = "agentforge"
+    object_store_secure: bool = False
 
     model_config = SettingsConfigDict(
         env_file=".env",

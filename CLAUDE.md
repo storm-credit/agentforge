@@ -24,6 +24,6 @@
 - **이관(무코드)**: 임베딩/LLM `base_url·model`을 사내 vLLM/Qwen3.6:35B로, `AGENT_FORGE_QDRANT_URL`만 교체.
 
 ## 알려진 한계 (배포 전)
-SSO 미연동(헤더 스텁) · 프롬프트 인젝션은 약한 모델서 비결정적 우회(하드닝=베이스라인) · 업로드 TXT/MD/PDF/DOCX 지원(XLSX·원본파일 보관 미지원) · 객체저장소(MinIO) 미배선 — 업로드는 동기 인메모리 처리(AF-009 예정, compose의 minio 서비스는 스캐폴딩) · run 조회 GET은 owner/admin 스코프(PR #29)지만 문서목록 GET 메타는 아직 무스코프(원문 없음).
+SSO 미연동(헤더 스텁) · 프롬프트 인젝션은 약한 모델서 비결정적 우회(하드닝=베이스라인) · 업로드 TXT/MD/PDF/DOCX 지원(XLSX·원본파일 보관 미지원) · 객체저장소(MinIO)는 배선됨(AF-009, PR #30) — opt-in `AGENT_FORGE_OBJECT_STORE_BACKEND`(기본 none), 켜면 업로드 원본 보관 + 큐 잡이 스토어에서 fetch(풀 async 큐 분리는 보류) · run 조회 GET은 owner/admin 스코프(PR #29)지만 문서목록 GET 메타는 아직 무스코프(원문 없음).
 
 (참고: 문서 ACL 편집/권한회수는 PR #21에서 구현됨 — `PATCH /documents/{id}/acl`, Qdrant payload 동기화 + 감사. 더는 한계 아님.)

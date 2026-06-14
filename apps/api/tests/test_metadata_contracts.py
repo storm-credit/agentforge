@@ -626,6 +626,55 @@ def test_queued_index_job_without_content_fails_closed(client):
     assert chunks == []
 
 
+def test_queued_index_fetches_content_from_object_store(client, monkeypatch):
+    from app.core.config import get_settings
+    from app.infra.object_store import document_object_key, get_object_store
+
+    monkeypatch.setenv("AGENT_FORGE_OBJECT_STORE_BACKEND", "memory")
+    get_settings.cache_clear()
+    get_object_store.cache_clear()
+    try:
+        document = _create_indexable_document(client)
+        store = get_object_store()
+        store.put(
+            document_object_key(document["id"]),
+            "# Stored Policy\n\nThis content was fetched from the object store.".encode("utf-8"),
+        )
+
+        queued = client.post(
+            f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+            json={},
+        ).json()
+        assert queued["status"] == "queued"
+
+        # No inline source_text: the worker must fetch the original from object storage
+        # instead of failing closed with SOURCE_CONTENT_UNAVAILABLE.
+        processed = client.post(
+            f"/api/v1/knowledge/index-jobs/{queued['id']}/process",
+            json={},
+        )
+        assert processed.status_code == 200
+        body = processed.json()
+        assert body["status"] == "succeeded"
+        assert body["chunk_count"] >= 1
+    finally:
+        get_settings.cache_clear()
+        get_object_store.cache_clear()
+
+
+def test_queued_index_without_object_store_still_fails_closed(client):
+    # Default backend = none -> no object store -> queued job without content fails closed.
+    document = _create_indexable_document(client)
+    queued = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs", json={}
+    ).json()
+    processed = client.post(
+        f"/api/v1/knowledge/index-jobs/{queued['id']}/process", json={}
+    ).json()
+    assert processed["status"] == "failed"
+    assert processed["error_code"] == "SOURCE_CONTENT_UNAVAILABLE"
+
+
 def test_process_rejects_non_queued_job(client):
     document = _create_indexable_document(client)
 

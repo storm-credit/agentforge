@@ -36,6 +36,7 @@ from app.domain.schemas import (
     RetrievalPreviewResponse,
 )
 from app.infra.audit import write_audit_event
+from app.infra.object_store import document_object_key, get_object_store
 
 router = APIRouter()
 
@@ -209,6 +210,11 @@ def upload_document_and_index(
     )
     db.add(document)
     db.flush()
+    # Persist the original bytes to object storage (AF-009) when enabled, so the
+    # document can be re-indexed later without re-uploading. No-op when disabled.
+    object_store = get_object_store()
+    if object_store is not None:
+        object_store.put(document_object_key(document.id), raw)
     write_audit_event(
         db,
         principal=principal,
@@ -333,13 +339,23 @@ def process_index_job(
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
-    if payload.source_text is None:
+    source_text = payload.source_text
+    source_bytes: bytes | None = None
+    if source_text is None:
+        raw = _fetch_object_bytes(document)
+        if raw is not None:
+            if document.mime_type in SUPPORTED_BINARY_MIME_TYPES:
+                source_bytes = raw
+            else:
+                source_text = _decode_uploaded_text(raw)
+
+    if source_text is None and source_bytes is None:
         job.started_at = datetime.now(UTC)
         job.status = "failed"
         job.stage = "parse"
         job.error_code = "SOURCE_CONTENT_UNAVAILABLE"
         job.error_message = (
-            "No document content is available to index. Object storage retrieval is not yet wired."
+            "No document content is available to index and none is stored in object storage."
         )
         job.finished_at = datetime.now(UTC)
         document.status = "index_failed"
@@ -356,7 +372,8 @@ def process_index_job(
             db=db,
             document=document,
             job=job,
-            source_text=payload.source_text,
+            source_text=source_text,
+            source_bytes=source_bytes,
             principal=principal,
         )
 
@@ -455,6 +472,17 @@ def _index_job_config(payload: IndexJobCreate) -> dict:
         "force_reindex": payload.force_reindex,
         "source": "synthetic_text" if payload.source_text is not None else "object_store",
     }
+
+
+def _fetch_object_bytes(document: Document) -> bytes | None:
+    """Fetch a document's original bytes from object storage, or None if unavailable."""
+    store = get_object_store()
+    if store is None:
+        return None
+    key = document_object_key(document.id)
+    if not store.exists(key):
+        return None
+    return store.get(key)
 
 
 def _parse_access_groups(value: str) -> list[str]:

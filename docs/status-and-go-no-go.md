@@ -36,6 +36,7 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 | 항목 | 상태 | 근거 |
 |---|---|---|
 | 파서/청킹(오버랩) | ✅ | TXT/MD/PDF/DOCX, 청크 오버랩(citation 83→100% 입증) |
+| 객체저장소(원본 보관)+재인제스트 | ✅ | MinIO 배선, opt-in(기본 none), 실 MinIO 라이브 검증(PR #30) |
 | 임베딩/벡터 색인 | ✅ | Qdrant + bge-m3, `chunks_active` |
 | citation 정책 | ✅ | 인용 필수·검증, eval **citation 100%** |
 | 평가 질문 세트 | ✅ | `cases-live-v0.1/v0.2`, `eval/harness/run_live_eval.py` |
@@ -74,11 +75,11 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 | 사내 모델(Qwen3.6:35B) + cross-encoder 가용 | 인프라/AI | rerank·LLM-judge·query rewrite → **거부 규율 66.7%→개선**, useful 재측정. 옵션·추천: [research-reranking-options.md](research-reranking-options.md) |
 | 폐쇄망 staging 환경(EP-07) | DevOps | 실배포·운영 전환 |
 
-## 내가 결정 없이 코드로 닫을 수 있는 것 (🔧) — 진행률 2/4
+## 내가 결정 없이 코드로 닫을 수 있는 것 (🔧) — 진행률 3/4
 1. ✅ **버전 자동증가 + "새 버전 생성" UI** (PR #28).
-2. ✅ **run 조회 인가(owner/admin 스코프)** (PR #29) — `/runs`·`/{id}`·`/steps`·`/retrieval-hits`. (문서목록 메타 스코프는 빌더 영향+정책 미정으로 의도적 보류.)
-3. **MinIO 객체저장소 배선 + 비동기 인제스트(AF-009)** — 컨테이너 이미 있음. ← 다음
-4. 롤백/버전 디프 뷰 · 프롬프트 인젝션 하드닝 보강 · rerank "인터페이스/스텁"(품질은 모델 의존 — [research-reranking-options.md](research-reranking-options.md)).
+2. ✅ **run 조회 인가(owner/admin 스코프)** (PR #29). (문서목록 메타 스코프는 빌더 영향+정책 미정으로 의도적 보류.)
+3. ✅ **MinIO 객체저장소 배선 + 객체스토어 fetch 인제스트(AF-009)** (PR #30) — 업로드 원본 저장 + 큐 잡이 스토어에서 fetch. opt-in(기본 none). 실 MinIO 라이브 검증. ([object-storage-af009.md](object-storage-af009.md)) (풀 async 큐/워커 분리는 보류.)
+4. **롤백/버전 디프 뷰 · 프롬프트 인젝션 하드닝 보강 · rerank "인터페이스/스텁"**(품질은 모델 의존 — [research-reranking-options.md](research-reranking-options.md)) ← 다음(택1)
 
 ## Go/No-Go 권고
 - **기술 MVP: GO 가능** — 핵심 가치(권한 기반 인용 답변 + 누출 0)가 코드·eval로 성립.

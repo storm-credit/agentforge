@@ -214,6 +214,53 @@ def test_archive_document_excludes_from_retrieval_and_list(client):
     assert any(e["target_id"] == document["id"] for e in events)
 
 
+def test_document_list_and_chunks_scoped_by_acl(client):
+    source = client.post(
+        "/api/v1/knowledge/sources",
+        json={"name": "Scoped Src", "description": "x", "owner_department": "Security"},
+    ).json()
+    doc = client.post(
+        "/api/v1/knowledge/documents",
+        json={
+            "knowledge_source_id": source["id"],
+            "title": "HR Restricted Doc",
+            "object_uri": "object://hr-restricted.md",
+            "checksum": "sha256-hr-restricted",
+            "mime_type": "text/markdown",
+            "confidentiality_level": "restricted",
+            "access_groups": ["department:HR"],
+        },
+    ).json()
+    client.post(
+        f"/api/v1/knowledge/documents/{doc['id']}/index-jobs",
+        json={"source_text": "# HR\n\nrestricted leave exception details."},
+    )
+
+    finance = {"X-Agent-Forge-Department": "Finance", "X-Agent-Forge-Clearance": "internal"}
+    hr = {
+        "X-Agent-Forge-Department": "HR",
+        "X-Agent-Forge-Groups": "department:HR",
+        "X-Agent-Forge-Clearance": "restricted",
+    }
+
+    # chunks: Finance (no access) blocked; HR allowed; admin allowed
+    assert client.get(
+        f"/api/v1/knowledge/documents/{doc['id']}/chunks", headers=finance
+    ).status_code == 403
+    assert client.get(
+        f"/api/v1/knowledge/documents/{doc['id']}/chunks", headers=hr
+    ).status_code == 200
+    assert client.get(
+        f"/api/v1/knowledge/documents/{doc['id']}/chunks", headers=_ADMIN
+    ).status_code == 200
+
+    # list: Finance does not see the restricted doc; admin does
+    finance_ids = [d["id"] for d in client.get("/api/v1/knowledge/documents", headers=finance).json()]
+    admin_ids = [d["id"] for d in client.get("/api/v1/knowledge/documents", headers=_ADMIN).json()]
+    assert doc["id"] not in finance_ids
+    assert doc["id"] in admin_ids
+
+
 def test_audit_events_pagination(client):
     for i in range(3):
         client.post(
@@ -705,7 +752,9 @@ def test_index_job_fails_closed_for_missing_acl(client):
     assert job["error_code"] == "DOCUMENT_NOT_INDEXABLE"
     assert job["chunk_count"] == 0
 
-    chunks_response = client.get(f"/api/v1/knowledge/documents/{document['id']}/chunks")
+    chunks_response = client.get(
+        f"/api/v1/knowledge/documents/{document['id']}/chunks", headers=_ADMIN
+    )
 
     assert chunks_response.status_code == 200
     assert chunks_response.json() == []
@@ -798,7 +847,9 @@ def test_queued_index_job_without_content_fails_closed(client):
     assert processed_job["error_code"] == "SOURCE_CONTENT_UNAVAILABLE"
     assert processed_job["chunk_count"] == 0
 
-    chunks = client.get(f"/api/v1/knowledge/documents/{document['id']}/chunks").json()
+    chunks = client.get(
+        f"/api/v1/knowledge/documents/{document['id']}/chunks", headers=_ADMIN
+    ).json()
     assert chunks == []
 
 

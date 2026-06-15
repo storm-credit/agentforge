@@ -18,7 +18,7 @@ from app.domain.parsers import (
     SUPPORTED_DOCUMENT_MIME_TYPES,
     SUPPORTED_TEXT_MIME_TYPES,
 )
-from app.domain.acl import CONFIDENTIALITY_RANK, confidentiality_rank
+from app.domain.acl import CONFIDENTIALITY_RANK, confidentiality_rank, principal_can_access_document
 from app.domain.vector import FakeVectorStore, VectorQuery, build_acl_filter, get_vector_store
 from app.domain.schemas import (
     DocumentAclUpdate,
@@ -70,14 +70,21 @@ def create_source(
 
 
 @router.get("/documents", response_model=list[DocumentRead])
-def list_documents(db: Session = Depends(get_db)) -> list[Document]:
-    return list(
+def list_documents(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> list[Document]:
+    documents = list(
         db.scalars(
             select(Document)
             .where(Document.status != "archived")
             .order_by(Document.created_at.desc())
         )
     )
+    if "admin" in principal.roles:
+        return documents
+    # Non-admins only see document metadata they're authorized to access.
+    return [d for d in documents if principal_can_access_document(principal, d)]
 
 
 @router.delete("/documents/{document_id}", response_model=DocumentRead)
@@ -444,10 +451,19 @@ def get_index_job(job_id: str, db: Session = Depends(get_db)) -> IndexJob:
 
 
 @router.get("/documents/{document_id}/chunks", response_model=list[DocumentChunkRead])
-def list_document_chunks(document_id: str, db: Session = Depends(get_db)) -> list[DocumentChunk]:
+def list_document_chunks(
+    document_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> list[DocumentChunk]:
     document = db.get(Document, document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    if "admin" not in principal.roles and not principal_can_access_document(principal, document):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this document"
+        )
 
     return list(
         db.scalars(

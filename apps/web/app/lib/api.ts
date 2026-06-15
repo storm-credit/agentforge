@@ -69,7 +69,7 @@ export async function listSources(): Promise<KnowledgeSource[]> {
 
 // 소스별 status==="indexed" 문서 수
 export async function indexedDocCountBySource(): Promise<Record<string, number>> {
-  const r = await fetch(`${API_BASE}/knowledge/documents`);
+  const r = await fetch(`${API_BASE}/knowledge/documents`, { headers: { ...OPERATOR } });
   if (!r.ok) throw new Error(`list documents failed: ${r.status}`);
   const docs: Array<{ knowledge_source_id: string; status: string }> = await r.json();
   const counts: Record<string, number> = {};
@@ -182,7 +182,8 @@ export type DocumentSummary = {
 };
 
 export async function listDocuments(): Promise<DocumentSummary[]> {
-  const r = await fetch(`${API_BASE}/knowledge/documents`);
+  // /knowledge is an operator/admin view; document list is ACL-scoped server-side.
+  const r = await fetch(`${API_BASE}/knowledge/documents`, { headers: { ...OPERATOR } });
   if (!r.ok) throw new Error(`list documents failed: ${r.status}`);
   return r.json();
 }

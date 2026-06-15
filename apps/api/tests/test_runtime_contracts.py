@@ -322,6 +322,7 @@ def _create_and_publish_version(client, *, agent_id: str, source_id: str) -> dic
 
     publish_response = client.post(
         f"/api/v1/agents/versions/{version['id']}/publish",
+        headers={"X-Agent-Forge-Roles": "admin"},
         json={"reason": "Runtime contract test publish"},
     )
     assert publish_response.status_code == 200

@@ -145,7 +145,13 @@ def run_index_job(
     }
     try:
         confidentiality_rank_value = confidentiality_rank(document.confidentiality_level)
-        upsert_results = get_vector_store().upsert_chunks(
+        store = get_vector_store()
+        # Purge any existing vectors for this document before upserting. Chunk ids are
+        # content/line-derived, so an edited re-index produces new ids and would orphan
+        # the old vectors (which keep their ACL payload and stay searchable). No-op on
+        # first index. Mirrors the archive purge (PR #38).
+        store.delete_document(document.id)
+        upsert_results = store.upsert_chunks(
             tuple(
                 VectorUpsertInput(
                     chunk_id=parsed_chunk.chunk_id,

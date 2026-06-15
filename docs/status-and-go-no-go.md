@@ -94,8 +94,8 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
    - 보류(정책): 문서 *생성/업로드* 시 등급 지정의 역할 게이팅(operator-vs-end-user 정책 필요 — SSO기). PATCH(기존 문서 재분류)는 게이팅됨.
 
 ### 다음 백로그 (2026-06-15 풀 전문가 패널 6직무 종합 — 보안 군집 완료 후 재실행)
-**🐛 정합성 버그 (최우선):**
-- **force_reindex 시 옛 Qdrant 벡터 미퍼지**(Backend) — `indexing.py` force_reindex가 PG 청크만 지우고 Qdrant 벡터는 안 지움. 청크ID가 내용·줄 기반이라 편집+재색인 시 옛 벡터 고아화 → ACL 유지된 채 **stale 내용이 검색·인용됨**. PR#38 퍼지 패턴 재사용. (S)
+**🐛 정합성 버그:**
+- ✅ **force_reindex 시 옛 Qdrant 벡터 미퍼지** (PR #40) — `run_index_job`가 upsert 전 `delete_document`로 문서 벡터 퍼지(첫 색인엔 no-op). 라이브: v1 3청크→v2 force_reindex 1청크 후 Qdrant 포인트 3→1(고아 0). baseline 126.
 
 **🔧 인가 잔여:**
 - `GET /index-jobs/{id}`·`GET /agents`·`/agents/{id}`·`/agents/{id}/versions`·`/knowledge/sources` 무스코프(에이전트 config=시스템프롬프트 노출). (S, 보안·백엔드·QA 수렴)

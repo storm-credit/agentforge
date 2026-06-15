@@ -178,11 +178,48 @@ export async function validateVersion(
 
 export type DocumentSummary = {
   id: string; knowledge_source_id: string; title: string; status: string;
+  confidentiality_level: string; access_groups: string[];
 };
 
 export async function listDocuments(): Promise<DocumentSummary[]> {
   const r = await fetch(`${API_BASE}/knowledge/documents`);
   if (!r.ok) throw new Error(`list documents failed: ${r.status}`);
+  return r.json();
+}
+
+export async function updateDocumentAcl(
+  documentId: string,
+  input: { access_groups: string[]; confidentiality_level: string; reason: string },
+): Promise<DocumentSummary> {
+  const r = await fetch(`${API_BASE}/knowledge/documents/${documentId}/acl`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...OPERATOR },
+    body: JSON.stringify(input),
+  });
+  if (!r.ok) throw new Error(`acl update failed: ${r.status}`);
+  return r.json();
+}
+
+export type AuditEvent = {
+  id: string;
+  event_type: string;
+  actor_id: string;
+  actor_department: string;
+  target_type: string;
+  target_id: string;
+  reason: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+};
+
+export async function listAuditEvents(
+  params: { event_type?: string; limit?: number } = {},
+): Promise<AuditEvent[]> {
+  const q = new URLSearchParams();
+  if (params.event_type) q.set("event_type", params.event_type);
+  q.set("limit", String(params.limit ?? 50));
+  const r = await fetch(`${API_BASE}/audit/events?${q.toString()}`, { headers: { ...OPERATOR } });
+  if (!r.ok) throw new Error(`list audit failed: ${r.status}`);
   return r.json();
 }
 

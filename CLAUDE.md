@@ -31,7 +31,7 @@
 - **pytest 풀스위트는 `apps/api/.env`를 잠시 옆으로 옮긴 뒤 실행**(실 LLM/DB가 2개 테스트에 새어 실패) → 끝나면 복원. 현재 기준 91 passed / 0 skipped.
 - **라이브 스택**: `docker start agentforge-ollama compose-postgres-1 compose-qdrant-1` (볼륨 보존 — 모델 bge-m3/qwen3:1.7b, DB `agentforge_mvp2`, Qdrant `chunks_active` 유지). `.env` = qdrant 백엔드 + bge-m3 + agentforge_mvp2 + `AGENT_FORGE_RETRIEVAL_MIN_SCORE=0.53`.
 - **프론트 npx/.bin 셰임 깨짐** → node 직접: dev `node node_modules/next/dist/bin/next dev <apps/web 절대경로> -p 3300`, tsc `node node_modules/typescript/bin/tsc --noEmit`, e2e `node node_modules/@playwright/test/cli.js test`(`PLAYWRIGHT_BASE_URL=http://127.0.0.1:3300`). 화면 캡처는 `.claude/launch.json`(node 직접 설정)으로 `preview_start` → 3300 점유 먼저 비울 것.
-- **이관(무코드)**: 임베딩/LLM `base_url·model`을 사내 vLLM/Qwen3.6:35B로, `AGENT_FORGE_QDRANT_URL`만 교체.
+- **이관(무코드)**: 임베딩/LLM `base_url·model`을 사내 vLLM/`qwen3-30b-a3b`(MoE 30B/~3B활성, 회사 표준)로, `AGENT_FORGE_QDRANT_URL`만 교체.
 
 ## 알려진 한계 (배포 전)
 SSO 미연동(헤더 스텁) · 프롬프트 인젝션은 약한 모델서 비결정적 우회(하드닝=베이스라인) · 업로드 TXT/MD/PDF/DOCX 지원(XLSX·원본파일 보관 미지원) · 객체저장소(MinIO)는 배선됨(AF-009, PR #30) — opt-in `AGENT_FORGE_OBJECT_STORE_BACKEND`(기본 none), 켜면 업로드 원본 보관 + 큐 잡이 스토어에서 fetch(풀 async 큐 분리는 보류) · run 조회 GET은 owner/admin 스코프(PR #29)지만 문서목록 GET 메타는 아직 무스코프(원문 없음).

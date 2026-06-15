@@ -23,7 +23,7 @@ Next.js(App Router)  →  FastAPI  →  PostgreSQL (메타/실행 로그)
 
 - **검색**: 쿼리 임베딩 → Qdrant ANN + **ACL을 쿼리 조건으로** 적용(권한 밖 청크는 LLM 컨텍스트에 못 들어감) + 사후 불변식 재검증.
 - **답변**: 컨텍스트만 근거(외부지식 금지), 출처 필수, 권한 문서 없으면 거부.
-- **이관(무코드)**: 임베딩/LLM의 `BASE_URL`·`MODEL` env만 사내 vLLM/Qwen3.6:35B로 바꾸면 됨.
+- **이관(무코드)**: 임베딩/LLM의 `BASE_URL`·`MODEL` env만 사내 vLLM/`qwen3-30b-a3b`(MoE)로 바꾸면 됨.
 
 ## 로컬 실행 (요지)
 
@@ -86,4 +86,4 @@ cd ../../apps/web && npx playwright test    # 프론트 렌더 스모크
 - 문서: TXT/MD는 브라우저 텍스트 경로, PDF/DOCX는 서버에서 텍스트를 추출해 같은 청킹·임베딩 파이프라인으로 색인한다. 원본 파일의 MinIO 보관, XLSX 파싱, 대용량 비동기 인제스트는 다음 슬라이스(AF-009; compose의 minio 서비스는 아직 미배선 스캐폴딩).
 - ACL: 문서 권한(access_groups/confidentiality_level) 편집·회수는 구현됨 — `PATCH /api/v1/knowledge/documents/{id}/acl`(reason 필수, Qdrant payload 동기화로 회수 즉시 검색 제외, 감사 기록).
 - `/runs` 등 GET은 현재 무인증 — SSO 도입 시 principal 스코프 제한 필요.
-- **프롬프트 인젝션**: 2층 방어 — ① 프롬프트 하드닝(`llm_gateway.build_messages`, 컨텍스트=데이터) ② 출력 grounding 가드(`AGENT_FORGE_GROUNDING_MIN`, 컨텍스트 무관 답변 거부). 단 **둘 다 거친 방어**: 하드닝은 약한 모델서 비결정적으로 뚫리고, grounding 메트릭은 노이즈가 커 임계값을 낮게(0.1)만 둘 수 있어 grounding≈0인 노골적 납치만 잡는다(`docs/eval-results-live-v0.1.md` 참고). 정밀 방어는 운영급 모델(Qwen3.6:35B) + LLM-judge 가드 필요. 문서 업로드 무인증과 함께 배포 전 점검 대상.
+- **프롬프트 인젝션**: 2층 방어 — ① 프롬프트 하드닝(`llm_gateway.build_messages`, 컨텍스트=데이터) ② 출력 grounding 가드(`AGENT_FORGE_GROUNDING_MIN`, 컨텍스트 무관 답변 거부). 단 **둘 다 거친 방어**: 하드닝은 약한 모델서 비결정적으로 뚫리고, grounding 메트릭은 노이즈가 커 임계값을 낮게(0.1)만 둘 수 있어 grounding≈0인 노골적 납치만 잡는다(`docs/eval-results-live-v0.1.md` 참고). 정밀 방어는 운영급 모델(`qwen3-30b-a3b`) + LLM-judge 가드 필요. 문서 업로드 무인증과 함께 배포 전 점검 대상.

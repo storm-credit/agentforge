@@ -902,6 +902,27 @@ def test_queued_index_without_object_store_still_fails_closed(client):
     assert processed["error_code"] == "SOURCE_CONTENT_UNAVAILABLE"
 
 
+def test_reindex_purges_old_vectors(client, monkeypatch):
+    # A re-index must purge the document's existing vectors so edited content can't
+    # leave orphaned (stale, still-ACL'd) points behind in the vector store.
+    from app.domain import indexing, vector
+
+    spy = vector.FakeVectorStore()
+    monkeypatch.setattr(indexing, "get_vector_store", lambda: spy)
+
+    document = _create_indexable_document(client)
+    client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        json={"source_text": "# Policy\n\noriginal remote work text."},
+    )
+    client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        json={"source_text": "# Policy\n\nrevised remote work text.", "force_reindex": True},
+    )
+
+    assert document["id"] in spy._deleted_document_ids
+
+
 def test_process_rejects_non_queued_job(client):
     document = _create_indexable_document(client)
 

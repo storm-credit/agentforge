@@ -5,12 +5,22 @@
 ## 작업 운영 규칙 (반드시)
 
 1. **한 슬라이스 단위로 진행**: brainstorming → writing-plans → subagent-driven-development(TDD) → finishing-a-development-branch(push + PR + merge). 슬라이스는 작게, 백엔드/프론트 무관 영향 최소.
-2. **매 작업(슬라이스)이 끝날 때마다, 턴 마지막에 "다음 작업 핸드오프 프롬프트"를 작성한다.** 새 세션에 그대로 붙여 실행 가능한 자기완결형이어야 하고 다음을 포함:
-   - 배경(머지된 PR 요약)·목표·범위(YAGNI)·완료 기준
-   - **남은 작업 체크는 반드시 WBS에서 도출한다**: `notes/01_PM/WBS.md`의 워크스트림/게이트 + 실제 상태 단일 출처 [docs/status-and-go-no-go.md](docs/status-and-go-no-go.md)를 기준으로, 임의 리스트를 만들지 말 것. 각 항목에 해당 WBS 워크스트림(WS1~5)/주차 게이트를 명시하고, **코드로 닫을 수 있는 것(🔧)** 과 **조직·인프라 결정 대기(⛔, SSO·실문서·폐쇄망·사내모델 등 내가 못 끝내는 것)** 를 구분. 진행률은 "코드 가능 백로그 N/M"로.
-   - 활용할 도구: superpowers 스킬 체인, agentmemory MCP(recall/remember), 필요 시 subagent/Workflow 하네스, security-review·requesting-code-review, WebSearch 리서치, eval 하네스 재측정
-   - 아래 "환경/겟차" 전부
-   - **완결 조건**: 코드로 닫을 수 있는 백로그가 비면 다음 프롬프트를 만들지 말고 **"코드 완결"을 선언**한다(남은 건 비코드 의존이라고 명시). 무한히 새 작업을 만들어내지 않는다.
+2. **매 작업(슬라이스)이 끝날 때마다, 턴 마지막에 "다음 작업 핸드오프 프롬프트"를 작성한다.** 새 세션에 그대로 붙여 실행 가능한 자기완결형이어야 한다.
+
+   **2-a. 백로그는 전문가 패널로 도출한다(단독 판단 금지).** 슬라이스 종료 시 `dispatching-parallel-agents`로 직무별 에이전트(보안 WS2/RAG WS3/백엔드 WS4/프론트 WS7/DevOps WS8/QA·PM WS5·WS1 — 각 `notes/0X_*` 작업지시서 매핑)를 병렬로 띄워, 각자 "지금 코드로 닫을 수 있는 최고가치 항목"을 내게 하고 종합한다. 입력 기준은 항상 `notes/01_PM/WBS.md`(워크스트림/게이트) + 실제 상태 단일 출처 [docs/status-and-go-no-go.md](docs/status-and-go-no-go.md). 임의 리스트 금지. 범위가 좁으면 관련 직무만 부분 패널로 돌려도 되나, 종합 출처를 핸드오프에 명시. (패널 결과로 status 문서의 🔧/⛔ 분류를 갱신한다.)
+
+   **2-b. 핸드오프 프롬프트 필수 섹션(이 순서·이 항목들):**
+   - **제목** — `다음 작업: <무엇> (WS태그)`
+   - **종합 판단 출처** — 전문가 패널(WS별 + notes/0X_* 작업지시서) 병렬 종합임을 명시(단독 아님)
+   - **남은 작업 체크** — WBS+status 도출. 각 항목에 WS태그. 🔧 코드-now(진행률 N/M) / 🔧 측정·무결성 / 🔧 배포 / ⛔ 조직·모델·인프라 대기(SSO·실문서·폐쇄망·사내모델) 구분
+   - **배경** — 직전 머지 PR 요약·현 main·baseline 테스트 수·핵심 파일/메모리(`[[...]]`) 링크
+   - **목표/범위(YAGNI)** — 이번 슬라이스 한정 + 범위 밖 명시
+   - **완료 기준** — pytest 풀스위트 그린(.env 옆으로, baseline 명시)·ruff·필요시 security-review/eval before-after·라이브 1회·status 문서 갱신·정직 단서
+   - **활용 도구** — superpowers 체인, agentmemory recall/remember, Explore/subagent, security-review·requesting-code-review, WebSearch, eval 하네스
+   - **환경/겟차** — 아래 "환경/겟차" 전부
+   - **작업 끝나면** — memory:remember + status 갱신 + **전문가 패널 재실행** + 다음 핸드오프 + 완결표현 금지([[completion-claims-discipline]])
+
+   **2-c. 완결 조건**: 패널이 코드-now 항목을 더는 못 내면 다음 프롬프트를 만들지 말고 **"코드 완결"을 선언**(남은 건 비코드 의존이라 명시). 코드-now 항목이 하나라도 있으면 "제품 완성/완결" 표현 금지. 무한히 새 작업을 만들어내지 않는다.
 3. **정직 우선**: 테스트·검증 결과를 있는 그대로. 측정 안 한 건 "안 했다"고. 약점/한계 명시.
 4. **품질을 측정으로 입증**: 검색·답변 품질 변경은 `eval/harness/run_live_eval.py`로 before/after 수치. 보안 변경은 라이브 재현 + 가능하면 적대적 스윕.
 

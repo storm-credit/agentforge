@@ -105,6 +105,20 @@ class DocumentRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AuditEventRead(BaseModel):
+    id: str
+    event_type: str
+    actor_id: str
+    actor_department: str
+    target_type: str
+    target_id: str
+    reason: str
+    payload: dict[str, Any]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DocumentAclUpdate(BaseModel):
     access_groups: list[str] = Field(min_length=1)
     confidentiality_level: str = Field(min_length=1, max_length=40)

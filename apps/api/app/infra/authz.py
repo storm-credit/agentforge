@@ -18,6 +18,10 @@ from app.infra.audit import write_audit_event
 # Roles permitted to perform privileged platform mutations (publish/validate, ACL change).
 PRIVILEGED_ROLES: frozenset[str] = frozenset({"admin", "platform-admin", "knowledge-manager"})
 
+# Reading the audit trail is narrower than mutation rights (least privilege): a
+# knowledge-manager can change ACLs but should not enumerate org-wide who-did-what.
+AUDIT_READ_ROLES: frozenset[str] = frozenset({"admin", "platform-admin", "security-auditor"})
+
 
 def enforce_roles(
     db: Session,

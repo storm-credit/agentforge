@@ -142,6 +142,45 @@ _ADMIN = {"X-Agent-Forge-User": "ops", "X-Agent-Forge-Roles": "admin"}
 _DEVELOPER = {"X-Agent-Forge-User": "dev", "X-Agent-Forge-Roles": "developer"}
 
 
+def test_audit_events_query_admin_only_and_self_audited(client):
+    # non-admin is denied
+    assert client.get("/api/v1/audit/events", headers=_DEVELOPER).status_code == 403
+
+    # generate an auditable event
+    src = client.post(
+        "/api/v1/knowledge/sources",
+        json={"name": "Audit Src", "description": "x", "owner_department": "Operations"},
+    ).json()
+
+    resp = client.get(
+        "/api/v1/audit/events",
+        headers=_ADMIN,
+        params={"event_type": "knowledge_source.created"},
+    )
+    assert resp.status_code == 200
+    events = resp.json()
+    assert any(e["target_id"] == src["id"] for e in events)
+    assert all(e["event_type"] == "knowledge_source.created" for e in events)
+
+    # the query itself is audited (audit_log.viewed)
+    viewed = client.get(
+        "/api/v1/audit/events", headers=_ADMIN, params={"event_type": "audit_log.viewed"}
+    )
+    assert viewed.status_code == 200
+    assert len(viewed.json()) >= 1
+
+
+def test_audit_events_pagination(client):
+    for i in range(3):
+        client.post(
+            "/api/v1/knowledge/sources",
+            json={"name": f"Pg {i}", "description": "x", "owner_department": "Operations"},
+        )
+    page = client.get("/api/v1/audit/events", headers=_ADMIN, params={"limit": 2})
+    assert page.status_code == 200
+    assert len(page.json()) == 2
+
+
 def test_privileged_mutations_require_admin_role(client):
     # set up an agent + draft version + an indexed document as admin
     agent = client.post(

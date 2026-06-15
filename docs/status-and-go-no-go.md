@@ -93,12 +93,28 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
    - 후속(🔧 소): `GET /index-jobs/{id}` 무스코프(pre-existing, security-review MEDIUM) — 같은 패턴으로 스코프 가능.
    - 보류(정책): 문서 *생성/업로드* 시 등급 지정의 역할 게이팅(operator-vs-end-user 정책 필요 — SSO기). PATCH(기존 문서 재분류)는 게이팅됨.
 
-### 아직 코드로 닫을 수 있으나 미착수 (🔧 남음 — "완결" 아님)
-- 위 보안/거버넌스 군집 잔여 4건(감사 조회 API · ACL 편집 UI · 문서 삭제 · 목록 스코프).
-- 측정/무결성(QA): 지연·trace 스코어러 · 코퍼스 v0.3(suite·n↑) · rerank score_rerank 배선.
-- 배포(DevOps): 프로덕션 Dockerfile/compose · 게이트웨이 인증 토큰 · `.env.example` 완성.
-- **프롬프트 인젝션 하드닝 보강**(WS2) — 천장 낮음(모델 의존), 후순위.
-- (문서목록 GET 메타 스코프 — 위 군집에 포함.)
+### 다음 백로그 (2026-06-15 풀 전문가 패널 6직무 종합 — 보안 군집 완료 후 재실행)
+**🐛 정합성 버그 (최우선):**
+- **force_reindex 시 옛 Qdrant 벡터 미퍼지**(Backend) — `indexing.py` force_reindex가 PG 청크만 지우고 Qdrant 벡터는 안 지움. 청크ID가 내용·줄 기반이라 편집+재색인 시 옛 벡터 고아화 → ACL 유지된 채 **stale 내용이 검색·인용됨**. PR#38 퍼지 패턴 재사용. (S)
+
+**🔧 인가 잔여:**
+- `GET /index-jobs/{id}`·`GET /agents`·`/agents/{id}`·`/agents/{id}/versions`·`/knowledge/sources` 무스코프(에이전트 config=시스템프롬프트 노출). (S, 보안·백엔드·QA 수렴)
+- `PATCH /agents/{id}` RBAC 미적용(developer가 게시된 에이전트 config 편집 가능). (S, 보안)
+
+**🔧 측정/무결성(QA·RAG 수렴):**
+- 지연 p50/p95 + trace-completeness 스코어러(릴리스 게이트인데 미측정, 데이터는 이미 흐름). (S)
+- 코퍼스 v0.3(refusal n=3→↑, suite 태그). (M) · rerank score_rerank 실신호 배선 + Reranker (hit,score) 반환. (S) · 결정적 retrieval 회귀테스트. (S)
+
+**🔧 배포(DevOps):**
+- 게이트웨이 인증 토큰(llm/embedding api_key + Authorization) — 폐쇄망 모델 cutover 차단 해제. (S) · `.env.example` 완성+startup 검증. (S) · 프로덕션 Dockerfile(uv.lock·multi-stage·non-root·healthcheck)/compose. (M) · JSON 로깅+request_id 미들웨어. (M) · CI 워크플로. (M)
+
+**🔧 관측/감사:** request_id·actor_role 감사 필드(정책 필수). (M)
+
+**🔧 인젝션 코드-now(Security):** 실제 guard_input(현재 하드코딩 stub) — 크기제한·제어문자·정규식 마커 탐지 + `prompt_injection.detected` 감사. 실 강건성은 ⛔ 모델. (M)
+
+**🔧 프론트(데모성):** 문서 보관(archive) 버튼(PR#38 백엔드 UI 없음) (S) · /runs guardrail/judge/PII 신호 노출 + /chat 거부 상태 (S/M) · 역할별 UI(RBAC 시연) (M).
+
+**🔧 백엔드 기타:** 에이전트 archive·run list 필터/페이지네이션·index-job 멱등성. (S~M)
 
 > **거부규율(c07) 갱신:** scalar 게이트(v0.3)·로컬 1.7b judge(v0.4) 모두 못 고침. 코드 토대(judge 훅 + rerank 훅)는 깔렸고, 실질 개선은 사내 35B/cross-encoder 대기(⛔ 모델). rerank는 Ollama 미지원으로 로컬 검증 불가.
 

@@ -89,7 +89,8 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 8. ✅ **감사 조회 API** (PR #36) — `GET /api/v1/audit/events`(필터+페이지네이션), audit-read 전용 역할(admin/platform-admin/security-auditor), 조회 자체 `audit_log.viewed` 감사. 라이브: developer 403/admin 200.
 9. ✅ **문서 ACL 편집 UI + 감사 뷰어** (PR #37) — /knowledge 문서별 ACL 표시+편집(reason 필수→PATCH), /audit 스텁→실 뷰어(GET /audit/events, event_type 필터). 라이브: ACL 편집 round-trip + 감사에 document.acl_changed 노출.
 10. ✅ **문서 소프트삭제 + Qdrant 퍼지** (PR #38) — `DELETE /documents/{id}`(admin, reason): status=archived(+청크), Qdrant 퍼지(fail-closed), 감사 `document.archived`. 목록·검색·청크 조회에서 제외. 라이브: developer 403/admin archived, preview 1→0.
-   - 군집 잔여(🔧): 문서목록/청크 GET ACL 스코프(WS2) — 마지막.
+11. ✅ **문서목록/청크 GET ACL 스코프** (PR #39) — `GET /knowledge/documents`·`/documents/{id}/chunks`가 principal ACL로 스코프(admin 전체, 비admin은 principal_can_access_document). 프론트 목록은 operator 헤더로 전체 유지. 라이브: admin 110 / Finance 83. **→ 보안·거버넌스 군집 5/5 완료.**
+   - 후속(🔧 소): `GET /index-jobs/{id}` 무스코프(pre-existing, security-review MEDIUM) — 같은 패턴으로 스코프 가능.
    - 보류(정책): 문서 *생성/업로드* 시 등급 지정의 역할 게이팅(operator-vs-end-user 정책 필요 — SSO기). PATCH(기존 문서 재분류)는 게이팅됨.
 
 ### 아직 코드로 닫을 수 있으나 미착수 (🔧 남음 — "완결" 아님)

@@ -14,6 +14,7 @@ from app.domain.schemas import (
     AgentVersionValidate,
 )
 from app.infra.audit import write_audit_event
+from app.infra.authz import PRIVILEGED_ROLES, enforce_roles
 
 router = APIRouter()
 
@@ -146,6 +147,10 @@ def validate_agent_version(
     if version is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent version not found")
 
+    enforce_roles(
+        db, principal, PRIVILEGED_ROLES,
+        action="agent_version.validate", target_type="agent_version", target_id=version_id,
+    )
     version.status = "validated"
     write_audit_event(
         db,
@@ -172,6 +177,10 @@ def publish_agent_version(
     if version is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent version not found")
 
+    enforce_roles(
+        db, principal, PRIVILEGED_ROLES,
+        action="agent_version.publish", target_type="agent_version", target_id=version_id,
+    )
     agent = db.get(Agent, version.agent_id)
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")

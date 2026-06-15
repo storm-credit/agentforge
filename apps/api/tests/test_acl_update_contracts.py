@@ -147,7 +147,7 @@ def test_acl_revocation_excludes_document_from_retrieval(client):
 
     patch = client.patch(
         f"/api/v1/knowledge/documents/{document['id']}/acl",
-        headers={"X-Agent-Forge-User": "acl-admin"},
+        headers={"X-Agent-Forge-User": "acl-admin", "X-Agent-Forge-Roles": "admin"},
         json={
             "access_groups": ["department:HR"],
             "confidentiality_level": "internal",
@@ -169,7 +169,7 @@ def test_acl_change_writes_audit_event(client_with_db):
     document = _indexed_document(client)
     client.patch(
         f"/api/v1/knowledge/documents/{document['id']}/acl",
-        headers={"X-Agent-Forge-User": "acl-admin"},
+        headers={"X-Agent-Forge-User": "acl-admin", "X-Agent-Forge-Roles": "admin"},
         json={
             "access_groups": ["department:HR"],
             "confidentiality_level": "restricted",
@@ -194,6 +194,7 @@ def test_acl_update_rejects_invalid_confidentiality(client):
     document = _indexed_document(client)
     resp = client.patch(
         f"/api/v1/knowledge/documents/{document['id']}/acl",
+        headers={"X-Agent-Forge-Roles": "admin"},
         json={
             "access_groups": ["all-employees"],
             "confidentiality_level": "top-secret",

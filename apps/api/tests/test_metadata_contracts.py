@@ -114,7 +114,7 @@ def test_agent_and_version_contract(client):
 
     validate_response = client.post(
         f"/api/v1/agents/versions/{version['id']}/validate",
-        headers={"X-Agent-Forge-User": "agent-owner"},
+        headers={"X-Agent-Forge-User": "agent-owner", "X-Agent-Forge-Roles": "admin"},
         json={"reason": "Contract test validation"},
     )
 
@@ -123,7 +123,7 @@ def test_agent_and_version_contract(client):
 
     publish_response = client.post(
         f"/api/v1/agents/versions/{version['id']}/publish",
-        headers={"X-Agent-Forge-User": "platform-admin"},
+        headers={"X-Agent-Forge-User": "platform-admin", "X-Agent-Forge-Roles": "admin"},
         json={"reason": "Contract test publish"},
     )
 
@@ -136,6 +136,71 @@ def test_agent_and_version_contract(client):
     listed_agents = list_response.json()
     assert [item["id"] for item in listed_agents] == [agent["id"]]
     assert listed_agents[0]["status"] == "published"
+
+
+_ADMIN = {"X-Agent-Forge-User": "ops", "X-Agent-Forge-Roles": "admin"}
+_DEVELOPER = {"X-Agent-Forge-User": "dev", "X-Agent-Forge-Roles": "developer"}
+
+
+def test_privileged_mutations_require_admin_role(client):
+    # set up an agent + draft version + an indexed document as admin
+    agent = client.post(
+        "/api/v1/agents",
+        json={"name": "RBAC Agent", "purpose": "rbac.", "owner_department": "Operations"},
+    ).json()
+    version = client.post(
+        "/api/v1/agents/versions", json={"agent_id": agent["id"], "config": {}}
+    ).json()
+    source = client.post(
+        "/api/v1/knowledge/sources",
+        json={"name": "RBAC Src", "description": "x", "owner_department": "Operations"},
+    ).json()
+    doc = client.post(
+        "/api/v1/knowledge/documents",
+        json={
+            "knowledge_source_id": source["id"],
+            "title": "RBAC Doc",
+            "object_uri": "object://rbac.md",
+            "checksum": "sha256-rbac",
+            "mime_type": "text/markdown",
+            "confidentiality_level": "internal",
+            "access_groups": ["all-employees"],
+        },
+    ).json()
+
+    # developer role is rejected on each privileged mutation
+    assert client.post(
+        f"/api/v1/agents/versions/{version['id']}/validate",
+        headers=_DEVELOPER,
+        json={"reason": "x"},
+    ).status_code == 403
+    assert client.post(
+        f"/api/v1/agents/versions/{version['id']}/publish",
+        headers=_DEVELOPER,
+        json={"reason": "x"},
+    ).status_code == 403
+    assert client.patch(
+        f"/api/v1/knowledge/documents/{doc['id']}/acl",
+        headers=_DEVELOPER,
+        json={"access_groups": ["public"], "confidentiality_level": "public", "reason": "x"},
+    ).status_code == 403
+
+    # admin role is allowed
+    assert client.post(
+        f"/api/v1/agents/versions/{version['id']}/validate",
+        headers=_ADMIN,
+        json={"reason": "ok"},
+    ).status_code == 200
+    assert client.post(
+        f"/api/v1/agents/versions/{version['id']}/publish",
+        headers=_ADMIN,
+        json={"reason": "ok"},
+    ).status_code == 200
+    assert client.patch(
+        f"/api/v1/knowledge/documents/{doc['id']}/acl",
+        headers=_ADMIN,
+        json={"access_groups": ["department:HR"], "confidentiality_level": "internal", "reason": "ok"},
+    ).status_code == 200
 
 
 def test_agent_versions_autonumber_on_create(client):
@@ -175,12 +240,12 @@ def test_rollback_republishes_older_version(client):
         "/api/v1/agents/versions", json={"agent_id": agent["id"], "config": {}}
     ).json()
 
-    client.post(f"/api/v1/agents/versions/{v1['id']}/publish", json={"reason": "publish v1"})
-    client.post(f"/api/v1/agents/versions/{v2['id']}/publish", json={"reason": "publish v2"})
+    client.post(f"/api/v1/agents/versions/{v1['id']}/publish", headers=_ADMIN, json={"reason": "publish v1"})
+    client.post(f"/api/v1/agents/versions/{v2['id']}/publish", headers=_ADMIN, json={"reason": "publish v2"})
 
     # rollback = re-publish the older version; it supersedes the current one
     rollback = client.post(
-        f"/api/v1/agents/versions/{v1['id']}/publish", json={"reason": "rollback to v1"}
+        f"/api/v1/agents/versions/{v1['id']}/publish", headers=_ADMIN, json={"reason": "rollback to v1"}
     )
     assert rollback.status_code == 200
     assert rollback.json()["status"] == "published"

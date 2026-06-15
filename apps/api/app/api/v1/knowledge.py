@@ -36,6 +36,7 @@ from app.domain.schemas import (
     RetrievalPreviewResponse,
 )
 from app.infra.audit import write_audit_event
+from app.infra.authz import PRIVILEGED_ROLES, enforce_roles
 from app.infra.object_store import document_object_key, get_object_store
 
 router = APIRouter()
@@ -82,6 +83,7 @@ def register_document(
     source = db.get(KnowledgeSource, payload.knowledge_source_id)
     if source is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge source not found")
+    _validate_confidentiality(payload.confidentiality_level)
 
     document = Document(**payload.model_dump())
     db.add(document)
@@ -113,6 +115,11 @@ def update_document_acl(
     document = db.get(Document, document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    enforce_roles(
+        db, principal, PRIVILEGED_ROLES,
+        action="document.acl_update", target_type="document", target_id=document_id,
+    )
 
     if payload.confidentiality_level.lower() not in CONFIDENTIALITY_RANK:
         raise HTTPException(
@@ -196,6 +203,7 @@ def upload_document_and_index(
     mime_type = _upload_mime_type(file.content_type, filename)
     if mime_type not in SUPPORTED_DOCUMENT_MIME_TYPES:
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Unsupported file type")
+    _validate_confidentiality(confidentiality_level)
 
     document = Document(
         knowledge_source_id=source.id,
@@ -472,6 +480,14 @@ def _index_job_config(payload: IndexJobCreate) -> dict:
         "force_reindex": payload.force_reindex,
         "source": "synthetic_text" if payload.source_text is not None else "object_store",
     }
+
+
+def _validate_confidentiality(level: str) -> None:
+    if level.lower() not in CONFIDENTIALITY_RANK:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail="Unknown confidentiality_level",
+        )
 
 
 def _fetch_object_bytes(document: Document) -> bytes | None:

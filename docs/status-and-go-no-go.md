@@ -84,9 +84,17 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 5. ✅ **롤백 / 버전 config 디프 뷰** (PR #32) — WS4 버전 라이프사이클 완성.
 6. ✅ **LLM-as-judge 답변가능성 게이트** (PR #33) — 코드 훅(local Ollama로 동작, env `AGENT_FORGE_JUDGE_BACKEND`, 기본 off). **측정 결과: 로컬 qwen3:1.7b론 거부규율 개선 없음(citation 100→91.7 하락)** → 실질 개선은 사내 35B 대기. 훅은 이식 레버로 유지. ([eval-results-judge-v0.4.md](eval-results-judge-v0.4.md))
 
+### 보안/거버넌스 군집 (전문가 패널 도출, 코드-now)
+7. ✅ **mutation 엔드포인트 RBAC** (PR #35) — `enforce_roles`/`PRIVILEGED_ROLES`로 ACL 변경·게시·검증을 admin/platform-admin/knowledge-manager로 제한, 거부 시 `policy.denied` 감사. + 문서 create/upload `confidentiality_level` 검증 추가. 라이브: developer 403 / admin 200.
+   - 군집 잔여(🔧): 감사 조회 API(WS2/4) · 문서 ACL 편집 UI(WS7) · 문서 소프트삭제+Qdrant 퍼지(WS4) · 문서목록/청크 GET ACL 스코프(WS2).
+   - 보류(정책): 문서 *생성/업로드* 시 등급 지정의 역할 게이팅(operator-vs-end-user 정책 필요 — SSO기). PATCH(기존 문서 재분류)는 게이팅됨.
+
 ### 아직 코드로 닫을 수 있으나 미착수 (🔧 남음 — "완결" 아님)
-- **프롬프트 인젝션 하드닝 보강**(WS2) — 프롬프트 템플릿/가드 강화(강건성 상한은 모델 의존이나 개선 여지 있음).
-- (문서목록 GET 메타 스코프 — 의도적 보류, 정책 정해지면.)
+- 위 보안/거버넌스 군집 잔여 4건(감사 조회 API · ACL 편집 UI · 문서 삭제 · 목록 스코프).
+- 측정/무결성(QA): 지연·trace 스코어러 · 코퍼스 v0.3(suite·n↑) · rerank score_rerank 배선.
+- 배포(DevOps): 프로덕션 Dockerfile/compose · 게이트웨이 인증 토큰 · `.env.example` 완성.
+- **프롬프트 인젝션 하드닝 보강**(WS2) — 천장 낮음(모델 의존), 후순위.
+- (문서목록 GET 메타 스코프 — 위 군집에 포함.)
 
 > **거부규율(c07) 갱신:** scalar 게이트(v0.3)·로컬 1.7b judge(v0.4) 모두 못 고침. 코드 토대(judge 훅 + rerank 훅)는 깔렸고, 실질 개선은 사내 35B/cross-encoder 대기(⛔ 모델). rerank는 Ollama 미지원으로 로컬 검증 불가.
 

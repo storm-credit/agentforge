@@ -170,6 +170,50 @@ def test_audit_events_query_admin_only_and_self_audited(client):
     assert len(viewed.json()) >= 1
 
 
+def test_archive_document_excludes_from_retrieval_and_list(client):
+    document = _create_indexable_document(client)
+    client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        json={"source_text": "# Remote Work\n\nremote work after manager approval."},
+    )
+
+    def _doc_ids():
+        return [d["id"] for d in client.get("/api/v1/knowledge/documents").json()]
+
+    def _preview_titles():
+        resp = client.post(
+            "/api/v1/knowledge/retrieval/preview",
+            json={"query": "remote work approval", "top_k": 10},
+        )
+        return [h["title"] for h in resp.json()["hits"]]
+
+    assert document["id"] in _doc_ids()
+    assert document["title"] in _preview_titles()
+
+    # non-admin cannot archive
+    assert client.delete(
+        f"/api/v1/knowledge/documents/{document['id']}", headers=_DEVELOPER
+    ).status_code == 403
+
+    # admin archives -> status archived
+    resp = client.delete(
+        f"/api/v1/knowledge/documents/{document['id']}?reason=stale doc",
+        headers=_ADMIN,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "archived"
+
+    # excluded from list + retrieval
+    assert document["id"] not in _doc_ids()
+    assert document["title"] not in _preview_titles()
+
+    # audited
+    events = client.get(
+        "/api/v1/audit/events?event_type=document.archived", headers=_ADMIN
+    ).json()
+    assert any(e["target_id"] == document["id"] for e in events)
+
+
 def test_audit_events_pagination(client):
     for i in range(3):
         client.post(

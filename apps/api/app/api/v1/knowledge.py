@@ -2,7 +2,7 @@ import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -71,7 +71,52 @@ def create_source(
 
 @router.get("/documents", response_model=list[DocumentRead])
 def list_documents(db: Session = Depends(get_db)) -> list[Document]:
-    return list(db.scalars(select(Document).order_by(Document.created_at.desc())))
+    return list(
+        db.scalars(
+            select(Document)
+            .where(Document.status != "archived")
+            .order_by(Document.created_at.desc())
+        )
+    )
+
+
+@router.delete("/documents/{document_id}", response_model=DocumentRead)
+def archive_document(
+    document_id: str,
+    reason: str = Query(default="archived via API"),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> Document:
+    """Soft-delete a document: mark archived (excluded from search/list) and purge its
+    vectors from the store. Admin-gated; audited. Fail-closed: vector purge runs inside
+    the request transaction before commit."""
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    enforce_roles(
+        db, principal, PRIVILEGED_ROLES,
+        action="document.archive", target_type="document", target_id=document_id,
+    )
+
+    document.status = "archived"
+    for chunk in document.chunks:
+        chunk.status = "archived"
+    db.flush()
+    get_vector_store().delete_document(document.id)
+
+    write_audit_event(
+        db,
+        principal=principal,
+        event_type="document.archived",
+        target_type="document",
+        target_id=document.id,
+        reason=reason,
+        payload={"knowledge_source_id": document.knowledge_source_id, "title": document.title},
+    )
+    db.commit()
+    db.refresh(document)
+    return document
 
 
 @router.post("/documents", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
@@ -408,6 +453,7 @@ def list_document_chunks(document_id: str, db: Session = Depends(get_db)) -> lis
         db.scalars(
             select(DocumentChunk)
             .where(DocumentChunk.document_id == document_id)
+            .where(DocumentChunk.status != "archived")
             .order_by(DocumentChunk.chunk_index)
         )
     )

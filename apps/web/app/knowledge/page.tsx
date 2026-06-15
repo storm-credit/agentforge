@@ -10,6 +10,7 @@ import {
   sha256Hex,
   type DocumentSummary,
   type KnowledgeSource,
+  updateDocumentAcl,
   uploadDocument,
 } from "../lib/api";
 
@@ -34,11 +35,46 @@ export default function KnowledgePage() {
   const [error, setError] = useState("");
   const [result, setResult] = useState("");
 
+  // ACL editing (per-document)
+  const [aclEdit, setAclEdit] = useState<
+    { docId: string; groups: string; level: string; reason: string } | null
+  >(null);
+  const [aclBusy, setAclBusy] = useState(false);
+
   function refresh() {
     listSources().then(setSources).catch(() => {});
     listDocuments().then(setDocuments).catch(() => {});
   }
   useEffect(refresh, []);
+
+  function startAclEdit(d: DocumentSummary) {
+    setAclEdit({
+      docId: d.id,
+      groups: (d.access_groups ?? []).join(", "),
+      level: d.confidentiality_level,
+      reason: "",
+    });
+  }
+
+  async function saveAcl() {
+    if (!aclEdit) return;
+    setAclBusy(true);
+    setError("");
+    try {
+      const groups = aclEdit.groups.split(",").map((g) => g.trim()).filter(Boolean);
+      await updateDocumentAcl(aclEdit.docId, {
+        access_groups: groups,
+        confidentiality_level: aclEdit.level,
+        reason: aclEdit.reason.trim() || "ACL updated via Knowledge UI",
+      });
+      setAclEdit(null);
+      refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setAclBusy(false);
+    }
+  }
 
   function onFile(e: ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -192,10 +228,41 @@ export default function KnowledgePage() {
           {sources.map((s) => (
             <div key={s.id} style={{ marginBottom: "10px" }}>
               <strong>{s.name}</strong>
-              <ul style={{ margin: "4px 0", paddingLeft: "18px" }}>
+              <ul style={{ margin: "4px 0", paddingLeft: "18px", listStyle: "none" }}>
                 {documents.filter((d) => d.knowledge_source_id === s.id).map((d) => (
-                  <li key={d.id} style={{ fontSize: "14px" }}>
-                    {d.title} <span className="badge">{d.status}</span>
+                  <li key={d.id} data-testid="doc-row" style={{ fontSize: "14px", marginBottom: "6px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+                      {d.title} <span className="badge">{d.status}</span>
+                      <span className="badge warn" data-testid="doc-confidentiality">{d.confidentiality_level}</span>
+                      <span style={{ fontSize: "12px", color: "#64748b" }} data-testid="doc-groups">
+                        {(d.access_groups ?? []).join(", ")}
+                      </span>
+                      <button className="button secondary" data-testid="acl-edit"
+                        style={{ padding: "2px 8px", fontSize: "12px" }}
+                        onClick={() => startAclEdit(d)}>ACL 편집</button>
+                    </div>
+                    {aclEdit?.docId === d.id && (
+                      <div className="card" data-testid="acl-form" style={{ marginTop: "6px", padding: "10px" }}>
+                        <select value={aclEdit.level}
+                          onChange={(e) => setAclEdit({ ...aclEdit, level: e.target.value })}>
+                          <option value="public">공개</option>
+                          <option value="internal">내부</option>
+                          <option value="restricted">제한</option>
+                        </select>
+                        <input className="field" data-testid="acl-groups" placeholder="접근그룹(쉼표)"
+                          value={aclEdit.groups}
+                          onChange={(e) => setAclEdit({ ...aclEdit, groups: e.target.value })} />
+                        <input className="field" data-testid="acl-reason" placeholder="변경 사유 (감사 기록)"
+                          value={aclEdit.reason}
+                          onChange={(e) => setAclEdit({ ...aclEdit, reason: e.target.value })} />
+                        <div className="buttonRow">
+                          <button className="button" data-testid="acl-save" disabled={aclBusy} onClick={saveAcl}>
+                            {aclBusy ? "저장 중…" : "저장"}
+                          </button>
+                          <button className="button secondary" onClick={() => setAclEdit(null)}>취소</button>
+                        </div>
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

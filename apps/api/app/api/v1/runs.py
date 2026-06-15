@@ -25,6 +25,7 @@ from app.domain.pii import mask_pii
 from app.domain.vector import FakeVectorStore, VectorQuery, VectorSearchResult, build_acl_filter, get_vector_store
 from app.infra.audit import write_audit_event
 from app.services.llm_gateway import ContextBlock, clamp_temperature, clamp_top_p, get_gateway
+from app.services.answerability_judge import get_judge
 from app.services.reranker import get_reranker
 
 logger = logging.getLogger(__name__)
@@ -188,10 +189,17 @@ def create_run(
     confidence_ok = top_score >= gen_settings.answer_min_score
     grounding = None
     guard_tripped = False
-    confidence_gate_tripped = False
+    confidence_gate_tripped = not confidence_ok
 
-    if not confidence_ok:
-        confidence_gate_tripped = True
+    # LLM-as-judge answerability gate: even when the scalar confidence gate passes, a
+    # semantic judge can catch accessible-but-irrelevant context (the over-answer case
+    # scalar scores miss). Default no-op; runs on the local LLM when enabled.
+    judge = get_judge()
+    judge_refused = False
+    if confidence_ok and context_blocks and judge.name != "none":
+        judge_refused = not judge.is_answerable(payload.input.message, context_blocks)
+
+    if confidence_gate_tripped or judge_refused:
         run.answer = _guard_refusal(answer_language)
         citations = []
         run.citations = citations
@@ -301,6 +309,8 @@ def create_run(
             "guard_tripped": guard_tripped,
             "top_score": round(top_score, 4),
             "confidence_gate_tripped": confidence_gate_tripped,
+            "judge": judge.name,
+            "judge_refused": judge_refused,
         },
         status="succeeded" if citation_validation.passed else "failed",
         error_code=citation_validation.error_code,

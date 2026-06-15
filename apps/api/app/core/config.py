@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     object_store_bucket: str = "agentforge"
     object_store_secure: bool = False
     rerank_backend: str = "none"  # none | (future: vllm cross-encoder) — see research-reranking-options.md
+    judge_backend: str = "none"  # none | llm — LLM answerability judge (refusal discipline); runs on local Ollama
 
     model_config = SettingsConfigDict(
         env_file=".env",

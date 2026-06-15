@@ -406,6 +406,45 @@ def test_output_guard_refuses_ungrounded_answer(client, monkeypatch):
         get_settings.cache_clear()
 
 
+def test_llm_judge_refuses_when_context_not_answerable(client, monkeypatch):
+    from app.core.config import get_settings
+    from app.services import answerability_judge, llm_gateway
+
+    monkeypatch.setenv("AGENT_FORGE_JUDGE_BACKEND", "llm")
+    get_settings.cache_clear()
+    answerability_judge.get_judge.cache_clear()
+
+    # judge says NOT answerable -> the run must refuse instead of answering
+    monkeypatch.setattr(
+        llm_gateway.LLMGateway, "judge_answerable", lambda self, *, question, context: False
+    )
+
+    def fake_generate(self, *, question, context, language, temperature=0.2, top_p=None):
+        raise AssertionError("LLM generate must not be called when the judge refuses")
+
+    monkeypatch.setattr(llm_gateway.LLMGateway, "generate", fake_generate)
+    try:
+        ids = _seed_agent_with_indexed_doc(client)
+        resp = client.post(
+            "/api/v1/runs",
+            json={
+                "agent_id": ids["agent_id"],
+                "input": {"message": "휴가 며칠?"},
+                "knowledge_source_ids": [ids["source_id"]],
+            },
+        )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["citations"] == []  # refused
+        steps = client.get(f"/api/v1/runs/{body['id']}/steps").json()
+        guard = next(s for s in steps if s["step_type"] == "guard_output")
+        assert guard["output_summary"]["judge"] == "llm"
+        assert guard["output_summary"]["judge_refused"] is True
+    finally:
+        get_settings.cache_clear()
+        answerability_judge.get_judge.cache_clear()
+
+
 def test_run_records_reranker_in_trace(client):
     ids = _seed_agent_with_indexed_doc(client)
     run = client.post(

@@ -81,11 +81,14 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 3. ✅ **MinIO 객체저장소 배선 + 객체스토어 fetch 인제스트(AF-009)** (PR #30). opt-in(기본 none), 실 MinIO 라이브 검증. ([object-storage-af009.md](object-storage-af009.md))
 4. ✅ **rerank 인터페이스/스텁** (PR #31) — runs.py rerank 훅(noop 기본, env 게이트), 실제 cross-encoder는 사내 모델 가용 시 연결. ([research-reranking-options.md](research-reranking-options.md))
 
-5. ✅ **롤백 / 버전 config 디프 뷰** (PR #32) — 이전 버전 재게시(롤백, 현재본 supersede) + 현재 게시본 대비 config 차이 표시. WS4 버전 라이프사이클 완성.
+5. ✅ **롤백 / 버전 config 디프 뷰** (PR #32) — WS4 버전 라이프사이클 완성.
+6. ✅ **LLM-as-judge 답변가능성 게이트** (PR #33) — 코드 훅(local Ollama로 동작, env `AGENT_FORGE_JUDGE_BACKEND`, 기본 off). **측정 결과: 로컬 qwen3:1.7b론 거부규율 개선 없음(citation 100→91.7 하락)** → 실질 개선은 사내 35B 대기. 훅은 이식 레버로 유지. ([eval-results-judge-v0.4.md](eval-results-judge-v0.4.md))
 
 ### 아직 코드로 닫을 수 있으나 미착수 (🔧 남음 — "완결" 아님)
 - **프롬프트 인젝션 하드닝 보강**(WS2) — 프롬프트 템플릿/가드 강화(강건성 상한은 모델 의존이나 개선 여지 있음).
 - (문서목록 GET 메타 스코프 — 의도적 보류, 정책 정해지면.)
+
+> **거부규율(c07) 갱신:** scalar 게이트(v0.3)·로컬 1.7b judge(v0.4) 모두 못 고침. 코드 토대(judge 훅 + rerank 훅)는 깔렸고, 실질 개선은 사내 35B/cross-encoder 대기(⛔ 모델). rerank는 Ollama 미지원으로 로컬 검증 불가.
 
 ## Go/No-Go 권고
 - **기술 MVP: GO 가능** — 핵심 가치(권한 기반 인용 답변 + 누출 0)가 코드·eval로 성립.

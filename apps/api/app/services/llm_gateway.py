@@ -113,16 +113,28 @@ class LLMGateway:
     base_url must include the OpenAI version prefix, e.g. ``http://host:11434/v1``.
     """
 
-    def __init__(self, base_url: str | None, model: str, timeout_seconds: float) -> None:
+    def __init__(
+        self,
+        base_url: str | None,
+        model: str,
+        timeout_seconds: float,
+        api_key: str | None = None,
+    ) -> None:
         self.base_url = base_url.rstrip("/") if base_url else None
         self.model = model
         self.timeout_seconds = timeout_seconds
+        self.api_key = api_key
+
+    def _headers(self) -> dict:
+        if not self.api_key:
+            return {}
+        return {"Authorization": f"Bearer {self.api_key}"}
 
     def health(self) -> dict:
         if not self.base_url:
             return {"configured": False, "model": self.model}
         try:
-            with httpx.Client(timeout=min(self.timeout_seconds, 5.0)) as client:
+            with httpx.Client(timeout=min(self.timeout_seconds, 5.0), headers=self._headers()) as client:
                 r = client.get(f"{self.base_url}/models")
                 r.raise_for_status()
                 return {"configured": True, "status": "ok", "model": self.model}
@@ -151,7 +163,7 @@ class LLMGateway:
             clamped_top_p = clamp_top_p(top_p)
             if clamped_top_p is not None:
                 payload["top_p"] = clamped_top_p
-            with httpx.Client(timeout=self.timeout_seconds) as client:
+            with httpx.Client(timeout=self.timeout_seconds, headers=self._headers()) as client:
                 r = client.post(
                     f"{self.base_url}/chat/completions",
                     json=payload,
@@ -174,7 +186,7 @@ class LLMGateway:
         if not self.base_url or not context:
             return None
         try:
-            with httpx.Client(timeout=self.timeout_seconds) as client:
+            with httpx.Client(timeout=self.timeout_seconds, headers=self._headers()) as client:
                 r = client.post(
                     f"{self.base_url}/chat/completions",
                     json={
@@ -198,4 +210,9 @@ class LLMGateway:
 
 def get_gateway() -> LLMGateway:
     s = get_settings()
-    return LLMGateway(base_url=s.llm_base_url, model=s.llm_model, timeout_seconds=s.llm_timeout_seconds)
+    return LLMGateway(
+        base_url=s.llm_base_url,
+        model=s.llm_model,
+        timeout_seconds=s.llm_timeout_seconds,
+        api_key=s.llm_api_key,
+    )

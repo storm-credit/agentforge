@@ -22,10 +22,12 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = 30.0
     llm_temperature: float = 0.2
     llm_top_p: float | None = None
+    llm_api_key: str | None = None  # optional bearer token for the LLM gateway (in-house/prod gateways may require auth); default None = no Authorization header sent
     embedding_base_url: str | None = None
     embedding_model: str = "bge-m3"
     embedding_dim: int = 1024
     embedding_timeout_seconds: float = 30.0
+    embedding_api_key: str | None = None  # optional bearer token for the embedding gateway; default None = no Authorization header sent
     qdrant_url: str = "http://localhost:6333"
     vector_backend: str = "fake"  # "fake" | "qdrant"
     retrieval_min_score: float = 0.0  # drop retrieval hits below this score (relevance gating)

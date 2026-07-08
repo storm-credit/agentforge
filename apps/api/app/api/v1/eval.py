@@ -31,6 +31,7 @@ _SUMMARY_METRICS = (
     "useful_answer_pct",
     "refusal_discipline_pct",
     "faithfulness_pct",
+    "faithfulness_threshold",
 )
 
 

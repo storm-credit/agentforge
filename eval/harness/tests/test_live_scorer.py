@@ -183,6 +183,28 @@ def test_faithfulness_default_threshold_is_backend_code_default_zero(monkeypatch
     assert rep["faithfulness_pct"] == 100.0
 
 
+def test_faithfulness_threshold_reports_explicit_grounding_min():
+    scores = [score_case(_case(case_id=f"c{i}"), _run(), DOC_MAP) for i in range(4)]
+    rep = aggregate(scores, grounding_scores=[0.8, 0.5, 0.3, None], grounding_min=0.5)
+    assert rep["faithfulness_threshold"] == 0.5
+
+
+def test_faithfulness_threshold_reports_env_fallback_when_not_passed(monkeypatch):
+    monkeypatch.setenv("AGENT_FORGE_EVAL_GROUNDING_MIN", "0.5")
+    scores = [score_case(_case(case_id=f"c{i}"), _run(), DOC_MAP) for i in range(3)]
+    rep = aggregate(scores, grounding_scores=[0.8, 0.5, 0.3])
+    assert rep["faithfulness_threshold"] == 0.5
+
+
+def test_faithfulness_threshold_present_even_when_pct_is_none():
+    # No grounding_scores measured -> faithfulness_pct is None, but the threshold that
+    # WOULD have been used must still be reported so the field stays informative.
+    scores = [score_case(_case(), _run(), DOC_MAP)]
+    rep = aggregate(scores, grounding_min=0.5)
+    assert rep["faithfulness_pct"] is None
+    assert rep["faithfulness_threshold"] == 0.5
+
+
 def test_corpus_live_parses_and_is_consistent():
     import json
     import pathlib

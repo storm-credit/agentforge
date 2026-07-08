@@ -10,6 +10,7 @@ import {
   type AgentSummary,
   type AgentVersionSummary,
 } from "../../lib/api";
+import { useDemoRole } from "../../lib/useDemoRole";
 
 const STATUS_BADGE: Record<string, string> = {
   draft: "badge warn",
@@ -37,6 +38,9 @@ function diffConfig(
 
 export default function AgentDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
+  // UX only: version create/validate/publish are role-gated server-side (403 for
+  // non-privileged roles) — hide the controls the current demo role can't use.
+  const { isPrivileged } = useDemoRole();
   const [agent, setAgent] = useState<AgentSummary | null>(null);
   const [versions, setVersions] = useState<AgentVersionSummary[]>([]);
   const [error, setError] = useState("");
@@ -101,14 +105,16 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
       <div className="panel">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
           <h3 style={{ margin: 0 }}>버전 라이프사이클</h3>
-          <button
-            className="button secondary"
-            data-testid="new-version"
-            disabled={busyId === "new"}
-            onClick={onCreateVersion}
-          >
-            {busyId === "new" ? "생성 중…" : "새 버전 생성"}
-          </button>
+          {isPrivileged && (
+            <button
+              className="button secondary"
+              data-testid="new-version"
+              disabled={busyId === "new"}
+              onClick={onCreateVersion}
+            >
+              {busyId === "new" ? "생성 중…" : "새 버전 생성"}
+            </button>
+          )}
         </div>
         <p style={{ fontSize: "13px", color: "#64748b", margin: "8px 0 12px" }}>
           draft → validated → published. 게시하면 기존 게시 버전은 superseded 됩니다.
@@ -128,7 +134,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
                   by {v.created_by}{v.published_at ? ` · 게시 ${v.published_at.slice(0, 10)}` : ""}
                 </span>
               </div>
-              {(v.status === "draft" || v.status === "validated" || v.status === "superseded") && (
+              {isPrivileged && (v.status === "draft" || v.status === "validated" || v.status === "superseded") && (
                 <div className="buttonRow" style={{ marginTop: "8px" }}>
                   <input
                     className="field"

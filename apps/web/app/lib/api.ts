@@ -1,3 +1,5 @@
+import { roleHeaders } from "./demoRole";
+
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 export const MOCK_USERS = {
@@ -18,7 +20,7 @@ export const MOCK_USERS = {
 export type MockUserKey = keyof typeof MOCK_USERS;
 
 export async function firstAgentId(): Promise<string | null> {
-  const r = await fetch(`${API_BASE}/agents`, { headers: { ...OPERATOR } });
+  const r = await fetch(`${API_BASE}/agents`, { headers: { ...roleHeaders() } });
   const list = await r.json();
   return list[0]?.id ?? null;
 }
@@ -42,13 +44,8 @@ export async function ask(params: {
   return r.json();
 }
 
-const OPERATOR = {
-  "X-Agent-Forge-User": "operator",
-  "X-Agent-Forge-Department": "Operations",
-  "X-Agent-Forge-Roles": "admin",
-  "X-Agent-Forge-Groups": "all-employees",
-  "X-Agent-Forge-Clearance": "internal",
-} as const;
+// Identity headers are now built at call time from the selected demo role
+// (see lib/demoRole.ts) — default is the historical operator/admin bundle.
 
 export type KnowledgeSource = { id: string; name: string };
 export type AgentSummary = {
@@ -57,7 +54,7 @@ export type AgentSummary = {
 
 export async function listAgents(): Promise<AgentSummary[]> {
   // Builder view is operator/admin; agent list is publish-status-scoped server-side.
-  const r = await fetch(`${API_BASE}/agents`, { headers: { ...OPERATOR } });
+  const r = await fetch(`${API_BASE}/agents`, { headers: { ...roleHeaders() } });
   if (!r.ok) throw new Error(`list agents failed: ${r.status}`);
   return r.json();
 }
@@ -65,14 +62,14 @@ export async function listAgents(): Promise<AgentSummary[]> {
 export async function listSources(): Promise<KnowledgeSource[]> {
   // The builder is an operator/admin view; the source list is now clearance-scoped
   // server-side, so send the operator identity to see the full source picker.
-  const r = await fetch(`${API_BASE}/knowledge/sources`, { headers: { ...OPERATOR } });
+  const r = await fetch(`${API_BASE}/knowledge/sources`, { headers: { ...roleHeaders() } });
   if (!r.ok) throw new Error(`list sources failed: ${r.status}`);
   return r.json();
 }
 
 // 소스별 status==="indexed" 문서 수
 export async function indexedDocCountBySource(): Promise<Record<string, number>> {
-  const r = await fetch(`${API_BASE}/knowledge/documents`, { headers: { ...OPERATOR } });
+  const r = await fetch(`${API_BASE}/knowledge/documents`, { headers: { ...roleHeaders() } });
   if (!r.ok) throw new Error(`list documents failed: ${r.status}`);
   const docs: Array<{ knowledge_source_id: string; status: string }> = await r.json();
   const counts: Record<string, number> = {};
@@ -89,7 +86,7 @@ export async function createAgent(input: {
 }): Promise<{ id: string }> {
   const r = await fetch(`${API_BASE}/agents`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...OPERATOR },
+    headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify({ ...input, status: "draft" }),
   });
   if (!r.ok) throw new Error(`create agent failed: ${r.status}`);
@@ -106,7 +103,7 @@ export async function createVersion(input: {
   if (input.temperature !== undefined) config.temperature = input.temperature;
   const r = await fetch(`${API_BASE}/agents/versions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...OPERATOR },
+    headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify({
       agent_id: input.agent_id,
       status: "draft",
@@ -123,7 +120,7 @@ export async function publishVersion(
 ): Promise<AgentVersionSummary> {
   const r = await fetch(`${API_BASE}/agents/versions/${versionId}/publish`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...OPERATOR },
+    headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify({ reason }),
   });
   if (!r.ok) throw new Error(`publish failed: ${r.status}`);
@@ -147,7 +144,7 @@ export async function createDraftVersion(
 ): Promise<AgentVersionSummary> {
   const r = await fetch(`${API_BASE}/agents/versions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...OPERATOR },
+    headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify({ agent_id: agentId, status: "draft", config }),
   });
   if (!r.ok) throw new Error(`create version failed: ${r.status}`);
@@ -155,13 +152,13 @@ export async function createDraftVersion(
 }
 
 export async function getAgent(agentId: string): Promise<AgentSummary> {
-  const r = await fetch(`${API_BASE}/agents/${agentId}`, { headers: { ...OPERATOR } });
+  const r = await fetch(`${API_BASE}/agents/${agentId}`, { headers: { ...roleHeaders() } });
   if (!r.ok) throw new Error(`get agent failed: ${r.status}`);
   return r.json();
 }
 
 export async function listVersions(agentId: string): Promise<AgentVersionSummary[]> {
-  const r = await fetch(`${API_BASE}/agents/${agentId}/versions`, { headers: { ...OPERATOR } });
+  const r = await fetch(`${API_BASE}/agents/${agentId}/versions`, { headers: { ...roleHeaders() } });
   if (!r.ok) throw new Error(`list versions failed: ${r.status}`);
   return r.json();
 }
@@ -172,7 +169,7 @@ export async function validateVersion(
 ): Promise<AgentVersionSummary> {
   const r = await fetch(`${API_BASE}/agents/versions/${versionId}/validate`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...OPERATOR },
+    headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify({ reason }),
   });
   if (!r.ok) throw new Error(`validate failed: ${r.status}`);
@@ -186,7 +183,7 @@ export type DocumentSummary = {
 
 export async function listDocuments(): Promise<DocumentSummary[]> {
   // /knowledge is an operator/admin view; document list is ACL-scoped server-side.
-  const r = await fetch(`${API_BASE}/knowledge/documents`, { headers: { ...OPERATOR } });
+  const r = await fetch(`${API_BASE}/knowledge/documents`, { headers: { ...roleHeaders() } });
   if (!r.ok) throw new Error(`list documents failed: ${r.status}`);
   return r.json();
 }
@@ -197,7 +194,7 @@ export async function updateDocumentAcl(
 ): Promise<DocumentSummary> {
   const r = await fetch(`${API_BASE}/knowledge/documents/${documentId}/acl`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json", ...OPERATOR },
+    headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify(input),
   });
   if (!r.ok) throw new Error(`acl update failed: ${r.status}`);
@@ -211,7 +208,7 @@ export async function archiveDocument(
   const q = new URLSearchParams({ reason });
   const r = await fetch(`${API_BASE}/knowledge/documents/${documentId}?${q.toString()}`, {
     method: "DELETE",
-    headers: { ...OPERATOR },
+    headers: { ...roleHeaders() },
   });
   if (!r.ok) throw new Error(`archive failed: ${r.status}`);
   return r.json();
@@ -235,7 +232,7 @@ export async function listAuditEvents(
   const q = new URLSearchParams();
   if (params.event_type) q.set("event_type", params.event_type);
   q.set("limit", String(params.limit ?? 50));
-  const r = await fetch(`${API_BASE}/audit/events?${q.toString()}`, { headers: { ...OPERATOR } });
+  const r = await fetch(`${API_BASE}/audit/events?${q.toString()}`, { headers: { ...roleHeaders() } });
   if (!r.ok) throw new Error(`list audit failed: ${r.status}`);
   return r.json();
 }
@@ -250,7 +247,7 @@ export async function createSource(input: {
 }): Promise<{ id: string }> {
   const r = await fetch(`${API_BASE}/knowledge/sources`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...OPERATOR },
+    headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify(input),
   });
   if (!r.ok) throw new Error(`create source failed: ${r.status}`);
@@ -268,7 +265,7 @@ export async function registerDocument(input: {
 }): Promise<{ id: string }> {
   const r = await fetch(`${API_BASE}/knowledge/documents`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...OPERATOR },
+    headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify({ ...input, status: "registered" }),
   });
   if (!r.ok) throw new Error(`register document failed: ${r.status}`);
@@ -299,7 +296,7 @@ export async function uploadDocument(input: {
 
   const r = await fetch(`${API_BASE}/knowledge/documents/upload`, {
     method: "POST",
-    headers: { ...OPERATOR },
+    headers: { ...roleHeaders() },
     body: form,
   });
   if (!r.ok) throw new Error(`upload failed: ${r.status}`);
@@ -311,7 +308,7 @@ export async function indexDocument(input: {
 }): Promise<{ status: string; chunk_count: number; error_code: string | null; error_message: string | null }> {
   const r = await fetch(`${API_BASE}/knowledge/documents/${input.document_id}/index-jobs`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...OPERATOR },
+    headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify({
       parser_profile: "default-txt-md",
       embedding_model: "bge-m3",
@@ -359,19 +356,19 @@ export type RetrievalHit = {
 // The Runs page is an operator/admin monitoring view; run reads are owner/admin-scoped
 // server-side, so send the operator identity to see all runs.
 export async function listRuns(): Promise<RunSummary[]> {
-  const r = await fetch(`${API_BASE}/runs`, { headers: { ...OPERATOR } });
+  const r = await fetch(`${API_BASE}/runs`, { headers: { ...roleHeaders() } });
   if (!r.ok) throw new Error(`list runs failed: ${r.status}`);
   return r.json();
 }
 
 export async function getRunSteps(runId: string): Promise<RunStep[]> {
-  const r = await fetch(`${API_BASE}/runs/${runId}/steps`, { headers: { ...OPERATOR } });
+  const r = await fetch(`${API_BASE}/runs/${runId}/steps`, { headers: { ...roleHeaders() } });
   if (!r.ok) throw new Error(`get steps failed: ${r.status}`);
   return r.json();
 }
 
 export async function getRunHits(runId: string): Promise<RetrievalHit[]> {
-  const r = await fetch(`${API_BASE}/runs/${runId}/retrieval-hits`, { headers: { ...OPERATOR } });
+  const r = await fetch(`${API_BASE}/runs/${runId}/retrieval-hits`, { headers: { ...roleHeaders() } });
   if (!r.ok) throw new Error(`get hits failed: ${r.status}`);
   return r.json();
 }

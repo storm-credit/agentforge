@@ -14,8 +14,12 @@ import {
   updateDocumentAcl,
   uploadDocument,
 } from "../lib/api";
+import { useDemoRole } from "../lib/useDemoRole";
 
 export default function KnowledgePage() {
+  // UX only: the server enforces RBAC on these mutations regardless (403 for
+  // non-privileged roles) — we just hide controls the current demo role can't use.
+  const { role, isPrivileged } = useDemoRole();
   const [sources, setSources] = useState<KnowledgeSource[]>([]);
   const [documents, setDocuments] = useState<DocumentSummary[]>([]);
 
@@ -209,7 +213,7 @@ export default function KnowledgePage() {
               <option value="new">새로 만들기</option>
             </select>
             {sourceMode === "existing" ? (
-              <select value={selectedSourceId} onChange={(e) => setSelectedSourceId(e.target.value)}>
+              <select data-testid="source-select" value={selectedSourceId} onChange={(e) => setSelectedSourceId(e.target.value)}>
                 <option value="">소스 선택…</option>
                 {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
@@ -226,7 +230,7 @@ export default function KnowledgePage() {
             value={content} onChange={(e) => setContent(e.target.value)} />
 
           <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
-            <select value={confidentiality} onChange={(e) => setConfidentiality(e.target.value)}>
+            <select data-testid="confidentiality-select" value={confidentiality} onChange={(e) => setConfidentiality(e.target.value)}>
               <option value="public">공개</option>
               <option value="internal">내부</option>
               <option value="restricted">제한</option>
@@ -249,6 +253,12 @@ export default function KnowledgePage() {
 
         <div className="panel" style={{ flex: "1 1 320px" }}>
           <h3>지식소스 / 문서</h3>
+          {!isPrivileged && (
+            <p data-testid="role-restricted-note" style={{ fontSize: "12px", color: "#64748b" }}>
+              데모 역할 &quot;{role}&quot; — 관리 작업(ACL 편집/보관)은 숨겨지며, 목록은 이
+              역할의 열람 권한(clearance/ACL) 범위만 서버에서 필터되어 표시됩니다.
+            </p>
+          )}
           {sources.map((s) => (
             <div key={s.id} style={{ marginBottom: "10px" }}>
               <strong>{s.name}</strong>
@@ -261,12 +271,16 @@ export default function KnowledgePage() {
                       <span style={{ fontSize: "12px", color: "#64748b" }} data-testid="doc-groups">
                         {(d.access_groups ?? []).join(", ")}
                       </span>
-                      <button className="button secondary" data-testid="acl-edit"
-                        style={{ padding: "2px 8px", fontSize: "12px" }}
-                        onClick={() => startAclEdit(d)}>ACL 편집</button>
-                      <button className="button secondary" data-testid="archive-doc"
-                        style={{ padding: "2px 8px", fontSize: "12px" }}
-                        onClick={() => startArchive(d)}>보관</button>
+                      {isPrivileged && (
+                        <>
+                          <button className="button secondary" data-testid="acl-edit"
+                            style={{ padding: "2px 8px", fontSize: "12px" }}
+                            onClick={() => startAclEdit(d)}>ACL 편집</button>
+                          <button className="button secondary" data-testid="archive-doc"
+                            style={{ padding: "2px 8px", fontSize: "12px" }}
+                            onClick={() => startArchive(d)}>보관</button>
+                        </>
+                      )}
                     </div>
                     {archiveEdit?.docId === d.id && (
                       <div className="card" data-testid="archive-form" style={{ marginTop: "6px", padding: "10px" }}>

@@ -10,7 +10,7 @@ test("archiving a document via the knowledge page removes it from the list", asy
   const uniqueTitle = `Archive Test Doc ${Date.now()}`;
 
   // Pick the first existing knowledge source (default "기존 선택" mode).
-  const sourceSelect = page.locator("select").nth(1);
+  const sourceSelect = page.getByTestId("source-select");
   await sourceSelect.selectOption({ index: 1 });
 
   await page.getByPlaceholder("문서 제목").fill(uniqueTitle);

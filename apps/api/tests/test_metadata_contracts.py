@@ -373,6 +373,118 @@ def test_archive_document_excludes_from_retrieval_and_list(client):
     assert any(e["target_id"] == document["id"] for e in events)
 
 
+def test_restore_document_requires_admin_and_reappears_in_list(client):
+    document = _create_indexable_document(client)
+    client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        json={"source_text": "# Remote Work\n\nremote work after manager approval."},
+    )
+    client.delete(f"/api/v1/knowledge/documents/{document['id']}", headers=_ADMIN)
+
+    def _doc_ids():
+        return [d["id"] for d in client.get("/api/v1/knowledge/documents").json()]
+
+    assert document["id"] not in _doc_ids()
+
+    # non-admin cannot restore -> 403 + policy.denied audit event
+    denied = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/restore", headers=_DEVELOPER
+    )
+    assert denied.status_code == 403
+    denied_events = client.get(
+        "/api/v1/audit/events?event_type=policy.denied", headers=_ADMIN
+    ).json()
+    assert any(
+        e["target_id"] == document["id"] and e["payload"].get("action") == "document.restore"
+        for e in denied_events
+    )
+
+    # admin restores -> back to "registered" (pre-index state: listed + re-indexable,
+    # but not searchable since archive purged the vectors), chunks visible again
+    resp = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/restore?reason=archived by mistake",
+        headers=_ADMIN,
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "registered"
+    assert document["id"] in _doc_ids()
+    chunks = client.get(f"/api/v1/knowledge/documents/{document['id']}/chunks").json()
+    assert len(chunks) >= 1
+    assert all(c["status"] == "active" for c in chunks)
+
+    # audited
+    events = client.get(
+        "/api/v1/audit/events?event_type=document.restored", headers=_ADMIN
+    ).json()
+    assert any(
+        e["target_id"] == document["id"] and e["reason"] == "archived by mistake"
+        for e in events
+    )
+
+
+def test_restore_non_archived_document_conflicts(client):
+    document = _create_indexable_document(client)
+
+    response = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/restore", headers=_ADMIN
+    )
+    assert response.status_code == 409
+    assert response.json()["detail"] == "Document is not archived"
+
+    assert client.post(
+        "/api/v1/knowledge/documents/missing-document/restore", headers=_ADMIN
+    ).status_code == 404
+
+
+def test_restore_does_not_resurrect_vectors(client, monkeypatch):
+    # Archive purged the document's vectors; restore must NOT touch the vector store
+    # (no re-upsert, no purge) and the content stays unretrievable until a fresh
+    # index job runs.
+    from app.api.v1 import knowledge as knowledge_module
+
+    document = _create_indexable_document(client)
+    client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        json={"source_text": "# Remote Work\n\nremote work after manager approval."},
+    )
+    client.delete(f"/api/v1/knowledge/documents/{document['id']}", headers=_ADMIN)
+
+    def _fail_if_used():
+        raise AssertionError("restore must not touch the vector store")
+
+    monkeypatch.setattr(knowledge_module, "get_vector_store", _fail_if_used)
+    resp = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/restore", headers=_ADMIN
+    )
+    assert resp.status_code == 200
+
+    # No chunk/vector-backed retrieval after restore: chunks are "active" (not
+    # "indexed"), so the fake store can only emit its chunk-less document fallback
+    # hit (chunk_id None) — the purged vectors did not come back.
+    def _doc_hits():
+        resp = client.post(
+            "/api/v1/knowledge/retrieval/preview",
+            json={"query": "remote work approval", "top_k": 10},
+        )
+        return [h for h in resp.json()["hits"] if h["document_id"] == document["id"]]
+
+    assert all(h["chunk_id"] is None for h in _doc_hits())
+
+    # ...until a fresh (forced) index job runs: the restored "registered" status must
+    # be re-indexable, and re-indexing makes chunk-backed retrieval work again.
+    monkeypatch.undo()
+    job = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        json={
+            "source_text": "# Remote Work\n\nremote work after manager approval.",
+            "force_reindex": True,
+        },
+    ).json()
+    assert job["status"] == "succeeded"
+    chunk_hits = [h for h in _doc_hits() if h["chunk_id"]]
+    assert len(chunk_hits) >= 1
+
+
 def test_document_list_and_chunks_scoped_by_acl(client):
     source = client.post(
         "/api/v1/knowledge/sources",

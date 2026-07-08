@@ -590,6 +590,193 @@ def test_audit_events_pagination(client):
     assert len(page.json()) == 2
 
 
+def test_list_agents_pagination(client):
+    agents = [
+        client.post(
+            "/api/v1/agents",
+            json={"name": f"Pg Agent {i}", "purpose": "p", "owner_department": "Operations"},
+        ).json()
+        for i in range(3)
+    ]
+    _publish_new_version(client, agents[0]["id"])
+
+    # (a) default behavior unchanged: no params returns the full (role-scoped) list.
+    admin_default = [a["id"] for a in client.get("/api/v1/agents", headers=_ADMIN).json()]
+    assert set(admin_default) == {a["id"] for a in agents}
+    dev_default = [a["id"] for a in client.get("/api/v1/agents", headers=_DEVELOPER).json()]
+    assert dev_default == [agents[0]["id"]]
+
+    # (b) limit/offset windows the admin result consistently with the full list.
+    def _admin_page(limit, offset):
+        return [
+            a["id"]
+            for a in client.get(
+                "/api/v1/agents", headers=_ADMIN, params={"limit": limit, "offset": offset}
+            ).json()
+        ]
+
+    assert _admin_page(2, 0) == admin_default[:2]
+    assert _admin_page(2, 2) == admin_default[2:]
+    assert _admin_page(2, 3) == []
+
+    # Non-admin pagination windows the published-only set (SQL WHERE runs before
+    # LIMIT/OFFSET, so the single published agent is on page 0, not filtered out of it).
+    dev_page0 = client.get(
+        "/api/v1/agents", headers=_DEVELOPER, params={"limit": 1, "offset": 0}
+    ).json()
+    assert [a["id"] for a in dev_page0] == [agents[0]["id"]]
+    assert client.get(
+        "/api/v1/agents", headers=_DEVELOPER, params={"limit": 1, "offset": 1}
+    ).json() == []
+
+    # bounds validation matches the audit-events pattern
+    assert client.get("/api/v1/agents", headers=_ADMIN, params={"limit": 0}).status_code == 422
+    assert client.get("/api/v1/agents", headers=_ADMIN, params={"limit": 501}).status_code == 422
+    assert client.get("/api/v1/agents", headers=_ADMIN, params={"offset": -1}).status_code == 422
+
+
+def test_list_documents_pagination_applies_after_acl_filter(client):
+    # CRITICAL pagination-correctness test: accessible and inaccessible documents are
+    # interleaved in creation order, so a naive SQL LIMIT/OFFSET applied BEFORE the
+    # Python ACL filter would window the unfiltered 5-doc superset and produce short,
+    # skippy, inconsistent pages for the non-admin. Pagination must window the
+    # ACL-FILTERED set instead.
+    source = client.post(
+        "/api/v1/knowledge/sources",
+        json={"name": "Doc Pagination Src", "description": "x", "owner_department": "Security"},
+    ).json()
+
+    def _register(title, level, groups):
+        return client.post(
+            "/api/v1/knowledge/documents",
+            json={
+                "knowledge_source_id": source["id"],
+                "title": title,
+                "object_uri": f"object://{title}.md",
+                "checksum": f"sha256-{title}",
+                "mime_type": "text/markdown",
+                "confidentiality_level": level,
+                "access_groups": groups,
+            },
+        ).json()
+
+    # creation order: hidden, visible, hidden, visible, hidden
+    _register("pg-hidden-0", "restricted", ["department:HR"])
+    visible_first = _register("pg-visible-0", "internal", ["all-employees"])
+    _register("pg-hidden-1", "restricted", ["department:HR"])
+    visible_second = _register("pg-visible-1", "internal", ["all-employees"])
+    _register("pg-hidden-2", "restricted", ["department:HR"])
+
+    finance = {"X-Agent-Forge-Department": "Finance", "X-Agent-Forge-Clearance": "internal"}
+
+    # (a) default behavior unchanged (no params): non-admin sees exactly the 2
+    # accessible docs; admin sees all 5.
+    full = [d["id"] for d in client.get("/api/v1/knowledge/documents", headers=finance).json()]
+    assert set(full) == {visible_first["id"], visible_second["id"]}
+    admin_full = [d["id"] for d in client.get("/api/v1/knowledge/documents", headers=_ADMIN).json()]
+    assert len(admin_full) == 5
+
+    # (b) admin windows match slices of the admin full list
+    def _admin_page(limit, offset):
+        return [
+            d["id"]
+            for d in client.get(
+                "/api/v1/knowledge/documents",
+                headers=_ADMIN,
+                params={"limit": limit, "offset": offset},
+            ).json()
+        ]
+
+    assert _admin_page(2, 0) == admin_full[:2]
+    assert _admin_page(2, 2) == admin_full[2:4]
+    assert _admin_page(2, 4) == admin_full[4:]
+
+    # (c) THE TRAP CHECK: non-admin limit=1 pages, concatenated, reproduce the full
+    # filtered set exactly -- no duplicates, no gaps, each page full-sized. If the
+    # window were computed on the unfiltered superset (SQL LIMIT/OFFSET before the
+    # Python ACL filter), offset=0/limit=1 would land on a hidden doc and return [].
+    def _finance_page(limit, offset):
+        return [
+            d["id"]
+            for d in client.get(
+                "/api/v1/knowledge/documents",
+                headers=finance,
+                params={"limit": limit, "offset": offset},
+            ).json()
+        ]
+
+    page0 = _finance_page(1, 0)
+    page1 = _finance_page(1, 1)
+    assert len(page0) == 1
+    assert len(page1) == 1
+    assert page0 + page1 == full
+    assert len(set(page0 + page1)) == 2
+    assert _finance_page(1, 2) == []
+
+
+def test_list_sources_pagination_applies_after_clearance_filter(client):
+    # CRITICAL pagination-correctness test (sources variant): visible and hidden
+    # sources interleaved so a pre-filter SQL window would misalign non-admin pages.
+    def _make(name, level):
+        return client.post(
+            "/api/v1/knowledge/sources",
+            json={
+                "name": name,
+                "description": "x",
+                "owner_department": "Security",
+                "default_confidentiality_level": level,
+            },
+        ).json()
+
+    _make("pg-src-hidden-0", "restricted")
+    src_visible_first = _make("pg-src-visible-0", "internal")
+    _make("pg-src-hidden-1", "confidential")
+    src_visible_second = _make("pg-src-visible-1", "public")
+    _make("pg-src-hidden-2", "restricted")
+
+    low = {"X-Agent-Forge-Roles": "developer", "X-Agent-Forge-Clearance": "internal"}
+
+    # (a) default behavior unchanged (no params)
+    full = [s["id"] for s in client.get("/api/v1/knowledge/sources", headers=low).json()]
+    assert set(full) == {src_visible_first["id"], src_visible_second["id"]}
+    admin_full = [s["id"] for s in client.get("/api/v1/knowledge/sources", headers=_ADMIN).json()]
+    assert len(admin_full) == 5
+
+    # (b) admin windows match slices of the admin full list
+    def _admin_page(limit, offset):
+        return [
+            s["id"]
+            for s in client.get(
+                "/api/v1/knowledge/sources",
+                headers=_ADMIN,
+                params={"limit": limit, "offset": offset},
+            ).json()
+        ]
+
+    assert _admin_page(3, 0) == admin_full[:3]
+    assert _admin_page(3, 3) == admin_full[3:]
+
+    # (c) THE TRAP CHECK: non-admin limit=1 pages concatenate to exactly the
+    # clearance-filtered set -- no duplicates, no gaps.
+    def _low_page(limit, offset):
+        return [
+            s["id"]
+            for s in client.get(
+                "/api/v1/knowledge/sources",
+                headers=low,
+                params={"limit": limit, "offset": offset},
+            ).json()
+        ]
+
+    page0 = _low_page(1, 0)
+    page1 = _low_page(1, 1)
+    assert len(page0) == 1
+    assert len(page1) == 1
+    assert page0 + page1 == full
+    assert len(set(page0 + page1)) == 2
+    assert _low_page(1, 2) == []
+
+
 def test_privileged_mutations_require_admin_role(client):
     # set up an agent + draft version + an indexed document as admin
     agent = client.post(

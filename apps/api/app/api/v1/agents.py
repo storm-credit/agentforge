@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -21,6 +21,8 @@ router = APIRouter()
 
 @router.get("", response_model=list[AgentRead])
 def list_agents(
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> list[Agent]:
@@ -29,7 +31,10 @@ def list_agents(
     query = select(Agent).order_by(Agent.created_at.desc())
     if "admin" not in principal.roles:
         query = query.where(Agent.status == "published")
-    return list(db.scalars(query))
+    # Unlike list_documents/list_sources, the publish-status scoping here is already a
+    # SQL WHERE (no Python post-filter), so LIMIT/OFFSET can safely live in SQL: the
+    # window is computed on the exact set the caller is allowed to see.
+    return list(db.scalars(query.limit(limit).offset(offset)))
 
 
 @router.get("/{agent_id}", response_model=AgentRead)

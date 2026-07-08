@@ -230,6 +230,23 @@ class RetrievalHit(Base):
     chunk: Mapped[DocumentChunk | None] = relationship(back_populates="retrieval_hits")
 
 
+class EvalRun(Base):
+    """A persisted eval-harness run: the full aggregate report plus headline metadata.
+
+    The report shape is intentionally unnormalized (JSON blob) — the eval harness's
+    aggregate() output evolves faster than a relational schema should.
+    """
+
+    __tablename__ = "eval_runs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    corpus_id: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_by: Mapped[str] = mapped_column(String(120), nullable=False)
+    label: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    report: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
 class AuditEvent(Base):
     __tablename__ = "audit_events"
 

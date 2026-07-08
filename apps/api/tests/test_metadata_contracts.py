@@ -443,6 +443,44 @@ def test_restore_non_archived_document_conflicts(client):
     ).status_code == 404
 
 
+def test_list_documents_include_archived_is_admin_only(client):
+    active = _create_indexable_document(client)
+    archived = _create_indexable_document(client)
+    client.delete(f"/api/v1/knowledge/documents/{archived['id']}", headers=_ADMIN)
+
+    def _ids(headers=None, params=None):
+        resp = client.get("/api/v1/knowledge/documents", headers=headers, params=params)
+        assert resp.status_code == 200
+        return [d["id"] for d in resp.json()]
+
+    # (a) default behavior unchanged (no regression): archived hidden from admin and
+    # non-admin alike, both with no param and with an explicit include_archived=false.
+    assert active["id"] in _ids(headers=_ADMIN)
+    assert archived["id"] not in _ids(headers=_ADMIN)
+    assert active["id"] in _ids(headers=_DEVELOPER)
+    assert archived["id"] not in _ids(headers=_DEVELOPER)
+    assert archived["id"] not in _ids(headers=_ADMIN, params={"include_archived": "false"})
+    assert archived["id"] not in _ids(headers=_DEVELOPER, params={"include_archived": "false"})
+
+    # (b) admin + include_archived=true: the archived doc's id becomes discoverable
+    # (this is how an admin finds the id to POST /documents/{id}/restore).
+    admin_all = client.get(
+        "/api/v1/knowledge/documents", headers=_ADMIN, params={"include_archived": "true"}
+    )
+    assert admin_all.status_code == 200
+    status_by_id = {d["id"]: d["status"] for d in admin_all.json()}
+    assert status_by_id.get(archived["id"]) == "archived"
+    assert active["id"] in status_by_id
+
+    # (c) non-admin + include_archived=true: the flag is SILENTLY IGNORED (200, normal
+    # non-archived ACL-scoped list -- not 403, matching this file's quiet-scoping GET
+    # convention). The archived doc stays hidden even though its ACL (all-employees /
+    # internal) would otherwise let this caller read it.
+    dev_ids = _ids(headers=_DEVELOPER, params={"include_archived": "true"})
+    assert archived["id"] not in dev_ids
+    assert active["id"] in dev_ids
+
+
 def test_restore_does_not_resurrect_vectors(client, monkeypatch):
     # Archive purged the document's vectors; restore must NOT touch the vector store
     # (no re-upsert, no purge) and the content stays unretrievable until a fresh

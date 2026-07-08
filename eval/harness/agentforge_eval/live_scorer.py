@@ -161,6 +161,11 @@ def aggregate(
         "latency_p95_ms": p95,
         "trace_completeness_pct": trace_completeness_pct,
         "faithfulness_pct": faithfulness_pct,
+        # The grounding threshold actually used to compute faithfulness_pct above (explicit
+        # param or the AGENT_FORGE_EVAL_GROUNDING_MIN env fallback). Always present, even when
+        # faithfulness_pct is None, so a reader can tell a 100% reading apart from an
+        # untuned 0.0 default without going to read the source.
+        "faithfulness_threshold": grounding_min,
         "cases": [
             {
                 "case_id": s.case_id, "behavior": s.expected_behavior, "answered": s.answered,

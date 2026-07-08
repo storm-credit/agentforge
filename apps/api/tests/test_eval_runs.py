@@ -68,6 +68,7 @@ def _sample_report(**overrides) -> dict:
         "latency_p95_ms": 4100,
         "trace_completeness_pct": 100.0,
         "faithfulness_pct": 88.9,
+        "faithfulness_threshold": 0.5,
         "corpus_id": "live-v0.2",
         "cases": [
             {"case_id": "c1", "question": "What is the leave policy?", "citation_ok": True},
@@ -116,6 +117,7 @@ def test_list_returns_lightweight_summaries_detail_returns_cases(client):
     assert row["useful_answer_pct"] == 77.8
     assert row["refusal_discipline_pct"] == 88.9
     assert row["faithfulness_pct"] == 88.9
+    assert row["faithfulness_threshold"] == 0.5
     # ...but the heavy payload is not.
     assert "report" not in row
     assert "cases" not in row

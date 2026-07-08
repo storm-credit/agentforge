@@ -268,6 +268,7 @@ export type EvalRunSummary = {
   useful_answer_pct: number | null;
   refusal_discipline_pct: number | null;
   faithfulness_pct: number | null;
+  faithfulness_threshold: number | null;
 };
 
 export async function listEvalRuns(

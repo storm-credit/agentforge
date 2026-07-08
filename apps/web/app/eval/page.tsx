@@ -69,7 +69,12 @@ export default function EvalPage() {
                     <td style={{ padding: "6px 8px" }}>{pct(r.citation_pct)}</td>
                     <td style={{ padding: "6px 8px" }}>{pct(r.useful_answer_pct)}</td>
                     <td style={{ padding: "6px 8px" }}>{pct(r.refusal_discipline_pct)}</td>
-                    <td style={{ padding: "6px 8px" }}>{pct(r.faithfulness_pct)}</td>
+                    <td style={{ padding: "6px 8px" }}>
+                      {pct(r.faithfulness_pct)}
+                      {r.faithfulness_threshold != null && (
+                        <span style={{ color: "#64748b" }}> (≥{r.faithfulness_threshold})</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

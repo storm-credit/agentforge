@@ -313,6 +313,7 @@ class EvalRunSummary(BaseModel):
     useful_answer_pct: float | None = None
     refusal_discipline_pct: float | None = None
     faithfulness_pct: float | None = None
+    faithfulness_threshold: float | None = None
 
 
 class RetrievalHitRead(BaseModel):

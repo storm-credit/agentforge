@@ -11,6 +11,7 @@ sys.path.insert(0, str(HARNESS_ROOT))
 
 from agentforge_eval.live_runner import run_live_eval  # noqa: E402
 from agentforge_eval.live_scorer import grounding_min_from_env  # noqa: E402
+from agentforge_eval.persist import maybe_persist_report  # noqa: E402
 
 
 def main() -> int:
@@ -22,6 +23,9 @@ def main() -> int:
     # deployment's AGENT_FORGE_GROUNDING_MIN. Defaults to the backend code default 0.0.
     grounding_min = grounding_min_from_env()
     report = run_live_eval(corpus, base_url=base_url, prefix=prefix, grounding_min=grounding_min)
+    # Opt-in (AGENT_FORGE_EVAL_PERSIST=true) history recording; fail-soft — a broken
+    # persistence call never fails the eval run itself.
+    maybe_persist_report(report, base_url=base_url, corpus_filename=corpus_name)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
 

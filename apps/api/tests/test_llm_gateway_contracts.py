@@ -136,3 +136,83 @@ def test_generate_omits_top_p_when_none(monkeypatch):
     gw.generate(question="q", context=CTX, language="en")
     assert "top_p" not in captured["json"]
     assert captured["json"]["temperature"] == 0.2   # default
+
+
+def test_generate_no_api_key_sends_no_authorization_header(monkeypatch):
+    captured = {}
+
+    def fake_post(self, url, json, **kwargs):
+        captured["headers"] = dict(self.headers)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "ok"}}]},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    gw = LLMGateway(base_url="http://x/v1", model="m", timeout_seconds=5)
+    gw.generate(question="q", context=CTX, language="en")
+    assert "authorization" not in {k.lower() for k in captured["headers"]}
+
+
+def test_generate_with_api_key_sends_bearer_authorization_header(monkeypatch):
+    captured = {}
+
+    def fake_post(self, url, json, **kwargs):
+        captured["headers"] = dict(self.headers)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "ok"}}]},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    gw = LLMGateway(base_url="http://x/v1", model="m", timeout_seconds=5, api_key="secret-token")
+    gw.generate(question="q", context=CTX, language="en")
+    headers = {k.lower(): v for k, v in captured["headers"].items()}
+    assert headers.get("authorization") == "Bearer secret-token"
+
+
+def test_judge_answerable_with_api_key_sends_bearer_authorization_header(monkeypatch):
+    captured = {}
+
+    def fake_post(self, url, json, **kwargs):
+        captured["headers"] = dict(self.headers)
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "YES"}}]},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    gw = LLMGateway(base_url="http://x/v1", model="m", timeout_seconds=5, api_key="secret-token")
+    gw.judge_answerable(question="q", context=CTX)
+    headers = {k.lower(): v for k, v in captured["headers"].items()}
+    assert headers.get("authorization") == "Bearer secret-token"
+
+
+def test_health_no_api_key_sends_no_authorization_header(monkeypatch):
+    captured = {}
+
+    def fake_get(self, url, **kwargs):
+        captured["headers"] = dict(self.headers)
+        return httpx.Response(200, json={}, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    gw = LLMGateway(base_url="http://x/v1", model="m", timeout_seconds=5)
+    gw.health()
+    assert "authorization" not in {k.lower() for k in captured["headers"]}
+
+
+def test_health_with_api_key_sends_bearer_authorization_header(monkeypatch):
+    captured = {}
+
+    def fake_get(self, url, **kwargs):
+        captured["headers"] = dict(self.headers)
+        return httpx.Response(200, json={}, request=httpx.Request("GET", url))
+
+    monkeypatch.setattr(httpx.Client, "get", fake_get)
+    gw = LLMGateway(base_url="http://x/v1", model="m", timeout_seconds=5, api_key="secret-token")
+    gw.health()
+    headers = {k.lower(): v for k, v in captured["headers"].items()}
+    assert headers.get("authorization") == "Bearer secret-token"

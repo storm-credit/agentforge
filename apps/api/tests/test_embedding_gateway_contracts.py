@@ -48,3 +48,40 @@ def test_http_error_raises_unavailable(monkeypatch):
 def test_empty_input_returns_empty_without_call():
     gw = EmbeddingGateway(base_url="http://x/v1", model="m", dim=3, timeout_seconds=5)
     assert gw.embed([]) == []
+
+
+def test_embed_no_api_key_sends_no_authorization_header(monkeypatch):
+    captured = {}
+
+    def fake_post(self, url, json, **kwargs):
+        captured["headers"] = dict(self.headers)
+        return httpx.Response(
+            200,
+            json={"data": [{"embedding": [0.1, 0.2, 0.3]}]},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    gw = EmbeddingGateway(base_url="http://x/v1", model="m", dim=3, timeout_seconds=5)
+    gw.embed(["a"])
+    assert "authorization" not in {k.lower() for k in captured["headers"]}
+
+
+def test_embed_with_api_key_sends_bearer_authorization_header(monkeypatch):
+    captured = {}
+
+    def fake_post(self, url, json, **kwargs):
+        captured["headers"] = dict(self.headers)
+        return httpx.Response(
+            200,
+            json={"data": [{"embedding": [0.1, 0.2, 0.3]}]},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx.Client, "post", fake_post)
+    gw = EmbeddingGateway(
+        base_url="http://x/v1", model="m", dim=3, timeout_seconds=5, api_key="secret-token"
+    )
+    gw.embed(["a"])
+    headers = {k.lower(): v for k, v in captured["headers"].items()}
+    assert headers.get("authorization") == "Bearer secret-token"

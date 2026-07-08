@@ -107,14 +107,19 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 
 **✅ guard_input 실체화** (PR #45, 2026-07-08 PM 오케스트라 배치, opus 작성) — 하드코딩 stub(`{"allowed": True, "risk_level": "low"}` 무조건)을 `domain/input_guard.py`의 결정적 규칙 기반 평가로 교체: 제어문자/널바이트 + 영한 인젝션 마커 문구(짧고 명시적으로 low-recall). **로그만, 차단 안 함**(오탐 방지 위해 run은 그대로 진행) — risk_level·마커 레이블만 정직하게 기록, non-low면 `run.input_guard.injection_detected` 감사(원문 미포함). security-review: log-not-block 보존·감사 페이로드 원문 없음·ReDoS 없음·CJK 오탐 없음·실배선 확인, 고신뢰 발견 0건. 실제 인젝션 강건성은 여전히 ⛔ 사내모델 의존.
 
-**통합 검증(2026-07-08, 3개 PR 머지 후 로컬 재확인):** 풀스위트 **141 passed, 0 skipped**, ruff 클린.
+**✅ QA 게이트 완성 + 코퍼스 확장** (PR #47, 2026-07-08 PM 오케스트라 배치) — `live_scorer.aggregate()`에 `latency_p50_ms`/`latency_p95_ms`(선형보간)·`trace_completeness_pct`(5단계 트레이스 완전성) 신규(미제공 시 `None`, 임의 0/100 아님). 거부군 코퍼스 3→**9케이스**(`cases-live-v0.3.json`, policy_denied 2·refuse 2·인젝션성향 2 추가) — 1건 뒤집힘의 영향이 33%p→11%p로 완화. 훅메틱 테스트 26 passed(0 skipped). **라이브 before/after 실측**: v0.2(3건)→v0.3(9건)로 refusal_discipline **66.7%→88.9%**(신규 6건 전부 통과, 기존 c07 과답변 케이스는 예상대로 여전히 실패 — 정직 보고). 지연시간 p50 1598→1375ms, p95 4129→5058ms(로컬 qwen3:1.7b, 사내모델 아님). `docs/eval-results-live-v0.4.md`.
 
-**🔧 측정/무결성(QA·RAG 수렴):**
-- 지연 p50/p95 + trace-completeness 스코어러(릴리스 게이트인데 미측정, 데이터는 이미 흐름). (S)
-- 코퍼스 v0.3(refusal n=3→↑, suite 태그). (M) · rerank score_rerank 실신호 배선 + Reranker (hit,score) 반환. (S) · 결정적 retrieval 회귀테스트. (S)
+**통합 검증(2026-07-08, 4개 PR 순차 머지 후 로컬 재확인):** apps/api 풀스위트 **141 passed, 0 skipped**, ruff 클린.
 
-**🔧 배포(DevOps):**
-- 게이트웨이 인증 토큰(llm/embedding api_key + Authorization) — 폐쇄망 모델 cutover 차단 해제. (S) · `.env.example` 완성+startup 검증. (S) · 프로덕션 Dockerfile(uv.lock·multi-stage·non-root·healthcheck)/compose. (M) · JSON 로깅+request_id 미들웨어. (M) · CI 워크플로. (M)
+**🔧 측정/무결성 잔여(QA·RAG):**
+- rerank `score_rerank` 실신호 배선(현재 no-op만) + `Reranker`가 (hit,score) 반환하도록. (S) · 결정적 retrieval 회귀테스트. (S) · trace_completeness<100% 실전 경로 라이브 미검증(훅메틱만) — 후속.
+
+**🔧 배포(DevOps) — 2건 완료, 잔여:**
+- ✅ **게이트웨이 인증 토큰**(PR #44, 위 참조) · ✅ **프로덕션 web Dockerfile**(PR #46, 2026-07-08 배치) — `apps/web/Dockerfile.prod` 신규 추가(멀티스테이지, standalone output, non-root). 기존 dev용 `apps/web/Dockerfile`(감사에서 "없다"고 오판했던 파일, 실은 존재함)과 `docker-compose.dev.yaml`은 무변경. 라이브: 실제 docker build 성공 + 컨테이너 기동 후 HTTP 200 확인. ⚠️ 검증 중 Docker Desktop 엔진 장애로 `docker desktop restart` 실행 — 이 머신의 다른 프로젝트 컨테이너 십여 개가 함께 재시작됨(정상 복구 확인, 사후 보고).
+- 잔여: `.env.example` startup 검증(파일 자체는 PR#44에서 완성) · 프로덕션 compose 전체 배선(리버스프록시·env 주입, Dockerfile.prod는 있으나 미연결) · JSON 로깅+request_id 미들웨어 · CI 워크플로.
+
+**🔧 프론트 데모성 — 세션 한도로 미완료 (코드 문제 아님):**
+- 문서 archive 버튼 + `/runs` guardrail·PII·judge 신호 노출: 2026-07-08 PM 오케스트라 배치에서 시도했으나 **Claude 세션 사용량 한도**(리셋 3:30pm KST)로 미완료(일시적 서버 과부하 아님, 재시도 무의미했던 시점). 브랜치 `feat/knowledge-archive-and-run-signals`는 워크트리에 보존됨(재개 가능).
 
 **🔧 관측/감사:** request_id·actor_role 감사 필드(정책 필수). (M)
 

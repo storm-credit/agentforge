@@ -35,7 +35,7 @@
 
 - **Python은 반드시 `apps/api/.venv/Scripts/python.exe`** (전역 python은 contract 테스트 silent skip).
 - **uvicorn에 `--reload` 없음** → 백엔드 코드 변경 후 반드시 재기동. 라이브가 구버전 응답하면 의심. 포트 8000을 옛 프로세스가 점유하면 새 API가 exit 1 → 기존 python 정리 후 기동.
-- **pytest 풀스위트는 `apps/api/.env`를 잠시 옆으로 옮긴 뒤 실행**(실 LLM/DB가 2개 테스트에 새어 실패) → 끝나면 복원. 현재 기준 91 passed / 0 skipped.
+- **pytest 풀스위트는 `apps/api/.env`를 잠시 옆으로 옮긴 뒤 실행**(실 LLM/DB가 2개 테스트에 새어 실패) → 끝나면 복원. 현재 기준 141 passed / 0 skipped(CI에서도 동일 확인, PR #53).
 - **라이브 스택**: `docker start agentforge-ollama compose-postgres-1 compose-qdrant-1` (볼륨 보존 — 모델 bge-m3/qwen3:1.7b, DB `agentforge_mvp2`, Qdrant `chunks_active` 유지). `.env` = qdrant 백엔드 + bge-m3 + agentforge_mvp2 + `AGENT_FORGE_RETRIEVAL_MIN_SCORE=0.53`.
 - **프론트 npx/.bin 셰임 깨짐** → node 직접: dev `node node_modules/next/dist/bin/next dev <apps/web 절대경로> -p 3300`, tsc `node node_modules/typescript/bin/tsc --noEmit`, e2e `node node_modules/@playwright/test/cli.js test`(`PLAYWRIGHT_BASE_URL=http://127.0.0.1:3300`). 화면 캡처는 `.claude/launch.json`(node 직접 설정)으로 `preview_start` → 3300 점유 먼저 비울 것.
 - **이관(무코드)**: 임베딩/LLM `base_url·model`을 사내 vLLM/`qwen3-30b-a3b`(MoE 30B/~3B활성, 회사 표준)로, `AGENT_FORGE_QDRANT_URL`만 교체.

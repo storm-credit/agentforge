@@ -466,6 +466,49 @@ def test_run_records_reranker_in_trace(client):
     assert retriever["output_summary"]["reranker"] == "none"
 
 
+def test_run_with_hybrid_lexical_reranker_produces_valid_citations(client, monkeypatch):
+    # Full-pipeline plumbing check for the content-aware reranker: with the
+    # hybrid_lexical backend enabled, chunk content is fetched BEFORE reranking and
+    # passed in, and the run still produces valid citations/context and records the
+    # backend name in the retriever trace.
+    from app.core.config import get_settings
+    from app.services.reranker import get_reranker
+
+    monkeypatch.setenv("AGENT_FORGE_RERANK_BACKEND", "hybrid_lexical")
+    get_settings.cache_clear()
+    get_reranker.cache_clear()
+    try:
+        ids = _seed_agent_with_indexed_doc(client)
+        resp = client.post(
+            "/api/v1/runs",
+            json={
+                "agent_id": ids["agent_id"],
+                "input": {"message": "휴가 며칠?"},
+                "knowledge_source_ids": [ids["source_id"]],
+            },
+        )
+        assert resp.status_code == 201
+        run = resp.json()
+        assert run["answer"]
+        assert run["citations"], "expected at least one citation with reranker enabled"
+        assert run["citations"][0]["chunk_id"]
+
+        steps = client.get(f"/api/v1/runs/{run['id']}/steps").json()
+        retriever = next(s for s in steps if s["step_type"] == "retriever")
+        assert retriever["output_summary"]["reranker"] == "hybrid_lexical"
+
+        hits = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits").json()
+        assert hits
+        # rank bookkeeping survives: rank_original is the pre-rerank position and
+        # rank_reranked the post-rerank one (both 1-based).
+        assert sorted(h["rank_original"] for h in hits) == list(range(1, len(hits) + 1))
+        assert sorted(h["rank_reranked"] for h in hits) == list(range(1, len(hits) + 1))
+        assert all(h["used_in_context"] for h in hits)
+    finally:
+        get_settings.cache_clear()
+        get_reranker.cache_clear()
+
+
 def test_run_read_scoped_to_owner_or_admin(client):
     ids = _seed_agent_with_indexed_doc(client)
     alice = {

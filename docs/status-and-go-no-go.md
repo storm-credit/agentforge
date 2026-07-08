@@ -111,56 +111,40 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 
 **통합 검증(2026-07-08, 4개 PR 순차 머지 후 로컬 재확인):** apps/api 풀스위트 **141 passed, 0 skipped**, ruff 클린.
 
-**🔧 측정/무결성 잔여(QA·RAG):**
-- rerank `score_rerank` 실신호 배선(현재 no-op만) + `Reranker`가 (hit,score) 반환하도록. (S) · 결정적 retrieval 회귀테스트. (S) · trace_completeness<100% 실전 경로 라이브 미검증(훅메틱만) — 후속.
+**✅ 2026-07-08 PM 오케스트라 배치의 1차 패널 권고 5건 전부 완료** (PR #43 GET스코프·#44 게이트웨이토큰·#45 guard_input·#46 web Dockerfile·#47 QA게이트·#49 프론트데모성). 1차 패널 상세 기록은 git history(이 파일의 이전 리비전) 참고 — 아래는 배치 완료 후 재실행한 2차 패널 결과로 대체.
 
-**🔧 배포(DevOps) — 2건 완료, 잔여:**
-- ✅ **게이트웨이 인증 토큰**(PR #44, 위 참조) · ✅ **프로덕션 web Dockerfile**(PR #46, 2026-07-08 배치) — `apps/web/Dockerfile.prod` 신규 추가(멀티스테이지, standalone output, non-root). 기존 dev용 `apps/web/Dockerfile`(감사에서 "없다"고 오판했던 파일, 실은 존재함)과 `docker-compose.dev.yaml`은 무변경. 라이브: 실제 docker build 성공 + 컨테이너 기동 후 HTTP 200 확인. ⚠️ 검증 중 Docker Desktop 엔진 장애로 `docker desktop restart` 실행 — 이 머신의 다른 프로젝트 컨테이너 십여 개가 함께 재시작됨(정상 복구 확인, 사후 보고).
-- 잔여: `.env.example` startup 검증(파일 자체는 PR#44에서 완성) · 프로덕션 compose 전체 배선(리버스프록시·env 주입, Dockerfile.prod는 있으나 미연결) · JSON 로깅+request_id 미들웨어 · CI 워크플로.
+⚠️ **환경 사고 (투명 공개, 이미 복구됨):** 배치 진행 중 `apps/api/.venv`가 완전히 삭제됨(0파일) — 여러 서브에이전트가 격리 워크트리에 venv가 없어 "메인 체크아웃에 임시 디렉토리 정션을 만들고 끝나면 제거"하는 방식을 각자 썼는데, 그중 하나의 정리 단계가 정션이 아니라 실제 대상 디렉토리 내용을 삭제한 것으로 추정(가해 에이전트 특정 못 함). `py -3.11 -m venv .venv` + `pip install -e ".[dev]"` 재설치로 즉시 복구, 풀스위트 141 passed 확인. 교훈: 정션 트릭보다 "메인 체크아웃 실행파일 절대경로 직접 호출"이 안전.
 
-**✅ 프론트 데모성 완료** (PR #49, 2026-07-08, 세션 한도로 중단됐던 작업을 Fable 모델·고강도로 이어서 마무리) — `/knowledge` 문서별 **보관(archive) 버튼**(reason 입력→admin-gated DELETE) + `/runs`에 **가드레일 신호 배지**(PII 마스킹·인용검증·신뢰도게이트·그라운딩가드·judge/reranker 활성 시). 기존 ACL 편집 폼/패턴과 일관된 스타일. tsc 클린, **실 라이브 스택에서 e2e 16/16 통과**(기존 14 + 신규 2). 최신 main과 충돌 없이 병합. 검증 중 워크트리의 node_modules 정션 대소문자 문제(Next 클라이언트 런타임 중복 번들 → 전 페이지 크래시)를 스스로 발견·수정.
+## 2026-07-08 (2차) PM 오케스트라 종합 점검 — 배치 완료 후 재실행
 
-⚠️ **환경 사고 (투명 공개):** 이번 배치 진행 중 `apps/api/.venv`가 완전히 삭제됨(0파일) — 여러 서브에이전트가 격리 워크트리에 venv가 없어 "메인 체크아웃의 node_modules/venv에 임시 디렉토리 정션을 만들고 끝나면 제거"하는 방식을 각자 썼는데, 그 중 하나의 정리 단계가 정션이 아니라 실제 대상 디렉토리 내용을 삭제한 것으로 추정(정확한 가해 에이전트는 특정 못 함). **즉시 복구**: `py -3.11 -m venv .venv` + `pip install -e ".[dev]"` 재설치 → 풀스위트 141 passed, 0 skipped, ruff 클린 확인. 단 `uv.lock` 정확 버전 고정이 아니라 `pyproject.toml` 범위 기준 재설치라 미세한 버전 차이 가능(현재는 동작에 영향 없는 deprecation 경고 1건뿐). **교훈**: 격리 워크트리 에이전트에게 공유 리소스(venv/node_modules) 접근을 위한 디렉토리 정션 트릭을 맡길 때는 "정션 자체만 제거"를 명시적으로 강조해야 함(예: PowerShell `Remove-Item`이 특정 조건에서 정션을 타고 들어가 대상까지 삭제할 수 있음).
+CLAUDE.md 규칙 2-c(군집 완료 → 풀패널 재실행)에 따라 6직무 재실행. 입력: 위 배치로 갱신된 이 문서.
 
-**🔧 관측/감사:** request_id·actor_role 감사 필드(정책 필수). (M)
+### 교차 수렴
+- **`readyz`가 Qdrant/객체스토어 미체크** — 백엔드·DevOps 독립 수렴. Postgres만 체크해 벡터스토어가 죽어도 "준비됨"으로 보고.
 
-**🔧 인젝션 코드-now(Security):** 실제 guard_input(현재 하드코딩 stub) — 크기제한·제어문자·정규식 마커 탐지 + `prompt_injection.detected` 감사. 실 강건성은 ⛔ 모델. (M)
-
-**🔧 프론트(데모성):** 문서 보관(archive) 버튼(PR#38 백엔드 UI 없음) (S) · /runs guardrail/judge/PII 신호 노출 + /chat 거부 상태 (S/M) · 역할별 UI(RBAC 시연) (M).
-
-**🔧 백엔드 기타:** 에이전트 archive·run list 필터/페이지네이션·index-job 멱등성. (S~M)
-
-> **거부규율(c07) 갱신:** scalar 게이트(v0.3)·로컬 1.7b judge(v0.4) 모두 못 고침. 코드 토대(judge 훅 + rerank 훅)는 깔렸고, 실질 개선은 사내 qwen3-30b-a3b/cross-encoder 대기(⛔ 모델). rerank는 Ollama 미지원으로 로컬 검증 불가.
-
-## 2026-07-08 PM 오케스트라 종합 점검 (풀 6직무 패널: 보안/RAG/백엔드/프론트/DevOps/QA·PM)
-
-사용자 요청("PM으로써 오케스트라 진행")에 따라 narrow next-slice 선별이 아니라 **전 도메인 개선점/보완점/추가점** 감사를 실시. 병렬 6-에이전트, 각 도메인 read-only. 핵심 교차 발견(2개 이상 직무 수렴)과 도메인별 신규 항목만 기록(중복은 위 섹션에 병합).
-
-### 교차 수렴(3직무 이상 동의 — 최우선 신호)
-- **잔여 무스코프 GET(`/agents`류·`/knowledge/sources`)** — 보안·백엔드·프론트 3직무 독립 지적. 프론트는 이 항목이 "역할별 UI(RBAC 시연)"의 **선행 의존성**이라고 명시 — 백엔드가 먼저 닫혀야 프론트가 착수 가능.
-- **eval 게이트 미완성(latency/trace-completeness 미측정, deny n=3 통계 취약)** — RAG·QA 양쪽 수렴. QA는 "이게 가장 저비용·고가치, 릴리스 게이트 5개 중 3개가 비어 있어 code-complete 선언이 이르다"고 명시.
-- **guard_input이 하드코딩 stub** — 보안·QA 양쪽 지적. 감사로그엔 "검사함"으로 찍히지만 실제 미검사 — 정직성 문제(로그가 거짓 신호).
-
-### 도메인별 신규 발견 (이번 감사 이전 status 문서에 없던 것)
-- **보안**: CORS `allow_headers/methods="*"`+credentials 조합 완화 필요, PII 마스킹 기본 off, rate limiting 전무, 세션/재생 방지 없음(헤더 스텁조차 서명·nonce 없음), 보안 응답 헤더(HSTS/CSP 등) 없음.
-- **RAG**: 청킹 토큰 근사가 한국어 형태소와 안 맞음(공백분리), XLSX·스캔 PDF(OCR) 미지원, 하이브리드검색(BM25+dense)·쿼리재작성·중복제거·멀티턴 컨텍스트 전무. **qwen3-30b-a3b 확정으로 Qwen3-Reranker/judge 재측정의 우선순위가 추측성에서 "당연히 할 것"으로 격상**.
-- **백엔드**: 리스트 엔드포인트 페이지네이션 전무, ACL 필터링이 전체 로드 후 Python 처리(스케일 한계), 인덱스 워커가 동기 인라인(진짜 큐 아님), **소프트삭제가 Document에만 있고 Agent/KnowledgeSource는 hard delete**, `enforce_roles`가 거부 시 자체 커밋 — 향후 호출부가 mutation 먼저 flush하면 부분상태 위험(현재는 안전, 패턴 경고), `readyz`가 Postgres만 체크(Qdrant/객체스토어 미확인), Alembic 3개뿐이고 downgrade 미검증.
-- **프론트**: 문서 archive 버튼 없음(백엔드 PR#38엔 있음), `/runs`가 guardrail/judge/PII/rerank 신호를 raw JSON에 묻어둠(안전기능 데모 안 됨), 역할별 UI 없음(모든 mutation 버튼이 무조건 렌더링), retrieval-preview UI 없음(백엔드 존재), 로딩 상태·aria-live·label 접근성 공통 누락, `/eval`·`/admin/settings`는 100% 정적 스텁.
-- **DevOps**: **`apps/web/Dockerfile`이 아예 존재하지 않음**(prod 빌드 즉시 실패), 게이트웨이 인증 토큰 배선 없음(Authorization 헤더 자체가 코드에 없음 — 실 vLLM이 토큰 요구 시 "무코드 이관" 전제 붕괴, **가장 시급**), api Dockerfile lockfile·multi-stage·non-root·healthcheck 없음, CI 전무, SBOM/체크섬 자동화 없음(서명키만 진짜 ⛔, 생성 스크립트는 지금 가능).
-- **QA/PM**: status 문서 "단일 출처"인데 헤더 날짜(06-15)와 본문 최신성(PR#35~42 소급 반영) 불일치, `useful_answer_pct`가 단일 실행값인데 "충족"으로 확정 표기(v0.3 문서 자체가 "노이즈 있음" 자인), citation_ok이 "인용 존재"만 확인하고 실제 근거(faithfulness)는 미검증, `notes/01_PM/WBS.md` 원안과 이 status 문서의 이원 추적 구조가 계속 부채로 남음.
+### 도메인별 핵심 발견
+- **보안**: `POST /agents/versions` RBAC 미적용 확인(재확인, S, 최우선). `GET /knowledge/sources`에 **코드-now 부분 해법** 제시 — 전체 ACL 없이도 `confidentiality_rank(clearance) >= confidentiality_rank(source.default_confidentiality_level)`만으로 등급 기준 필터 가능(그룹/부서 ACL까지는 아니지만 "무스코프"보다 확실히 나음). CORS는 이미 origin allowlist라 우려보다 낮은 위험(재평가, 하향).
+- **RAG**: **c07 재진단** — 스칼라 게이트(v0.3)·로컬 judge(v0.4) 실패는 환각이 아니라 "정당히 접근 가능하지만 성급한 답변"이 원인 → 추가 스칼라/휴리스틱 땜질은 과적합, 이 스레드는 **문서화하고 닫는 게 맞음**(실 리랭커/judge 대기). 신규: `grounding_score`가 이미 `live_runner.py`에서 계산되는데 `aggregate()`가 안 씀 → **faithfulness_pct 게이트 배선**(S, 완전 결정적, 모델 무관). 신규: **실제 non-LLM 하이브리드(BM25/어휘) 리랭커는 사내모델 없이 지금 만들 수 있음**(M) — 순수 no-op 스텁이 아닌 진짜 신호. rerank 인터페이스에 `score_rerank` 채우는 건 모델 없인 무의미(기각).
+- **백엔드**: **문서 archive에 복원(unarchive) API가 없음**(PR#49 프론트 버튼이 노출시킨 비대칭, S, 최우선급) · 리스트 엔드포인트 페이지네이션 전무(M) · `readyz` Postgres만(S) · Agent/KnowledgeSource는 여전히 hard-delete(S~M) · `enforce_roles` 거부시 자체 커밋 패턴 위험 여전(S, 현재는 안전) · Alembic 3개·downgrade 미검증(S).
+- **프론트**: **역할별 UI(RBAC 시연)가 이제 진짜 언블록됨** — GET 스코프+RBAC가 이미 서버에서 강제되므로 클라이언트 버튼 숨김은 순수 데모 UX(보안 결정 아님), 착수 가능(M). retrieval-preview UI 미배선(백엔드 존재, S~M). 리스트 검색/필터+로딩상태+접근성 라벨(S, 공통). `/eval`은 아직 이르다(백엔드에 결과 저장 API 자체가 없음 — 새 발견, 배선 말고 백엔드 갭으로 기록).
+- **DevOps**: **CI 전무이 1순위** — 이번 venv 사고를 CI(pytest+ruff+tsc on PR)가 있었으면 즉시 잡았을 것(S). startup 설정 검증 없음(S). `Dockerfile.prod`는 여전히 미배선 스캐폴딩(compose 연결 안 됨, M, 급하지 않음). JSON 로깅+request_id 미들웨어(S/M).
 
 ### QA/PM 종합 판단 (패널 인용)
-> "코드 관점 MVP는 사실상 완성되었으나, **측정의 완결성**은 아직 5개 릴리스 게이트 중 3개(latency/trace/거부규율 통계신뢰도)가 비어 있어 QA가 code-complete를 선언하기엔 이르다. 프론트 role-aware-UI는 백엔드 GET-scoping(PR#39 완료분)에 의존했으나 이제 일부 언블록됨 — 잔여 무스코프 GET(agents류)만 닫히면 완전 언블록. PM이 지금 강제해야 할 결정: **코드-now 백로그를 이번엔 QA 게이트 완성(latency/trace 스코어러 + deny 코퍼스 확장)으로 좁히고, 그 다음 잔여 인가(agents/sources GET)로 넘긴다** — 그래야 '코드 완결' 선언 시점이 실제로 방어 가능해진다."
+> "코드 가능 백로그는 아직 소진 안 됨(CI·trace_completeness 실전검증·faithfulness 게이트 모두 실제 코드-now) — '코드 완결' 아님. 다만 백로그 성격이 **기능 추가에서 안전망 구축(CI·측정 견고화)으로 전환**됐다 — 조직·인프라 벽에 가까워지는 신호. venv 사고는 병렬 멀티에이전트 배치 패턴의 직접적 결과(서브에이전트들이 공유 리소스 정리 방식을 조율 없이 각자 즉흥 처리)."
+>
+> **운영 권고: 멀티에이전트 "오케스트라 배치" 패턴을 잠시 멈추고, 다음 슬라이스는 CLAUDE.md 규칙 1대로 단일 슬라이스로 진행 — 그 슬라이스가 바로 CI**. 이유: (1) CI가 정확히 이번 venv 사고 같은 걸 자동으로 잡아줄 안전망이니 다음 병렬 배치 *전에* 있어야 함, (2) CI는 본질적으로 순차·인프라성이라 도메인별 병렬화가 안 맞고 집중된 단일 에이전트가 적합, (3) CI가 생기면 배치 모드를 회귀 안전망 있는 채로 재개 가능. 배치 모드는 독립적이고 blast-radius 작은 도메인 슬라이스에 예외적으로 쓰는 것으로.
 
 ### PM 권고 (전 도메인 종합, 우선순위)
-1. **(다음 슬라이스, 최우선)** 잔여 GET 인가(`/agents`·`/agents/{id}`·`/agents/{id}/versions`·`/knowledge/sources`) — 3직무 수렴 + 프론트 역할별 UI의 선행 의존성. S, 이미 검증된 패턴(PR#35~39,42) 재적용.
-2. QA 게이트 완성(latency/trace-completeness 스코어러 + deny 코퍼스 n↑) — 릴리스 게이트 정직성 확보, 데이터는 이미 흐름. S~M.
-3. DevOps 긴급 2건: `apps/web/Dockerfile` 작성(현재 prod 빌드 불가) + 게이트웨이 인증 토큰 배선(사내 모델 cutover 무코드 전제 보호). 둘 다 S, 인프라 없이 지금 가능.
-4. 프론트 데모성(archive 버튼, /runs 신호 노출) — 인가 잔여(1번) 완료 후 착수하면 역할별 UI까지 한 번에.
-5. guard_input 실체화 — 보안+QA 수렴, 정직성 문제(로그 거짓 신호) 해소.
+1. **(다음 슬라이스, 최우선, 단일 슬라이스로) CI 워크플로** — pytest+ruff+tsc on PR. QA/PM 강력 권고 채택: 이번 venv 사고의 재발 방지 안전망을 다음 병렬 배치 전에 깔아야 함. S.
+2. 문서 unarchive(복원) API — PR#49가 노출시킨 비대칭 해소. S.
+3. `POST /agents/versions` RBAC + `GET /knowledge/sources` confidentiality_rank 부분 필터 — 검증된 패턴 재적용. 둘 다 S.
+4. `readyz`에 Qdrant/객체스토어 체크 추가. S.
+5. `grounding_score` → eval faithfulness_pct 게이트 배선. S, 결정적.
+6. (여력 시) 역할별 UI(RBAC 시연) — 이제 언블록, 데모 완성도용. M.
+- **c07 스레드**: 공식 종결 — 추가 스칼라 땜질 금지, 사내모델/실 리랭커 대기로 문서화.
 - **비코드 불변**: SSO IdP, qwen3-30b-a3b/cross-encoder 실측, 실문서/파일럿 부서, 폐쇄망 EP-07 — 조직 결정 필요.
 
 ## Go/No-Go 권고
 - **기술 MVP: GO 가능** — 핵심 가치(권한 기반 인용 답변 + 누출 0)가 코드·eval로 성립.
 - **파일럿 진입: 조건부 HOLD** — 코드 문제 아님. 위 "결정 → 해제 표"의 4개 입력(파일럿 부서/실문서·SSO·사내모델·폐쇄망)이 채워져야 진입 가능.
-- **권고 순서**: (조직) 파일럿 부서·실문서 + SSO 결정 착수 ∥ (코드, 내가 가능) 위 "PM 권고" 1→5 순서.
+- **권고 순서**: (조직) 파일럿 부서·실문서 + SSO 결정 착수 ∥ (코드, 내가 가능) 위 "PM 권고" 1→6 순서, **1번(CI)부터 단일 슬라이스로**.

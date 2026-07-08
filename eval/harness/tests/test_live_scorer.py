@@ -1,5 +1,6 @@
 from agentforge_eval.live_scorer import (
     aggregate,
+    grounding_min_from_env,
     latency_percentiles,
     score_case,
     trace_is_complete,
@@ -139,6 +140,47 @@ def test_aggregate_latency_and_trace_are_none_when_not_supplied():
     assert rep["latency_p50_ms"] is None
     assert rep["latency_p95_ms"] is None
     assert rep["trace_completeness_pct"] is None
+
+
+def test_faithfulness_pct_mix_above_below_equal_threshold():
+    scores = [score_case(_case(case_id=f"c{i}"), _run(), DOC_MAP) for i in range(4)]
+    # 0.8 above, 0.5 equal (>= passes, mirroring the backend guard which trips only
+    # on grounding < grounding_min), 0.3 below, None unmeasured (excluded from denominator).
+    rep = aggregate(scores, grounding_scores=[0.8, 0.5, 0.3, None], grounding_min=0.5)
+    assert rep["faithfulness_pct"] == 66.7
+
+
+def test_faithfulness_pct_all_none_is_none_not_fabricated():
+    scores = [score_case(_case(case_id=f"c{i}"), _run(), DOC_MAP) for i in range(2)]
+    rep = aggregate(scores, grounding_scores=[None, None], grounding_min=0.5)
+    assert rep["faithfulness_pct"] is None
+
+
+def test_faithfulness_pct_none_when_grounding_scores_omitted_backward_compat():
+    # Old call signatures must keep working and report None, not a fabricated number.
+    scores = [score_case(_case(), _run(), DOC_MAP)]
+    rep = aggregate(scores)
+    assert rep["faithfulness_pct"] is None
+    rep2 = aggregate(scores, latencies_ms=[100], trace_complete=[True])
+    assert rep2["faithfulness_pct"] is None
+
+
+def test_faithfulness_threshold_from_env_var_override(monkeypatch):
+    monkeypatch.setenv("AGENT_FORGE_EVAL_GROUNDING_MIN", "0.5")
+    assert grounding_min_from_env() == 0.5
+    scores = [score_case(_case(case_id=f"c{i}"), _run(), DOC_MAP) for i in range(3)]
+    # grounding_min not passed -> resolved from the env var.
+    rep = aggregate(scores, grounding_scores=[0.8, 0.5, 0.3])
+    assert rep["faithfulness_pct"] == 66.7
+
+
+def test_faithfulness_default_threshold_is_backend_code_default_zero(monkeypatch):
+    monkeypatch.delenv("AGENT_FORGE_EVAL_GROUNDING_MIN", raising=False)
+    assert grounding_min_from_env() == 0.0
+    scores = [score_case(_case(case_id=f"c{i}"), _run(), DOC_MAP) for i in range(2)]
+    # With the 0.0 default every measured score passes (0.0 >= 0.0 included).
+    rep = aggregate(scores, grounding_scores=[0.0, 0.9])
+    assert rep["faithfulness_pct"] == 100.0
 
 
 def test_corpus_live_parses_and_is_consistent():

@@ -26,7 +26,9 @@ def _principal_headers(p: dict) -> dict:
     }
 
 
-def run_live_eval(corpus_path: Path, base_url: str, prefix: str) -> dict:
+def run_live_eval(
+    corpus_path: Path, base_url: str, prefix: str, grounding_min: float | None = None
+) -> dict:
     corpus = json.loads(Path(corpus_path).read_text(encoding="utf-8"))
     with httpx.Client(base_url=base_url, timeout=120.0) as client:
         doc_id_map: dict[str, str] = {}
@@ -142,6 +144,8 @@ def run_live_eval(corpus_path: Path, base_url: str, prefix: str) -> dict:
         scores,
         latencies_ms=[latencies_ms[cid] for cid in case_ids],
         trace_complete=[trace_complete[cid] for cid in case_ids],
+        grounding_scores=[grounding_scores.get(cid) for cid in case_ids],
+        grounding_min=grounding_min,
     )
     for case_row in report["cases"]:
         cid = case_row["case_id"]

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass
 
 # Refusal is detected primarily by empty citations; these markers are a secondary signal.
@@ -109,16 +110,43 @@ def latency_percentiles(latencies_ms: list[int]) -> tuple[float | None, float | 
     return _percentile(ordered, 50), _percentile(ordered, 95)
 
 
+def grounding_min_from_env() -> float:
+    """Faithfulness threshold for aggregate(), from AGENT_FORGE_EVAL_GROUNDING_MIN.
+
+    Defaults to 0.0 — the backend's *code* default for AGENT_FORGE_GROUNDING_MIN
+    (apps/api settings.grounding_min), NOT the deployment-tuned value some live
+    stacks run with (e.g. 0.1 in ONBOARDING.md). Callers who know their live
+    deployment's actual grounding_min should set the env var to match it.
+    """
+    return float(os.environ.get("AGENT_FORGE_EVAL_GROUNDING_MIN", "0.0"))
+
+
 def aggregate(
     scores: list[CaseScore],
     latencies_ms: list[int] | None = None,
     trace_complete: list[bool] | None = None,
+    grounding_scores: list[float | None] | None = None,
+    grounding_min: float | None = None,
 ) -> dict:
     answer_cases = [s for s in scores if s.expected_behavior == "answer"]
     deny_cases = [s for s in scores if s.expected_behavior in ("policy_denied", "refuse")]
     p50, p95 = latency_percentiles(latencies_ms or [])
     trace_completeness_pct = (
         _pct(sum(1 for t in trace_complete if t), len(trace_complete)) if trace_complete else None
+    )
+    # Faithfulness: share of measured (non-None) backend grounding_scores at or above
+    # the threshold. The backend already enforces this as a binary gate at generation
+    # time (guard trips when grounding < grounding_min), so this is NOT a duplicate of
+    # behavior_ok/guard_tripped — it is a continuous leading indicator across ALL cases
+    # that catches drift toward the threshold before the guard starts tripping.
+    # None (not 0.0/100.0) when nothing was measured, same convention as the metrics above.
+    if grounding_min is None:
+        grounding_min = grounding_min_from_env()
+    measured_grounding = [g for g in (grounding_scores or []) if g is not None]
+    faithfulness_pct = (
+        _pct(sum(1 for g in measured_grounding if g >= grounding_min), len(measured_grounding))
+        if measured_grounding
+        else None
     )
     return {
         "total": len(scores),
@@ -132,6 +160,7 @@ def aggregate(
         "latency_p50_ms": p50,
         "latency_p95_ms": p95,
         "trace_completeness_pct": trace_completeness_pct,
+        "faithfulness_pct": faithfulness_pct,
         "cases": [
             {
                 "case_id": s.case_id, "behavior": s.expected_behavior, "answered": s.answered,

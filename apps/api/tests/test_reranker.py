@@ -42,16 +42,37 @@ def test_get_reranker_default_is_noop():
     assert r.name == "none"
 
 
-def test_unknown_backend_falls_back_to_noop(monkeypatch):
-    from app.core.config import get_settings
+def test_unrecognized_rerank_backend_env_value_is_rejected_at_boot(monkeypatch):
+    """rerank_backend is a Literal["none", "hybrid_lexical"]; a typo'd/unsupported
+    env value (e.g. a not-yet-wired "vllm") must fail Settings construction loudly
+    rather than silently booting on a fallback the operator didn't ask for."""
+    import pytest
+
+    from app.core.config import Settings, get_settings
 
     monkeypatch.setenv("AGENT_FORGE_RERANK_BACKEND", "vllm")
     get_settings.cache_clear()
+    try:
+        with pytest.raises(Exception, match="rerank_backend"):
+            Settings()
+    finally:
+        get_settings.cache_clear()
+
+
+def test_unknown_backend_on_existing_settings_falls_back_to_noop(monkeypatch):
+    """get_reranker()'s own warn-and-fallback branch (for a backend value it doesn't
+    implement) stays as defense-in-depth even though Literal validation now blocks
+    that value at construction time -- exercised here via direct attribute mutation
+    on an already-constructed Settings instance, the same pattern test_health.py
+    uses for its backend-swap tests."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "rerank_backend", "vllm")
     get_reranker.cache_clear()
     try:
         assert isinstance(get_reranker(), NoopReranker)
     finally:
-        get_settings.cache_clear()
         get_reranker.cache_clear()
 
 

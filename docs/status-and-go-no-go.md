@@ -55,7 +55,7 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 ### WS5 QA/파일럿/운영
 | 항목 | 상태 | 근거 |
 |---|---|---|
-| E2E 테스트 | ✅(코드) | Playwright 12 + 백엔드 102 passed |
+| E2E 테스트 | ✅(코드) | Playwright 14 + 백엔드 128 passed (2026-07-08 기준) |
 | 품질 평가 | ✅(MVP 코퍼스) | citation 100% / useful 83.3% — 8주 게이트(95%/80%) 충족 |
 | MVP 데모(Go/No-Go) | 🟡 | 코드는 데모 가능 상태, **라이브 데모/판단 미실시**(조직) |
 | 파일럿 운영 가이드 / 운영 전환 | ⛔ | 폐쇄망 staging·EP-07 배포 대기(인프라) |
@@ -98,8 +98,9 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 - ✅ **force_reindex 시 옛 Qdrant 벡터 미퍼지** (PR #40) — `run_index_job`가 upsert 전 `delete_document`로 문서 벡터 퍼지(첫 색인엔 no-op). 라이브: v1 3청크→v2 force_reindex 1청크 후 Qdrant 포인트 3→1(고아 0). baseline 126.
 
 **🔧 인가 잔여:**
-- `GET /index-jobs/{id}`·`GET /agents`·`/agents/{id}`·`/agents/{id}/versions`·`/knowledge/sources` 무스코프(에이전트 config=시스템프롬프트 노출). (S, 보안·백엔드·QA 수렴)
-- `PATCH /agents/{id}` RBAC 미적용(developer가 게시된 에이전트 config 편집 가능). (S, 보안)
+- ✅ **`GET /index-jobs/{id}` 스코프 + `PATCH /agents/{id}` RBAC** (PR #42) — index-job은 admin 또는 문서 `principal_can_access_document`, 미존재 문서는 fail-closed(비admin 거부). PATCH는 `enforce_roles(PRIVILEGED_ROLES)`. 라이브+계약테스트, security-review 고신뢰 발견 0건. baseline 128.
+- **잔여**: `GET /agents`·`/agents/{id}`·`/agents/{id}/versions`·`/knowledge/sources` 여전히 무스코프(에이전트 config=시스템프롬프트, 소스 메타 노출). (S, 보안·백엔드·프론트 3직무 수렴 — **프론트 역할별 UI가 이 항목에 의존**)
+- (MEDIUM, security-review) `POST /agents/versions`도 RBAC 미적용 — draft 생성만 가능(게시는 게이팅됨)이라 즉시 위험은 낮으나 위 항목과 함께 정리 권장.
 
 **🔧 측정/무결성(QA·RAG 수렴):**
 - 지연 p50/p95 + trace-completeness 스코어러(릴리스 게이트인데 미측정, 데이터는 이미 흐름). (S)
@@ -118,7 +119,35 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 
 > **거부규율(c07) 갱신:** scalar 게이트(v0.3)·로컬 1.7b judge(v0.4) 모두 못 고침. 코드 토대(judge 훅 + rerank 훅)는 깔렸고, 실질 개선은 사내 qwen3-30b-a3b/cross-encoder 대기(⛔ 모델). rerank는 Ollama 미지원으로 로컬 검증 불가.
 
+## 2026-07-08 PM 오케스트라 종합 점검 (풀 6직무 패널: 보안/RAG/백엔드/프론트/DevOps/QA·PM)
+
+사용자 요청("PM으로써 오케스트라 진행")에 따라 narrow next-slice 선별이 아니라 **전 도메인 개선점/보완점/추가점** 감사를 실시. 병렬 6-에이전트, 각 도메인 read-only. 핵심 교차 발견(2개 이상 직무 수렴)과 도메인별 신규 항목만 기록(중복은 위 섹션에 병합).
+
+### 교차 수렴(3직무 이상 동의 — 최우선 신호)
+- **잔여 무스코프 GET(`/agents`류·`/knowledge/sources`)** — 보안·백엔드·프론트 3직무 독립 지적. 프론트는 이 항목이 "역할별 UI(RBAC 시연)"의 **선행 의존성**이라고 명시 — 백엔드가 먼저 닫혀야 프론트가 착수 가능.
+- **eval 게이트 미완성(latency/trace-completeness 미측정, deny n=3 통계 취약)** — RAG·QA 양쪽 수렴. QA는 "이게 가장 저비용·고가치, 릴리스 게이트 5개 중 3개가 비어 있어 code-complete 선언이 이르다"고 명시.
+- **guard_input이 하드코딩 stub** — 보안·QA 양쪽 지적. 감사로그엔 "검사함"으로 찍히지만 실제 미검사 — 정직성 문제(로그가 거짓 신호).
+
+### 도메인별 신규 발견 (이번 감사 이전 status 문서에 없던 것)
+- **보안**: CORS `allow_headers/methods="*"`+credentials 조합 완화 필요, PII 마스킹 기본 off, rate limiting 전무, 세션/재생 방지 없음(헤더 스텁조차 서명·nonce 없음), 보안 응답 헤더(HSTS/CSP 등) 없음.
+- **RAG**: 청킹 토큰 근사가 한국어 형태소와 안 맞음(공백분리), XLSX·스캔 PDF(OCR) 미지원, 하이브리드검색(BM25+dense)·쿼리재작성·중복제거·멀티턴 컨텍스트 전무. **qwen3-30b-a3b 확정으로 Qwen3-Reranker/judge 재측정의 우선순위가 추측성에서 "당연히 할 것"으로 격상**.
+- **백엔드**: 리스트 엔드포인트 페이지네이션 전무, ACL 필터링이 전체 로드 후 Python 처리(스케일 한계), 인덱스 워커가 동기 인라인(진짜 큐 아님), **소프트삭제가 Document에만 있고 Agent/KnowledgeSource는 hard delete**, `enforce_roles`가 거부 시 자체 커밋 — 향후 호출부가 mutation 먼저 flush하면 부분상태 위험(현재는 안전, 패턴 경고), `readyz`가 Postgres만 체크(Qdrant/객체스토어 미확인), Alembic 3개뿐이고 downgrade 미검증.
+- **프론트**: 문서 archive 버튼 없음(백엔드 PR#38엔 있음), `/runs`가 guardrail/judge/PII/rerank 신호를 raw JSON에 묻어둠(안전기능 데모 안 됨), 역할별 UI 없음(모든 mutation 버튼이 무조건 렌더링), retrieval-preview UI 없음(백엔드 존재), 로딩 상태·aria-live·label 접근성 공통 누락, `/eval`·`/admin/settings`는 100% 정적 스텁.
+- **DevOps**: **`apps/web/Dockerfile`이 아예 존재하지 않음**(prod 빌드 즉시 실패), 게이트웨이 인증 토큰 배선 없음(Authorization 헤더 자체가 코드에 없음 — 실 vLLM이 토큰 요구 시 "무코드 이관" 전제 붕괴, **가장 시급**), api Dockerfile lockfile·multi-stage·non-root·healthcheck 없음, CI 전무, SBOM/체크섬 자동화 없음(서명키만 진짜 ⛔, 생성 스크립트는 지금 가능).
+- **QA/PM**: status 문서 "단일 출처"인데 헤더 날짜(06-15)와 본문 최신성(PR#35~42 소급 반영) 불일치, `useful_answer_pct`가 단일 실행값인데 "충족"으로 확정 표기(v0.3 문서 자체가 "노이즈 있음" 자인), citation_ok이 "인용 존재"만 확인하고 실제 근거(faithfulness)는 미검증, `notes/01_PM/WBS.md` 원안과 이 status 문서의 이원 추적 구조가 계속 부채로 남음.
+
+### QA/PM 종합 판단 (패널 인용)
+> "코드 관점 MVP는 사실상 완성되었으나, **측정의 완결성**은 아직 5개 릴리스 게이트 중 3개(latency/trace/거부규율 통계신뢰도)가 비어 있어 QA가 code-complete를 선언하기엔 이르다. 프론트 role-aware-UI는 백엔드 GET-scoping(PR#39 완료분)에 의존했으나 이제 일부 언블록됨 — 잔여 무스코프 GET(agents류)만 닫히면 완전 언블록. PM이 지금 강제해야 할 결정: **코드-now 백로그를 이번엔 QA 게이트 완성(latency/trace 스코어러 + deny 코퍼스 확장)으로 좁히고, 그 다음 잔여 인가(agents/sources GET)로 넘긴다** — 그래야 '코드 완결' 선언 시점이 실제로 방어 가능해진다."
+
+### PM 권고 (전 도메인 종합, 우선순위)
+1. **(다음 슬라이스, 최우선)** 잔여 GET 인가(`/agents`·`/agents/{id}`·`/agents/{id}/versions`·`/knowledge/sources`) — 3직무 수렴 + 프론트 역할별 UI의 선행 의존성. S, 이미 검증된 패턴(PR#35~39,42) 재적용.
+2. QA 게이트 완성(latency/trace-completeness 스코어러 + deny 코퍼스 n↑) — 릴리스 게이트 정직성 확보, 데이터는 이미 흐름. S~M.
+3. DevOps 긴급 2건: `apps/web/Dockerfile` 작성(현재 prod 빌드 불가) + 게이트웨이 인증 토큰 배선(사내 모델 cutover 무코드 전제 보호). 둘 다 S, 인프라 없이 지금 가능.
+4. 프론트 데모성(archive 버튼, /runs 신호 노출) — 인가 잔여(1번) 완료 후 착수하면 역할별 UI까지 한 번에.
+5. guard_input 실체화 — 보안+QA 수렴, 정직성 문제(로그 거짓 신호) 해소.
+- **비코드 불변**: SSO IdP, qwen3-30b-a3b/cross-encoder 실측, 실문서/파일럿 부서, 폐쇄망 EP-07 — 조직 결정 필요.
+
 ## Go/No-Go 권고
 - **기술 MVP: GO 가능** — 핵심 가치(권한 기반 인용 답변 + 누출 0)가 코드·eval로 성립.
 - **파일럿 진입: 조건부 HOLD** — 코드 문제 아님. 위 "결정 → 해제 표"의 4개 입력(파일럿 부서/실문서·SSO·사내모델·폐쇄망)이 채워져야 진입 가능.
-- **권고 순서**: (조직) 파일럿 부서·실문서 + SSO 결정 착수 ∥ (코드, 내가 가능) 버전 자동증가 → GET 인가로 데모/배포 신뢰도 보강.
+- **권고 순서**: (조직) 파일럿 부서·실문서 + SSO 결정 착수 ∥ (코드, 내가 가능) 위 "PM 권고" 1→5 순서.

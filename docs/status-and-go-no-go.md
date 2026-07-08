@@ -118,8 +118,9 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 - ✅ **게이트웨이 인증 토큰**(PR #44, 위 참조) · ✅ **프로덕션 web Dockerfile**(PR #46, 2026-07-08 배치) — `apps/web/Dockerfile.prod` 신규 추가(멀티스테이지, standalone output, non-root). 기존 dev용 `apps/web/Dockerfile`(감사에서 "없다"고 오판했던 파일, 실은 존재함)과 `docker-compose.dev.yaml`은 무변경. 라이브: 실제 docker build 성공 + 컨테이너 기동 후 HTTP 200 확인. ⚠️ 검증 중 Docker Desktop 엔진 장애로 `docker desktop restart` 실행 — 이 머신의 다른 프로젝트 컨테이너 십여 개가 함께 재시작됨(정상 복구 확인, 사후 보고).
 - 잔여: `.env.example` startup 검증(파일 자체는 PR#44에서 완성) · 프로덕션 compose 전체 배선(리버스프록시·env 주입, Dockerfile.prod는 있으나 미연결) · JSON 로깅+request_id 미들웨어 · CI 워크플로.
 
-**🔧 프론트 데모성 — 세션 한도로 미완료 (코드 문제 아님):**
-- 문서 archive 버튼 + `/runs` guardrail·PII·judge 신호 노출: 2026-07-08 PM 오케스트라 배치에서 시도했으나 **Claude 세션 사용량 한도**(리셋 3:30pm KST)로 미완료(일시적 서버 과부하 아님, 재시도 무의미했던 시점). 브랜치 `feat/knowledge-archive-and-run-signals`는 워크트리에 보존됨(재개 가능).
+**✅ 프론트 데모성 완료** (PR #49, 2026-07-08, 세션 한도로 중단됐던 작업을 Fable 모델·고강도로 이어서 마무리) — `/knowledge` 문서별 **보관(archive) 버튼**(reason 입력→admin-gated DELETE) + `/runs`에 **가드레일 신호 배지**(PII 마스킹·인용검증·신뢰도게이트·그라운딩가드·judge/reranker 활성 시). 기존 ACL 편집 폼/패턴과 일관된 스타일. tsc 클린, **실 라이브 스택에서 e2e 16/16 통과**(기존 14 + 신규 2). 최신 main과 충돌 없이 병합. 검증 중 워크트리의 node_modules 정션 대소문자 문제(Next 클라이언트 런타임 중복 번들 → 전 페이지 크래시)를 스스로 발견·수정.
+
+⚠️ **환경 사고 (투명 공개):** 이번 배치 진행 중 `apps/api/.venv`가 완전히 삭제됨(0파일) — 여러 서브에이전트가 격리 워크트리에 venv가 없어 "메인 체크아웃의 node_modules/venv에 임시 디렉토리 정션을 만들고 끝나면 제거"하는 방식을 각자 썼는데, 그 중 하나의 정리 단계가 정션이 아니라 실제 대상 디렉토리 내용을 삭제한 것으로 추정(정확한 가해 에이전트는 특정 못 함). **즉시 복구**: `py -3.11 -m venv .venv` + `pip install -e ".[dev]"` 재설치 → 풀스위트 141 passed, 0 skipped, ruff 클린 확인. 단 `uv.lock` 정확 버전 고정이 아니라 `pyproject.toml` 범위 기준 재설치라 미세한 버전 차이 가능(현재는 동작에 영향 없는 deprecation 경고 1건뿐). **교훈**: 격리 워크트리 에이전트에게 공유 리소스(venv/node_modules) 접근을 위한 디렉토리 정션 트릭을 맡길 때는 "정션 자체만 제거"를 명시적으로 강조해야 함(예: PowerShell `Remove-Item`이 특정 조건에서 정션을 타고 들어가 대상까지 삭제할 수 있음).
 
 **🔧 관측/감사:** request_id·actor_role 감사 필드(정책 필수). (M)
 

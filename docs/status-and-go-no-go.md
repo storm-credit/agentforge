@@ -99,8 +99,15 @@ eval에서 citation 100% / useful 83.3% / leak 0건). **남은 것은 거의 전
 
 **🔧 인가 잔여:**
 - ✅ **`GET /index-jobs/{id}` 스코프 + `PATCH /agents/{id}` RBAC** (PR #42) — index-job은 admin 또는 문서 `principal_can_access_document`, 미존재 문서는 fail-closed(비admin 거부). PATCH는 `enforce_roles(PRIVILEGED_ROLES)`. 라이브+계약테스트, security-review 고신뢰 발견 0건. baseline 128.
-- **잔여**: `GET /agents`·`/agents/{id}`·`/agents/{id}/versions`·`/knowledge/sources` 여전히 무스코프(에이전트 config=시스템프롬프트, 소스 메타 노출). (S, 보안·백엔드·프론트 3직무 수렴 — **프론트 역할별 UI가 이 항목에 의존**)
-- (MEDIUM, security-review) `POST /agents/versions`도 RBAC 미적용 — draft 생성만 가능(게시는 게이팅됨)이라 즉시 위험은 낮으나 위 항목과 함께 정리 권장.
+- ✅ **`GET /agents`·`/agents/{id}`·`/agents/{id}/versions` 스코프** (PR #43, 2026-07-08 PM 오케스트라 배치, opus 작성) — 에이전트에 ACL 필드가 없어 게시 상태 기준: 비admin은 published만 목록, 미게시 건은 403 아닌 **404**(존재 자체 은닉), 버전목록은 published/superseded만(draft/validated 미노출). 프론트 4개 GET에 OPERATOR 헤더 추가(빌더 전체뷰 유지). 계약테스트 4종 신규. security-review 고신뢰 발견 0건.
+- **잔여**: `GET /knowledge/sources` 여전히 무스코프(의도적 보류 — 소스에 ACL 개념 자체가 없어 별도 정책 설계 필요).
+- (MEDIUM, security-review) `POST /agents/versions`도 RBAC 미적용 — draft 생성만 가능(게시는 게이팅됨)이라 즉시 위험은 낮으나 후속 정리 권장.
+
+**✅ 게이트웨이 인증 토큰 배선** (PR #44, 2026-07-08 PM 오케스트라 배치) — `AGENT_FORGE_LLM_API_KEY`/`AGENT_FORGE_EMBEDDING_API_KEY`(기본 None=헤더 없음, 무변경). 설정 시 `Authorization: Bearer` 자동 첨부(generate/judge_answerable/health/embed 전부). `.env.example`을 4줄→32개 필드 전체 문서화로 확장. 테스트 8종(키 있음/없음 × 4개 호출지점). **폐쇄망 모델 cutover 시 "무코드 이관" 전제를 지켜주는 선제 조치** — 실 토큰 검증 게이트웨이 대상 미검증(인프라 필요, 정직 명시).
+
+**✅ guard_input 실체화** (PR #45, 2026-07-08 PM 오케스트라 배치, opus 작성) — 하드코딩 stub(`{"allowed": True, "risk_level": "low"}` 무조건)을 `domain/input_guard.py`의 결정적 규칙 기반 평가로 교체: 제어문자/널바이트 + 영한 인젝션 마커 문구(짧고 명시적으로 low-recall). **로그만, 차단 안 함**(오탐 방지 위해 run은 그대로 진행) — risk_level·마커 레이블만 정직하게 기록, non-low면 `run.input_guard.injection_detected` 감사(원문 미포함). security-review: log-not-block 보존·감사 페이로드 원문 없음·ReDoS 없음·CJK 오탐 없음·실배선 확인, 고신뢰 발견 0건. 실제 인젝션 강건성은 여전히 ⛔ 사내모델 의존.
+
+**통합 검증(2026-07-08, 3개 PR 머지 후 로컬 재확인):** 풀스위트 **141 passed, 0 skipped**, ruff 클린.
 
 **🔧 측정/무결성(QA·RAG 수렴):**
 - 지연 p50/p95 + trace-completeness 스코어러(릴리스 게이트인데 미측정, 데이터는 이미 흐름). (S)

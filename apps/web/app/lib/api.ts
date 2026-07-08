@@ -202,6 +202,19 @@ export async function updateDocumentAcl(
   return r.json();
 }
 
+export async function archiveDocument(
+  documentId: string,
+  reason: string,
+): Promise<DocumentSummary> {
+  const q = new URLSearchParams({ reason });
+  const r = await fetch(`${API_BASE}/knowledge/documents/${documentId}?${q.toString()}`, {
+    method: "DELETE",
+    headers: { ...OPERATOR },
+  });
+  if (!r.ok) throw new Error(`archive failed: ${r.status}`);
+  return r.json();
+}
+
 export type AuditEvent = {
   id: string;
   event_type: string;

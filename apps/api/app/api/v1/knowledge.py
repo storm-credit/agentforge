@@ -44,27 +44,35 @@ router = APIRouter()
 
 @router.get("/sources", response_model=list[KnowledgeSourceRead])
 def list_sources(
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> list[KnowledgeSource]:
     sources = list(
         db.scalars(select(KnowledgeSource).order_by(KnowledgeSource.created_at.desc()))
     )
-    if "admin" in principal.roles:
-        return sources
-    # PARTIAL access control (NOT full ACL): KnowledgeSource has no per-source
-    # access_groups/department ACL the way Document does -- only a
-    # default_confidentiality_level. So this is a clearance-RANK filter ONLY: a non-admin
-    # sees a source only when their clearance rank >= the source's default confidentiality
-    # rank. It deliberately does NOT enforce group/department scoping for sources (none
-    # exists in the schema); adding that requires a schema/migration change (out of scope).
-    # Do not mistake this for document-style ACL enforcement.
-    principal_rank = confidentiality_rank(principal.clearance_level)
-    return [
-        s
-        for s in sources
-        if principal_rank >= confidentiality_rank(s.default_confidentiality_level)
-    ]
+    if "admin" not in principal.roles:
+        # PARTIAL access control (NOT full ACL): KnowledgeSource has no per-source
+        # access_groups/department ACL the way Document does -- only a
+        # default_confidentiality_level. So this is a clearance-RANK filter ONLY: a non-admin
+        # sees a source only when their clearance rank >= the source's default confidentiality
+        # rank. It deliberately does NOT enforce group/department scoping for sources (none
+        # exists in the schema); adding that requires a schema/migration change (out of scope).
+        # Do not mistake this for document-style ACL enforcement.
+        principal_rank = confidentiality_rank(principal.clearance_level)
+        sources = [
+            s
+            for s in sources
+            if principal_rank >= confidentiality_rank(s.default_confidentiality_level)
+        ]
+    # Pagination is applied in PYTHON, after the clearance filter above -- deliberately
+    # NOT as SQL LIMIT/OFFSET. A SQL-level window would be computed against the
+    # unfiltered superset, so non-admin pages would shrink and skip unpredictably once
+    # the filter ran. The tradeoff: the full filtered set is still materialized
+    # server-side per request. Acceptable at this platform's internal data volumes;
+    # revisit (push the filter into SQL first) if source counts grow large.
+    return sources[offset : offset + limit]
 
 
 @router.post("/sources", response_model=KnowledgeSourceRead, status_code=status.HTTP_201_CREATED)
@@ -92,6 +100,8 @@ def create_source(
 @router.get("/documents", response_model=list[DocumentRead])
 def list_documents(
     include_archived: bool = Query(default=False),
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> list[Document]:
@@ -106,10 +116,17 @@ def list_documents(
     if not (include_archived and is_admin):
         statement = statement.where(Document.status != "archived")
     documents = list(db.scalars(statement))
-    if is_admin:
-        return documents
-    # Non-admins only see document metadata they're authorized to access.
-    return [d for d in documents if principal_can_access_document(principal, d)]
+    if not is_admin:
+        # Non-admins only see document metadata they're authorized to access.
+        documents = [d for d in documents if principal_can_access_document(principal, d)]
+    # Pagination is applied in PYTHON, after the ACL filter above -- deliberately NOT
+    # as SQL LIMIT/OFFSET. A SQL-level window would be computed against the unfiltered
+    # superset: a non-admin's page would then be filtered down further, producing
+    # short pages, skipped items, and unreachable results. The tradeoff: the full
+    # ACL-filtered set is still materialized server-side per request. Acceptable at
+    # this platform's internal data volumes; revisit (push the ACL into SQL first)
+    # if document counts grow large.
+    return documents[offset : offset + limit]
 
 
 @router.delete("/documents/{document_id}", response_model=DocumentRead)

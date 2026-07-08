@@ -20,14 +20,27 @@ router = APIRouter()
 
 
 @router.get("", response_model=list[AgentRead])
-def list_agents(db: Session = Depends(get_db)) -> list[Agent]:
-    return list(db.scalars(select(Agent).order_by(Agent.created_at.desc())))
+def list_agents(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> list[Agent]:
+    # Admins see every agent; non-admins only see published ones (drafts/validated
+    # configs — including their system prompts and wired knowledge ids — stay hidden).
+    query = select(Agent).order_by(Agent.created_at.desc())
+    if "admin" not in principal.roles:
+        query = query.where(Agent.status == "published")
+    return list(db.scalars(query))
 
 
 @router.get("/{agent_id}", response_model=AgentRead)
-def get_agent(agent_id: str, db: Session = Depends(get_db)) -> Agent:
+def get_agent(
+    agent_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> Agent:
     agent = db.get(Agent, agent_id)
-    if agent is None:
+    # 404 (not 403) for unpublished agents so a non-admin can't even learn they exist.
+    if agent is None or ("admin" not in principal.roles and agent.status != "published"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
     return agent
 
@@ -127,18 +140,26 @@ def create_agent_version(
 
 
 @router.get("/{agent_id}/versions", response_model=list[AgentVersionRead])
-def list_agent_versions(agent_id: str, db: Session = Depends(get_db)) -> list[AgentVersion]:
+def list_agent_versions(
+    agent_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> list[AgentVersion]:
     agent = db.get(Agent, agent_id)
-    if agent is None:
+    is_admin = "admin" in principal.roles
+    # Same existence-hiding rule as get_agent: an unpublished agent is 404 to non-admins.
+    if agent is None or (not is_admin and agent.status != "published"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
-    return list(
-        db.scalars(
-            select(AgentVersion)
-            .where(AgentVersion.agent_id == agent_id)
-            .order_by(AgentVersion.version.desc())
-        )
+    query = (
+        select(AgentVersion)
+        .where(AgentVersion.agent_id == agent_id)
+        .order_by(AgentVersion.version.desc())
     )
+    if not is_admin:
+        # Even on a published agent, never expose draft/validated (untested) configs.
+        query = query.where(AgentVersion.status.in_(("published", "superseded")))
+    return list(db.scalars(query))
 
 
 @router.post("/versions/{version_id}/validate", response_model=AgentVersionRead)

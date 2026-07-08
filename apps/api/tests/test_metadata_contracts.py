@@ -72,7 +72,8 @@ def test_agent_and_version_contract(client):
     assert agent["name"] == "Policy Assistant"
     assert agent["status"] == "draft"
 
-    detail_response = client.get(f"/api/v1/agents/{agent['id']}")
+    # Inspecting an unpublished (draft) agent is an admin/builder action now.
+    detail_response = client.get(f"/api/v1/agents/{agent['id']}", headers=_ADMIN)
 
     assert detail_response.status_code == 200
     assert detail_response.json()["id"] == agent["id"]
@@ -107,7 +108,8 @@ def test_agent_and_version_contract(client):
     assert version["version"] == 1
     assert version["created_by"] == "agent-owner"
 
-    versions_response = client.get(f"/api/v1/agents/{agent['id']}/versions")
+    # Agent is still a draft at this point, so listing versions needs admin scope.
+    versions_response = client.get(f"/api/v1/agents/{agent['id']}/versions", headers=_ADMIN)
 
     assert versions_response.status_code == 200
     assert [item["id"] for item in versions_response.json()] == [version["id"]]
@@ -153,6 +155,117 @@ def test_patch_agent_requires_admin(client):
     assert client.patch(
         f"/api/v1/agents/{agent['id']}", headers=_ADMIN, json={"purpose": "edited"}
     ).status_code == 200
+
+
+def _publish_new_version(client, agent_id: str) -> dict:
+    """Create a fresh version for an agent and publish it (admin), returning the version."""
+    version = client.post(
+        "/api/v1/agents/versions",
+        json={"agent_id": agent_id, "config": {"citation_required": True}},
+    ).json()
+    published = client.post(
+        f"/api/v1/agents/versions/{version['id']}/publish",
+        headers=_ADMIN,
+        json={"reason": "publish for get-scope fixture"},
+    ).json()
+    return published
+
+
+def test_list_agents_hides_unpublished_from_non_admin(client):
+    # A published agent and a draft agent.
+    published_agent = client.post(
+        "/api/v1/agents",
+        json={"name": "Published One", "purpose": "p", "owner_department": "Operations"},
+    ).json()
+    _publish_new_version(client, published_agent["id"])
+    draft_agent = client.post(
+        "/api/v1/agents",
+        json={"name": "Draft One", "purpose": "p", "owner_department": "Operations"},
+    ).json()
+
+    # non-admin: only published agents, draft hidden
+    dev_ids = [a["id"] for a in client.get("/api/v1/agents", headers=_DEVELOPER).json()]
+    assert published_agent["id"] in dev_ids
+    assert draft_agent["id"] not in dev_ids
+    assert all(a["status"] == "published" for a in client.get("/api/v1/agents", headers=_DEVELOPER).json())
+
+    # admin: sees both
+    admin_ids = [a["id"] for a in client.get("/api/v1/agents", headers=_ADMIN).json()]
+    assert published_agent["id"] in admin_ids
+    assert draft_agent["id"] in admin_ids
+
+
+def test_get_agent_returns_404_for_draft_to_non_admin(client):
+    draft_agent = client.post(
+        "/api/v1/agents",
+        json={"name": "Hidden Draft", "purpose": "p", "owner_department": "Operations"},
+    ).json()
+
+    # non-admin gets 404 (not 403) so existence is not revealed
+    assert client.get(f"/api/v1/agents/{draft_agent['id']}", headers=_DEVELOPER).status_code == 404
+    # admin sees it
+    assert client.get(f"/api/v1/agents/{draft_agent['id']}", headers=_ADMIN).status_code == 200
+
+    # published agent is visible to non-admin
+    published_agent = client.post(
+        "/api/v1/agents",
+        json={"name": "Visible Pub", "purpose": "p", "owner_department": "Operations"},
+    ).json()
+    _publish_new_version(client, published_agent["id"])
+    assert client.get(f"/api/v1/agents/{published_agent['id']}", headers=_DEVELOPER).status_code == 200
+
+
+def test_list_versions_returns_404_for_draft_agent_to_non_admin(client):
+    draft_agent = client.post(
+        "/api/v1/agents",
+        json={"name": "Draft With Versions", "purpose": "p", "owner_department": "Operations"},
+    ).json()
+    client.post(
+        "/api/v1/agents/versions", json={"agent_id": draft_agent["id"], "config": {}}
+    )
+
+    assert client.get(
+        f"/api/v1/agents/{draft_agent['id']}/versions", headers=_DEVELOPER
+    ).status_code == 404
+    assert client.get(
+        f"/api/v1/agents/{draft_agent['id']}/versions", headers=_ADMIN
+    ).status_code == 200
+
+
+def test_list_versions_exposes_only_published_and_superseded_to_non_admin(client):
+    agent = client.post(
+        "/api/v1/agents",
+        json={"name": "Multi Version", "purpose": "p", "owner_department": "Operations"},
+    ).json()
+    # v1 published, then v2 published -> v1 becomes superseded, v2 published
+    v1 = _publish_new_version(client, agent["id"])
+    v2 = _publish_new_version(client, agent["id"])
+    # v3 left as draft
+    v3 = client.post(
+        "/api/v1/agents/versions", json={"agent_id": agent["id"], "config": {}}
+    ).json()
+    # v4 validated (not published)
+    v4 = client.post(
+        "/api/v1/agents/versions", json={"agent_id": agent["id"], "config": {}}
+    ).json()
+    client.post(
+        f"/api/v1/agents/versions/{v4['id']}/validate", headers=_ADMIN, json={"reason": "v"}
+    )
+
+    # non-admin: only published (v2) + superseded (v1); no draft/validated
+    dev_versions = client.get(f"/api/v1/agents/{agent['id']}/versions", headers=_DEVELOPER)
+    assert dev_versions.status_code == 200
+    dev_by_id = {item["id"]: item["status"] for item in dev_versions.json()}
+    assert dev_by_id.get(v1["id"]) == "superseded"
+    assert dev_by_id.get(v2["id"]) == "published"
+    assert v3["id"] not in dev_by_id
+    assert v4["id"] not in dev_by_id
+    assert set(dev_by_id.values()) <= {"published", "superseded"}
+
+    # admin: sees all four versions
+    admin_versions = client.get(f"/api/v1/agents/{agent['id']}/versions", headers=_ADMIN).json()
+    admin_ids = {item["id"] for item in admin_versions}
+    assert {v1["id"], v2["id"], v3["id"], v4["id"]} <= admin_ids
 
 
 def test_index_job_get_scoped_by_document_acl(client):

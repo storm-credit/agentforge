@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import "./globals.css";
+import { RoleSwitcher } from "./components/RoleSwitcher";
 
 export const metadata: Metadata = {
   title: "Agent Forge",
@@ -38,6 +39,7 @@ export default function RootLayout({
               </Link>
             ))}
           </nav>
+          <RoleSwitcher />
         </aside>
         <main>{children}</main>
       </body>

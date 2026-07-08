@@ -43,8 +43,28 @@ router = APIRouter()
 
 
 @router.get("/sources", response_model=list[KnowledgeSourceRead])
-def list_sources(db: Session = Depends(get_db)) -> list[KnowledgeSource]:
-    return list(db.scalars(select(KnowledgeSource).order_by(KnowledgeSource.created_at.desc())))
+def list_sources(
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> list[KnowledgeSource]:
+    sources = list(
+        db.scalars(select(KnowledgeSource).order_by(KnowledgeSource.created_at.desc()))
+    )
+    if "admin" in principal.roles:
+        return sources
+    # PARTIAL access control (NOT full ACL): KnowledgeSource has no per-source
+    # access_groups/department ACL the way Document does -- only a
+    # default_confidentiality_level. So this is a clearance-RANK filter ONLY: a non-admin
+    # sees a source only when their clearance rank >= the source's default confidentiality
+    # rank. It deliberately does NOT enforce group/department scoping for sources (none
+    # exists in the schema); adding that requires a schema/migration change (out of scope).
+    # Do not mistake this for document-style ACL enforcement.
+    principal_rank = confidentiality_rank(principal.clearance_level)
+    return [
+        s
+        for s in sources
+        if principal_rank >= confidentiality_rank(s.default_confidentiality_level)
+    ]
 
 
 @router.post("/sources", response_model=KnowledgeSourceRead, status_code=status.HTTP_201_CREATED)

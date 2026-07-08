@@ -155,6 +155,7 @@ def test_runtime_run_requires_published_version(client):
     agent = _create_agent(client)
     version_response = client.post(
         "/api/v1/agents/versions",
+        headers={"X-Agent-Forge-Roles": "admin"},
         json={
             "agent_id": agent["id"],
             "version": 1,
@@ -308,6 +309,7 @@ def _create_agent(client) -> dict:
 def _create_and_publish_version(client, *, agent_id: str, source_id: str) -> dict:
     version_response = client.post(
         "/api/v1/agents/versions",
+        headers={"X-Agent-Forge-Roles": "admin"},
         json={
             "agent_id": agent_id,
             "version": 1,

@@ -18,11 +18,16 @@ def test_default_backend_is_fake(monkeypatch):
     assert isinstance(get_vector_store(), FakeVectorStore)
 
 
-def test_qdrant_backend_without_embedding_url_falls_back_to_fake(monkeypatch):
+def test_qdrant_backend_without_embedding_url_fails_fast_at_boot(monkeypatch):
+    """Previously this silently fell back to FakeVectorStore -- a deployment that
+    explicitly asked for qdrant would boot "healthy" while quietly running on the
+    in-memory fake. A cross-field validator now rejects this combination loudly at
+    Settings() construction time instead."""
     monkeypatch.setenv("AGENT_FORGE_VECTOR_BACKEND", "qdrant")
-    # empty string overrides any .env value and is falsy -> factory returns Fake
+    # empty string overrides any .env value and is falsy -> validator must reject it
     monkeypatch.setenv("AGENT_FORGE_EMBEDDING_BASE_URL", "")
-    assert isinstance(get_vector_store(), FakeVectorStore)
+    with pytest.raises(Exception, match="AGENT_FORGE_VECTOR_BACKEND=qdrant"):
+        get_vector_store()
 
 
 def test_qdrant_backend_with_config_returns_qdrant(monkeypatch):

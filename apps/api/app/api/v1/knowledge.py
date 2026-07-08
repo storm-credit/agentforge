@@ -91,17 +91,22 @@ def create_source(
 
 @router.get("/documents", response_model=list[DocumentRead])
 def list_documents(
+    include_archived: bool = Query(default=False),
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> list[Document]:
-    documents = list(
-        db.scalars(
-            select(Document)
-            .where(Document.status != "archived")
-            .order_by(Document.created_at.desc())
-        )
-    )
-    if "admin" in principal.roles:
+    is_admin = "admin" in principal.roles
+    statement = select(Document).order_by(Document.created_at.desc())
+    # include_archived is admin-only: it exists so admins can discover an archived
+    # document's id to restore it (POST /documents/{id}/restore). For non-admins the
+    # flag is silently ignored (NOT 403), matching this file's convention that GET
+    # list endpoints scope results quietly (ACL filter below, list_sources' clearance
+    # filter) rather than reject the request; 403 here is reserved for per-resource
+    # reads and enforce_roles-gated mutations.
+    if not (include_archived and is_admin):
+        statement = statement.where(Document.status != "archived")
+    documents = list(db.scalars(statement))
+    if is_admin:
         return documents
     # Non-admins only see document metadata they're authorized to access.
     return [d for d in documents if principal_can_access_document(principal, d)]

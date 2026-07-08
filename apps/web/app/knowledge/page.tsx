@@ -8,6 +8,7 @@ import {
   listDocuments,
   listSources,
   registerDocument,
+  restoreDocument,
   sha256Hex,
   type DocumentSummary,
   type KnowledgeSource,
@@ -50,11 +51,17 @@ export default function KnowledgePage() {
   const [archiveEdit, setArchiveEdit] = useState<{ docId: string; reason: string } | null>(null);
   const [archiveBusy, setArchiveBusy] = useState(false);
 
+  // Archived view + restore (admin-only: the backend silently ignores
+  // include_archived for non-admins, so the toggle is hidden for them).
+  const [showArchived, setShowArchived] = useState(false);
+  const [restoreEdit, setRestoreEdit] = useState<{ docId: string; reason: string } | null>(null);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+
   function refresh() {
     listSources().then(setSources).catch(() => {});
-    listDocuments().then(setDocuments).catch(() => {});
+    listDocuments(showArchived).then(setDocuments).catch(() => {});
   }
-  useEffect(refresh, []);
+  useEffect(refresh, [showArchived]);
 
   function startAclEdit(d: DocumentSummary) {
     setAclEdit({
@@ -101,6 +108,25 @@ export default function KnowledgePage() {
       setError(String(e));
     } finally {
       setArchiveBusy(false);
+    }
+  }
+
+  function startRestore(d: DocumentSummary) {
+    setRestoreEdit({ docId: d.id, reason: "" });
+  }
+
+  async function confirmRestore() {
+    if (!restoreEdit) return;
+    setRestoreBusy(true);
+    setError("");
+    try {
+      await restoreDocument(restoreEdit.docId, restoreEdit.reason.trim() || "restored via Knowledge UI");
+      setRestoreEdit(null);
+      refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setRestoreBusy(false);
     }
   }
 
@@ -253,6 +279,17 @@ export default function KnowledgePage() {
 
         <div className="panel" style={{ flex: "1 1 320px" }}>
           <h3>지식소스 / 문서</h3>
+          {isPrivileged && (
+            <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", marginBottom: "8px" }}>
+              <input
+                type="checkbox"
+                data-testid="show-archived-toggle"
+                checked={showArchived}
+                onChange={(e) => setShowArchived(e.target.checked)}
+              />
+              보관됨 보기 (관리자 전용 — 복원할 문서 찾기)
+            </label>
+          )}
           {!isPrivileged && (
             <p data-testid="role-restricted-note" style={{ fontSize: "12px", color: "#64748b" }}>
               데모 역할 &quot;{role}&quot; — 관리 작업(ACL 편집/보관)은 숨겨지며, 목록은 이
@@ -271,7 +308,10 @@ export default function KnowledgePage() {
                       <span style={{ fontSize: "12px", color: "#64748b" }} data-testid="doc-groups">
                         {(d.access_groups ?? []).join(", ")}
                       </span>
-                      {isPrivileged && (
+                      {d.status === "archived" && (
+                        <span className="badge warn" data-testid="archived-badge">보관됨</span>
+                      )}
+                      {isPrivileged && d.status !== "archived" && (
                         <>
                           <button className="button secondary" data-testid="acl-edit"
                             style={{ padding: "2px 8px", fontSize: "12px" }}
@@ -281,7 +321,29 @@ export default function KnowledgePage() {
                             onClick={() => startArchive(d)}>보관</button>
                         </>
                       )}
+                      {isPrivileged && d.status === "archived" && (
+                        <button className="button secondary" data-testid="restore-doc"
+                          style={{ padding: "2px 8px", fontSize: "12px" }}
+                          onClick={() => startRestore(d)}>복원</button>
+                      )}
                     </div>
+                    {restoreEdit?.docId === d.id && (
+                      <div className="card" data-testid="restore-form" style={{ marginTop: "6px", padding: "10px" }}>
+                        <p data-testid="restore-note" style={{ fontSize: "12px", color: "#b45309", margin: "0 0 6px" }}>
+                          복원해도 벡터 색인은 되살아나지 않습니다 — 문서가 다시 검색되려면 복원 후 재색인이 필요합니다.
+                        </p>
+                        <input className="field" data-testid="restore-reason" placeholder="복원 사유 (감사 기록)"
+                          value={restoreEdit.reason}
+                          onChange={(e) => setRestoreEdit({ ...restoreEdit, reason: e.target.value })} />
+                        <div className="buttonRow">
+                          <button className="button" data-testid="restore-confirm" disabled={restoreBusy}
+                            onClick={confirmRestore}>
+                            {restoreBusy ? "복원 중…" : "복원 확정"}
+                          </button>
+                          <button className="button secondary" onClick={() => setRestoreEdit(null)}>취소</button>
+                        </div>
+                      </div>
+                    )}
                     {archiveEdit?.docId === d.id && (
                       <div className="card" data-testid="archive-form" style={{ marginTop: "6px", padding: "10px" }}>
                         <input className="field" data-testid="archive-reason" placeholder="보관 사유 (감사 기록)"

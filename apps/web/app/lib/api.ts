@@ -181,9 +181,13 @@ export type DocumentSummary = {
   confidentiality_level: string; access_groups: string[];
 };
 
-export async function listDocuments(): Promise<DocumentSummary[]> {
+export async function listDocuments(includeArchived = false): Promise<DocumentSummary[]> {
   // /knowledge is an operator/admin view; document list is ACL-scoped server-side.
-  const r = await fetch(`${API_BASE}/knowledge/documents`, { headers: { ...roleHeaders() } });
+  // include_archived is admin-only server-side: for non-admin callers the backend
+  // silently ignores the flag (200, normal non-archived list — not 403), so the UI
+  // additionally hides the toggle for non-privileged demo roles.
+  const q = includeArchived ? "?include_archived=true" : "";
+  const r = await fetch(`${API_BASE}/knowledge/documents${q}`, { headers: { ...roleHeaders() } });
   if (!r.ok) throw new Error(`list documents failed: ${r.status}`);
   return r.json();
 }
@@ -211,6 +215,22 @@ export async function archiveDocument(
     headers: { ...roleHeaders() },
   });
   if (!r.ok) throw new Error(`archive failed: ${r.status}`);
+  return r.json();
+}
+
+export async function restoreDocument(
+  documentId: string,
+  reason: string,
+): Promise<DocumentSummary> {
+  // Unarchive: status goes back to "registered". NOTE: the backend deliberately does
+  // NOT re-populate vectors (archive purged them) — the document is listed again but
+  // stays unretrievable until a fresh index job runs.
+  const q = new URLSearchParams({ reason });
+  const r = await fetch(`${API_BASE}/knowledge/documents/${documentId}/restore?${q.toString()}`, {
+    method: "POST",
+    headers: { ...roleHeaders() },
+  });
+  if (!r.ok) throw new Error(`restore failed: ${r.status}`);
   return r.json();
 }
 

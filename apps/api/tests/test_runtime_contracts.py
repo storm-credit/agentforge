@@ -282,9 +282,12 @@ def _register_document(
 
 
 def _index_document(client, *, document_id: str, source_text: str) -> dict:
+    # Indexing is setup for these RUNTIME retrieval tests; some fixtures target
+    # restricted docs. Index as admin (bypasses the create-time document-access check)
+    # so the tests exercise retrieval-time ACL, not index-time authorization.
     response = client.post(
         f"/api/v1/knowledge/documents/{document_id}/index-jobs",
-        headers={"X-Agent-Forge-User": "runtime-indexer"},
+        headers={"X-Agent-Forge-User": "runtime-indexer", "X-Agent-Forge-Roles": "admin"},
         json={"source_text": source_text},
     )
     assert response.status_code == 201

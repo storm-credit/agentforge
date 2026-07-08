@@ -415,6 +415,16 @@ def create_index_job(
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
+    # Authorize BEFORE any side effect. Indexing content into a document you cannot even
+    # read is nonsensical and, with a caller-supplied source_text + force_reindex, purges
+    # the document's real vectors and re-embeds attacker text under the document's UNCHANGED
+    # confidentiality/ACL tag -- content poisoning served to legitimately-authorized users.
+    # Read-ACL gate (matches sibling get_index_job / list_document_chunks in this file).
+    if "admin" not in principal.roles and not principal_can_access_document(principal, document):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this document"
+        )
+
     job = IndexJob(
         document_id=document.id,
         status="queued",
@@ -476,6 +486,14 @@ def process_index_job(
     document = db.get(Document, job.document_id)
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    # Authorize BEFORE the document is touched: processing drives run_index_job, which can
+    # purge + re-embed the document's vectors. Same read-ACL gate as create_index_job /
+    # the sibling read endpoints; return 403 to stay consistent with get_index_job.
+    if "admin" not in principal.roles and not principal_can_access_document(principal, document):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this index job"
+        )
 
     source_text = payload.source_text
     source_bytes: bytes | None = None

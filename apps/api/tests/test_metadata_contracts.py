@@ -288,8 +288,12 @@ def test_index_job_get_scoped_by_document_acl(client):
             "access_groups": ["department:HR"],
         },
     ).json()
+    # The doc is HR-restricted, so indexing it must be done by an authorized principal
+    # (admin here). A non-HR/low-clearance caller is denied at create time (see
+    # test_create_index_job_denied_without_document_access).
     job = client.post(
         f"/api/v1/knowledge/documents/{doc['id']}/index-jobs",
+        headers=_ADMIN,
         json={"source_text": "# HR\n\nrestricted."},
     ).json()
 
@@ -505,8 +509,10 @@ def test_document_list_and_chunks_scoped_by_acl(client):
             "access_groups": ["department:HR"],
         },
     ).json()
+    # Indexing an HR-restricted doc requires an authorized principal (admin here).
     client.post(
         f"/api/v1/knowledge/documents/{doc['id']}/index-jobs",
+        headers=_ADMIN,
         json={"source_text": "# HR\n\nrestricted leave exception details."},
     )
 
@@ -1104,8 +1110,12 @@ def test_index_job_fails_closed_for_missing_acl(client):
     )
     document = document_response.json()
 
+    # The doc has empty access_groups, so no non-admin can read it; use admin to reach
+    # run_index_job and prove it fails CLOSED on missing ACL (DOCUMENT_NOT_INDEXABLE),
+    # which is orthogonal to the create-time authorization check added elsewhere.
     job_response = client.post(
         f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_ADMIN,
         json={"source_text": "# Draft\n\nThis must not become searchable."},
     )
 
@@ -1131,6 +1141,162 @@ def test_index_job_rejects_unknown_document(client):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Document not found"
+
+
+_FINANCE = {"X-Agent-Forge-Department": "Finance", "X-Agent-Forge-Clearance": "internal"}
+_HR = {
+    "X-Agent-Forge-Department": "HR",
+    "X-Agent-Forge-Groups": "department:HR",
+    "X-Agent-Forge-Clearance": "restricted",
+}
+
+
+def _create_restricted_document(client) -> dict:
+    """An HR-restricted document that the default/Finance principal cannot read."""
+    source = client.post(
+        "/api/v1/knowledge/sources",
+        json={"name": "Restricted Index Corpus", "description": "x", "owner_department": "HR"},
+    ).json()
+    return client.post(
+        "/api/v1/knowledge/documents",
+        json={
+            "knowledge_source_id": source["id"],
+            "title": "HR Restricted Index Policy",
+            "object_uri": "object://hr/restricted-index.md",
+            "checksum": "sha256-hr-restricted-index",
+            "mime_type": "text/markdown",
+            "confidentiality_level": "restricted",
+            "access_groups": ["department:HR"],
+        },
+    ).json()
+
+
+def test_create_index_job_denied_without_document_access(client, monkeypatch):
+    # SECURITY: creating an index job with a caller-supplied source_text re-embeds content
+    # under the document's UNCHANGED ACL. A principal who cannot even read the document must
+    # not be able to do this (content-poisoning / citation-trust bypass). Denial is 403, to
+    # match the sibling read endpoints (get_index_job / list_document_chunks) in this file.
+    from app.domain import indexing, vector
+
+    doc = _create_restricted_document(client)
+    # Legitimately index it first (admin) so it has REAL chunks/vectors to protect.
+    good = client.post(
+        f"/api/v1/knowledge/documents/{doc['id']}/index-jobs",
+        headers=_ADMIN,
+        json={"source_text": "# HR\n\nlegitimate restricted content."},
+    ).json()
+    assert good["status"] == "succeeded"
+    before_ids = [
+        c["id"]
+        for c in client.get(
+            f"/api/v1/knowledge/documents/{doc['id']}/chunks", headers=_ADMIN
+        ).json()
+    ]
+    assert before_ids  # real indexed chunks exist
+
+    # Spy the vector store to PROVE a denied attempt purges nothing.
+    spy = vector.FakeVectorStore()
+    monkeypatch.setattr(indexing, "get_vector_store", lambda: spy)
+
+    # Finance has no HR group and internal < restricted clearance: the one-shot exploit.
+    denied = client.post(
+        f"/api/v1/knowledge/documents/{doc['id']}/index-jobs",
+        headers=_FINANCE,
+        json={
+            "source_text": "# Fabricated\n\nattacker-controlled poison.",
+            "force_reindex": True,
+        },
+    )
+    assert denied.status_code == 403
+
+    # Exploit closed: the document's vectors were NOT purged...
+    assert doc["id"] not in spy._deleted_document_ids
+    # ...and its real indexed chunks are byte-for-byte untouched (no poisoning).
+    after_ids = [
+        c["id"]
+        for c in client.get(
+            f"/api/v1/knowledge/documents/{doc['id']}/chunks", headers=_ADMIN
+        ).json()
+    ]
+    assert after_ids == before_ids
+
+
+def test_process_index_job_denied_without_document_access(client):
+    # SECURITY: /index-jobs/{id}/process is the second mutation path into run_index_job.
+    # A caller who cannot read the job's document must be denied before it is touched.
+    doc = _create_restricted_document(client)
+    queued = client.post(
+        f"/api/v1/knowledge/documents/{doc['id']}/index-jobs",
+        headers=_ADMIN,
+        json={},
+    ).json()
+    assert queued["status"] == "queued"
+
+    denied = client.post(
+        f"/api/v1/knowledge/index-jobs/{queued['id']}/process",
+        headers=_FINANCE,
+        json={"source_text": "# Fabricated\n\npoison via process."},
+    )
+    assert denied.status_code == 403
+
+    # The job stays queued (unprocessed) after the denied attempt.
+    assert client.get(
+        f"/api/v1/knowledge/index-jobs/{queued['id']}", headers=_ADMIN
+    ).json()["status"] == "queued"
+
+
+def test_index_job_allowed_for_authorized_principal(client):
+    # No regression: a principal WITH legitimate access can create and process as before.
+    # (Fresh docs per path so re-index chunk-id collisions don't confound the check.)
+    doc_create = _create_restricted_document(client)
+    created = client.post(
+        f"/api/v1/knowledge/documents/{doc_create['id']}/index-jobs",
+        headers=_HR,
+        json={"source_text": "# HR\n\nauthorized content."},
+    )
+    assert created.status_code == 201
+    assert created.json()["status"] == "succeeded"
+
+    doc_process = _create_restricted_document(client)
+    queued = client.post(
+        f"/api/v1/knowledge/documents/{doc_process['id']}/index-jobs",
+        headers=_HR,
+        json={},
+    ).json()
+    processed = client.post(
+        f"/api/v1/knowledge/index-jobs/{queued['id']}/process",
+        headers=_HR,
+        json={"source_text": "# HR\n\nauthorized processed content."},
+    )
+    assert processed.status_code == 200
+    assert processed.json()["status"] == "succeeded"
+
+
+def test_index_job_admin_bypass_regardless_of_acl(client):
+    # Admin bypass convention: admin has default internal clearance and no HR group, yet
+    # can still create/process index jobs on the HR-restricted document.
+    doc_create = _create_restricted_document(client)
+    created = client.post(
+        f"/api/v1/knowledge/documents/{doc_create['id']}/index-jobs",
+        headers=_ADMIN,
+        json={"source_text": "# HR\n\nadmin-indexed content."},
+    )
+    assert created.status_code == 201
+    assert created.json()["status"] == "succeeded"
+
+    doc_process = _create_restricted_document(client)
+    queued = client.post(
+        f"/api/v1/knowledge/documents/{doc_process['id']}/index-jobs",
+        headers=_ADMIN,
+        json={},
+    ).json()
+    processed = client.post(
+        f"/api/v1/knowledge/index-jobs/{queued['id']}/process",
+        headers=_ADMIN,
+        json={"source_text": "# HR\n\nadmin processed content."},
+    )
+    assert processed.status_code == 200
+    assert processed.json()["status"] == "succeeded"
 
 
 def _create_indexable_document(client) -> dict:

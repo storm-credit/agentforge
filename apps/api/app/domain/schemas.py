@@ -283,6 +283,38 @@ class RunStepRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class EvalRunCreate(BaseModel):
+    corpus_id: str = Field(min_length=1, max_length=120)
+    label: str | None = Field(default=None, max_length=240)
+    report: dict[str, Any]
+
+
+class EvalRunRead(BaseModel):
+    id: str
+    corpus_id: str
+    label: str | None
+    created_by: str
+    report: dict[str, Any]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EvalRunSummary(BaseModel):
+    """Lightweight list-view row: headline metrics only, no per-case detail."""
+
+    id: str
+    corpus_id: str
+    label: str | None
+    created_by: str
+    created_at: datetime
+    total: int | None = None
+    citation_pct: float | None = None
+    useful_answer_pct: float | None = None
+    refusal_discipline_pct: float | None = None
+    faithfulness_pct: float | None = None
+
+
 class RetrievalHitRead(BaseModel):
     id: str
     run_id: str

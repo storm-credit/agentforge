@@ -5,8 +5,12 @@ Two complementary harnesses live here:
 - **Live harness — `run_live_eval.py` (current, release-gate).** Drives the running API end to end
   (sources → documents → index → agent → runs) against the real pipeline (Qdrant + bge-m3 + LLM) and
   scores live behavior: `acl_pass_pct`, `citation_pct`, `useful_answer_pct`, `leak_free_pct`,
-  `refusal_discipline_pct`. This is what CLAUDE.md means by "before/after 수치". Default corpus
-  `eval/synthetic-corpus/cases-live-v0.1.json` (override with `AGENT_FORGE_EVAL_CORPUS`, e.g. v0.2).
+  `refusal_discipline_pct`, plus `latency_p50_ms`/`latency_p95_ms` (from each run's own `latency_ms`)
+  and `trace_completeness_pct` (percentage of runs that produced all five expected trace step types:
+  `guard_input`, `retriever`, `generator`, `citation_validator`, `guard_output`). This is what CLAUDE.md
+  means by "before/after 수치". Default corpus `eval/synthetic-corpus/cases-live-v0.1.json` (override
+  with `AGENT_FORGE_EVAL_CORPUS`, e.g. `cases-live-v0.2.json` or `cases-live-v0.3.json` — v0.3 expands
+  the deny-class corpus from 3 to 9 cases for a more statistically stable `refusal_discipline_pct`).
 - **Synthetic structure scorer — `run_synthetic_eval.py` (deterministic, no LLM).** Checks whether the
   synthetic corpus (`cases-v0.1.json`), ACL expectations, and citation expectations are internally
   consistent enough to become D3 evidence. It does not exercise retrieval or generation.

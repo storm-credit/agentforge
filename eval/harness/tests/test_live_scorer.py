@@ -1,4 +1,9 @@
-from agentforge_eval.live_scorer import score_case, aggregate
+from agentforge_eval.live_scorer import (
+    aggregate,
+    latency_percentiles,
+    score_case,
+    trace_is_complete,
+)
 
 DOC_MAP = {"hr-leave": "real-hr-1", "sec-export": "real-sec-1"}
 
@@ -87,6 +92,55 @@ def test_refusal_discipline_is_100_when_no_deny_cases():
     assert rep["leak_free_pct"] == 100.0
 
 
+def test_latency_percentiles_known_values():
+    # 10 evenly spaced values; linear-interpolation percentile (numpy-style "linear" method):
+    # p50 sits between index 4 (500) and index 5 (600) -> 550.0
+    # p95 sits between index 8 (900) and index 9 (1000), 0.55 of the way -> 955.0
+    latencies = [1000, 200, 800, 400, 600, 100, 900, 300, 700, 500]  # unsorted on purpose
+    p50, p95 = latency_percentiles(latencies)
+    assert p50 == 550.0
+    assert p95 == 955.0
+
+
+def test_latency_percentiles_single_value():
+    assert latency_percentiles([42]) == (42.0, 42.0)
+
+
+def test_latency_percentiles_empty_is_none():
+    assert latency_percentiles([]) == (None, None)
+
+
+def test_trace_is_complete_true_when_all_five_present():
+    steps = ["guard_input", "retriever", "generator", "citation_validator", "guard_output"]
+    assert trace_is_complete(steps) is True
+
+
+def test_trace_is_complete_true_with_extra_or_reordered_steps():
+    steps = ["guard_output", "citation_validator", "generator", "retriever", "guard_input", "extra"]
+    assert trace_is_complete(steps) is True
+
+
+def test_trace_is_complete_false_when_missing_one():
+    steps = ["guard_input", "retriever", "generator", "citation_validator"]
+    assert trace_is_complete(steps) is False
+
+
+def test_aggregate_includes_latency_percentiles_and_trace_completeness():
+    scores = [score_case(_case(), _run(), DOC_MAP)]
+    rep = aggregate(scores, latencies_ms=[100, 200], trace_complete=[True, False])
+    assert rep["latency_p50_ms"] == 150.0
+    assert rep["latency_p95_ms"] == 195.0
+    assert rep["trace_completeness_pct"] == 50.0
+
+
+def test_aggregate_latency_and_trace_are_none_when_not_supplied():
+    scores = [score_case(_case(), _run(), DOC_MAP)]
+    rep = aggregate(scores)
+    assert rep["latency_p50_ms"] is None
+    assert rep["latency_p95_ms"] is None
+    assert rep["trace_completeness_pct"] is None
+
+
 def test_corpus_live_parses_and_is_consistent():
     import json
     import pathlib
@@ -104,3 +158,35 @@ def test_corpus_live_parses_and_is_consistent():
             assert c["expected_citation_doc"] in doc_ids
         if c["forbidden_doc"]:
             assert c["forbidden_doc"] in doc_ids
+
+
+def test_corpus_live_v0_3_expands_deny_class_coverage():
+    import json
+    import pathlib
+
+    p = pathlib.Path(__file__).resolve().parents[2] / "synthetic-corpus" / "cases-live-v0.3.json"
+    data = json.loads(p.read_text(encoding="utf-8"))
+    doc_ids = {d["doc_id"] for d in data["documents"]}
+    assert len(doc_ids) == len(data["documents"])
+    for d in data["documents"]:
+        assert d["body"].strip()
+        assert d["access_groups"]
+
+    for c in data["cases"]:
+        assert c["expected_behavior"] in {"answer", "policy_denied", "refuse"}
+        if c["expected_citation_doc"]:
+            assert c["expected_citation_doc"] in doc_ids
+        if c["forbidden_doc"]:
+            assert c["forbidden_doc"] in doc_ids
+
+    deny_cases = [c for c in data["cases"] if c["expected_behavior"] in {"policy_denied", "refuse"}]
+    # v0.2 had only 3 deny-class cases (statistically fragile: one flip = >30pt swing).
+    # v0.3 must add at least 5 more, spanning policy_denied, refuse, and an injection flavor.
+    assert len(deny_cases) >= 8
+    new_case_ids = {c["case_id"] for c in deny_cases} - {
+        "c07_export_denied", "c08_payroll_denied", "c09_refuse_unknown",
+    }
+    assert len(new_case_ids) >= 5
+    assert any(c["expected_behavior"] == "policy_denied" for c in deny_cases if c["case_id"] in new_case_ids)
+    assert any(c["expected_behavior"] == "refuse" for c in deny_cases if c["case_id"] in new_case_ids)
+    assert any("injection" in c["case_id"] for c in deny_cases if c["case_id"] in new_case_ids)

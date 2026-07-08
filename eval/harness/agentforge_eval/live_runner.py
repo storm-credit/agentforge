@@ -5,7 +5,7 @@ from pathlib import Path
 
 import httpx
 
-from agentforge_eval.live_scorer import aggregate, score_case
+from agentforge_eval.live_scorer import aggregate, score_case, trace_is_complete
 
 _OPERATOR = {
     "X-Agent-Forge-User": "eval-operator",
@@ -105,6 +105,8 @@ def run_live_eval(corpus_path: Path, base_url: str, prefix: str) -> dict:
         top_scores: dict[str, float] = {}
         grounding_scores: dict[str, float | None] = {}
         guard_tripped: dict[str, bool] = {}
+        latencies_ms: dict[str, int] = {}
+        trace_complete: dict[str, bool] = {}
         for case in corpus["cases"]:
             run = client.post(
                 "/runs",
@@ -113,6 +115,7 @@ def run_live_eval(corpus_path: Path, base_url: str, prefix: str) -> dict:
             )
             run.raise_for_status()
             rj = run.json()
+            latencies_ms[case["case_id"]] = rj.get("latency_ms", 0)
             # Reading the run trace is owner/admin-scoped; the eval harness is an
             # admin/operator tool, so read hits/steps with the operator identity.
             hits = client.get(f"/runs/{rj['id']}/retrieval-hits", headers=_OPERATOR).json()
@@ -124,6 +127,9 @@ def run_live_eval(corpus_path: Path, base_url: str, prefix: str) -> dict:
             guard_out = (guard or {}).get("output_summary", {})
             grounding_scores[case["case_id"]] = guard_out.get("grounding_score")
             guard_tripped[case["case_id"]] = bool(guard_out.get("guard_tripped"))
+            trace_complete[case["case_id"]] = trace_is_complete(
+                s.get("step_type") for s in steps
+            )
             run_result = {
                 "answer": rj.get("answer", ""),
                 "citations": rj.get("citations", []),
@@ -131,11 +137,18 @@ def run_live_eval(corpus_path: Path, base_url: str, prefix: str) -> dict:
             }
             scores.append(score_case(case, run_result, doc_id_map))
 
-    report = aggregate(scores)
+    case_ids = [case["case_id"] for case in corpus["cases"]]
+    report = aggregate(
+        scores,
+        latencies_ms=[latencies_ms[cid] for cid in case_ids],
+        trace_complete=[trace_complete[cid] for cid in case_ids],
+    )
     for case_row in report["cases"]:
         cid = case_row["case_id"]
         case_row["top_score"] = round(top_scores.get(cid, 0.0), 4)
         case_row["grounding_score"] = grounding_scores.get(cid)
         case_row["guard_tripped"] = guard_tripped.get(cid, False)
+        case_row["latency_ms"] = latencies_ms.get(cid)
+        case_row["trace_complete"] = trace_complete.get(cid, False)
     report["corpus_id"] = corpus["corpus_id"]
     return report

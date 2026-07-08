@@ -65,6 +65,11 @@ def update_agent(
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
+    enforce_roles(
+        db, principal, PRIVILEGED_ROLES,
+        action="agent.update", target_type="agent", target_id=agent_id,
+    )
+
     updates = payload.model_dump(exclude_unset=True)
     for field, value in updates.items():
         setattr(agent, field, value)

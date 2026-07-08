@@ -79,7 +79,7 @@ def test_agent_and_version_contract(client):
 
     update_response = client.patch(
         f"/api/v1/agents/{agent['id']}",
-        headers={"X-Agent-Forge-User": "agent-owner"},
+        headers={"X-Agent-Forge-User": "agent-owner", "X-Agent-Forge-Roles": "admin"},
         json={"purpose": "Answer internal policy questions with traceable citations."},
     )
 
@@ -140,6 +140,52 @@ def test_agent_and_version_contract(client):
 
 _ADMIN = {"X-Agent-Forge-User": "ops", "X-Agent-Forge-Roles": "admin"}
 _DEVELOPER = {"X-Agent-Forge-User": "dev", "X-Agent-Forge-Roles": "developer"}
+
+
+def test_patch_agent_requires_admin(client):
+    agent = client.post(
+        "/api/v1/agents",
+        json={"name": "Guarded", "purpose": "p", "owner_department": "Operations"},
+    ).json()
+    assert client.patch(
+        f"/api/v1/agents/{agent['id']}", headers=_DEVELOPER, json={"purpose": "edited"}
+    ).status_code == 403
+    assert client.patch(
+        f"/api/v1/agents/{agent['id']}", headers=_ADMIN, json={"purpose": "edited"}
+    ).status_code == 200
+
+
+def test_index_job_get_scoped_by_document_acl(client):
+    source = client.post(
+        "/api/v1/knowledge/sources",
+        json={"name": "IJ Src", "description": "x", "owner_department": "Security"},
+    ).json()
+    doc = client.post(
+        "/api/v1/knowledge/documents",
+        json={
+            "knowledge_source_id": source["id"],
+            "title": "HR Restricted",
+            "object_uri": "object://ij-restricted.md",
+            "checksum": "sha256-ij",
+            "mime_type": "text/markdown",
+            "confidentiality_level": "restricted",
+            "access_groups": ["department:HR"],
+        },
+    ).json()
+    job = client.post(
+        f"/api/v1/knowledge/documents/{doc['id']}/index-jobs",
+        json={"source_text": "# HR\n\nrestricted."},
+    ).json()
+
+    finance = {"X-Agent-Forge-Department": "Finance", "X-Agent-Forge-Clearance": "internal"}
+    hr = {
+        "X-Agent-Forge-Department": "HR",
+        "X-Agent-Forge-Groups": "department:HR",
+        "X-Agent-Forge-Clearance": "restricted",
+    }
+    assert client.get(f"/api/v1/knowledge/index-jobs/{job['id']}", headers=finance).status_code == 403
+    assert client.get(f"/api/v1/knowledge/index-jobs/{job['id']}", headers=hr).status_code == 200
+    assert client.get(f"/api/v1/knowledge/index-jobs/{job['id']}", headers=_ADMIN).status_code == 200
 
 
 def test_audit_events_query_admin_only_and_self_audited(client):

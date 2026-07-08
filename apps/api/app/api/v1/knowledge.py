@@ -443,10 +443,21 @@ def process_index_job(
 
 
 @router.get("/index-jobs/{job_id}", response_model=IndexJobRead)
-def get_index_job(job_id: str, db: Session = Depends(get_db)) -> IndexJob:
+def get_index_job(
+    job_id: str,
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> IndexJob:
     job = db.get(IndexJob, job_id)
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Index job not found")
+    document = db.get(Document, job.document_id)
+    if "admin" not in principal.roles and not (
+        document is not None and principal_can_access_document(principal, document)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this index job"
+        )
     return job
 
 

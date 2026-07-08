@@ -13,6 +13,7 @@ from app.core.database import get_db
 from app.core.principal import Principal, get_principal
 from app.domain.citations import CitationValidationResult, validate_run_citations
 from app.domain.grounding import grounding_score
+from app.domain.input_guard import assess_input
 from app.domain.models import Agent, AgentVersion, Document, DocumentChunk, RetrievalHit, Run, RunStep
 from app.domain.schemas import (
     RetrievalHitRead,
@@ -97,15 +98,40 @@ def create_run(
     db.add(run)
     db.flush()
 
+    # Input guard: deterministic, non-model heuristic (control chars + a short,
+    # best-effort prompt-injection marker list). Log-not-block by design — it
+    # never refuses the run (false positives on legitimate questions), it only
+    # makes the trace/audit honest about what was checked. Real injection
+    # robustness needs the in-house LLM and is out of scope here.
+    guard_input = assess_input(payload.input.message)
     _add_step(
         db,
         run=run,
         order=1,
         step_type="guard_input",
         input_summary={"message_length": len(payload.input.message)},
-        output_summary={"allowed": True, "risk_level": "low"},
+        output_summary={
+            "allowed": True,  # heuristic logs, never blocks
+            "risk_level": guard_input.risk_level,
+            "markers": list(guard_input.markers),
+        },
         started_at=started_at,
     )
+    if guard_input.risk_level != "low":
+        # Marker labels + risk level only — the raw (attacker-controlled) message
+        # is deliberately NOT copied into the audit payload/reason.
+        write_audit_event(
+            db,
+            principal=principal,
+            event_type="run.input_guard.injection_detected",
+            target_type="run",
+            target_id=run.id,
+            reason=f"input guard heuristic flagged risk={guard_input.risk_level}",
+            payload={
+                "risk_level": guard_input.risk_level,
+                "markers": list(guard_input.markers),
+            },
+        )
 
     vector_result, vector_adapter, vector_degraded = _search_authorized_context(
         db=db,

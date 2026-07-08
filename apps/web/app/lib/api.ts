@@ -257,6 +257,32 @@ export async function listAuditEvents(
   return r.json();
 }
 
+export type EvalRunSummary = {
+  id: string;
+  corpus_id: string;
+  label: string | null;
+  created_by: string;
+  created_at: string;
+  total: number | null;
+  citation_pct: number | null;
+  useful_answer_pct: number | null;
+  refusal_discipline_pct: number | null;
+  faithfulness_pct: number | null;
+};
+
+export async function listEvalRuns(
+  params: { corpus_id?: string; limit?: number } = {},
+): Promise<EvalRunSummary[]> {
+  // Eval history reads are open to any authenticated principal server-side
+  // (aggregate quality metrics, no PII); writes stay operator-only.
+  const q = new URLSearchParams();
+  if (params.corpus_id) q.set("corpus_id", params.corpus_id);
+  q.set("limit", String(params.limit ?? 50));
+  const r = await fetch(`${API_BASE}/eval/runs?${q.toString()}`, { headers: { ...roleHeaders() } });
+  if (!r.ok) throw new Error(`list eval runs failed: ${r.status}`);
+  return r.json();
+}
+
 export async function sha256Hex(text: string): Promise<string> {
   const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
   return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");

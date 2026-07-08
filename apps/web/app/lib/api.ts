@@ -63,7 +63,9 @@ export async function listAgents(): Promise<AgentSummary[]> {
 }
 
 export async function listSources(): Promise<KnowledgeSource[]> {
-  const r = await fetch(`${API_BASE}/knowledge/sources`);
+  // The builder is an operator/admin view; the source list is now clearance-scoped
+  // server-side, so send the operator identity to see the full source picker.
+  const r = await fetch(`${API_BASE}/knowledge/sources`, { headers: { ...OPERATOR } });
   if (!r.ok) throw new Error(`list sources failed: ${r.status}`);
   return r.json();
 }

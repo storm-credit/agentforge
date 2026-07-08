@@ -110,6 +110,14 @@ def create_agent_version(
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
+    # Creating a version is a privileged builder mutation, gated like its siblings
+    # (update/validate/publish). The version row does not exist yet, so the denial is
+    # audited against the parent agent id (target_type still names the created resource).
+    enforce_roles(
+        db, principal, PRIVILEGED_ROLES,
+        action="agent_version.create", target_type="agent_version", target_id=agent.id,
+    )
+
     # Server assigns the next version number (max+1) so callers can't collide on the
     # (agent_id, version) unique constraint. Any client-supplied version is ignored.
     current_max = db.scalar(

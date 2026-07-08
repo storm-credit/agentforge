@@ -91,7 +91,7 @@ def test_agent_and_version_contract(client):
 
     version_response = client.post(
         "/api/v1/agents/versions",
-        headers={"X-Agent-Forge-User": "agent-owner"},
+        headers={"X-Agent-Forge-User": "agent-owner", "X-Agent-Forge-Roles": "admin"},
         json={
             "agent_id": agent["id"],
             "version": 1,
@@ -161,6 +161,7 @@ def _publish_new_version(client, agent_id: str) -> dict:
     """Create a fresh version for an agent and publish it (admin), returning the version."""
     version = client.post(
         "/api/v1/agents/versions",
+        headers=_ADMIN,
         json={"agent_id": agent_id, "config": {"citation_required": True}},
     ).json()
     published = client.post(
@@ -221,7 +222,9 @@ def test_list_versions_returns_404_for_draft_agent_to_non_admin(client):
         json={"name": "Draft With Versions", "purpose": "p", "owner_department": "Operations"},
     ).json()
     client.post(
-        "/api/v1/agents/versions", json={"agent_id": draft_agent["id"], "config": {}}
+        "/api/v1/agents/versions",
+        headers=_ADMIN,
+        json={"agent_id": draft_agent["id"], "config": {}},
     )
 
     assert client.get(
@@ -242,11 +245,11 @@ def test_list_versions_exposes_only_published_and_superseded_to_non_admin(client
     v2 = _publish_new_version(client, agent["id"])
     # v3 left as draft
     v3 = client.post(
-        "/api/v1/agents/versions", json={"agent_id": agent["id"], "config": {}}
+        "/api/v1/agents/versions", headers=_ADMIN, json={"agent_id": agent["id"], "config": {}}
     ).json()
     # v4 validated (not published)
     v4 = client.post(
-        "/api/v1/agents/versions", json={"agent_id": agent["id"], "config": {}}
+        "/api/v1/agents/versions", headers=_ADMIN, json={"agent_id": agent["id"], "config": {}}
     ).json()
     client.post(
         f"/api/v1/agents/versions/{v4['id']}/validate", headers=_ADMIN, json={"reason": "v"}
@@ -550,7 +553,7 @@ def test_privileged_mutations_require_admin_role(client):
         json={"name": "RBAC Agent", "purpose": "rbac.", "owner_department": "Operations"},
     ).json()
     version = client.post(
-        "/api/v1/agents/versions", json={"agent_id": agent["id"], "config": {}}
+        "/api/v1/agents/versions", headers=_ADMIN, json={"agent_id": agent["id"], "config": {}}
     ).json()
     source = client.post(
         "/api/v1/knowledge/sources",
@@ -604,6 +607,93 @@ def test_privileged_mutations_require_admin_role(client):
     ).status_code == 200
 
 
+def test_create_version_requires_admin_role(client):
+    # FIX 1: POST /agents/versions is now a privileged mutation, gated like its
+    # update/validate/publish siblings.
+    agent = client.post(
+        "/api/v1/agents",
+        json={"name": "Gated Version", "purpose": "p", "owner_department": "Operations"},
+    ).json()
+
+    # non-admin (developer) is denied and the attempt is audited as policy.denied
+    denied = client.post(
+        "/api/v1/agents/versions",
+        headers=_DEVELOPER,
+        json={"agent_id": agent["id"], "config": {"citation_required": True}},
+    )
+    assert denied.status_code == 403
+    denied_events = client.get(
+        "/api/v1/audit/events?event_type=policy.denied", headers=_ADMIN
+    ).json()
+    assert any(
+        e["target_id"] == agent["id"]
+        and e["payload"].get("action") == "agent_version.create"
+        for e in denied_events
+    )
+
+    # nothing was created for the denied caller
+    assert client.get(f"/api/v1/agents/{agent['id']}/versions", headers=_ADMIN).json() == []
+
+    # admin succeeds and creates the version as before
+    allowed = client.post(
+        "/api/v1/agents/versions",
+        headers=_ADMIN,
+        json={"agent_id": agent["id"], "config": {"citation_required": True}},
+    )
+    assert allowed.status_code == 201
+    assert allowed.json()["version"] == 1
+    admin_versions = client.get(f"/api/v1/agents/{agent['id']}/versions", headers=_ADMIN).json()
+    assert [v["id"] for v in admin_versions] == [allowed.json()["id"]]
+
+
+def test_list_sources_scoped_by_clearance_rank(client):
+    # FIX 2: GET /knowledge/sources is clearance-rank scoped for non-admins. This is a
+    # PARTIAL filter (rank only) -- sources have no group/department ACL in the schema.
+    def _make(name, level):
+        return client.post(
+            "/api/v1/knowledge/sources",
+            json={
+                "name": name,
+                "description": "x",
+                "owner_department": "Security",
+                "default_confidentiality_level": level,
+            },
+        ).json()
+
+    public = _make("Public Src", "public")
+    internal = _make("Internal Src", "internal")
+    restricted = _make("Restricted Src", "restricted")
+    confidential = _make("Confidential Src", "confidential")
+
+    def _ids(headers):
+        return {s["id"] for s in client.get("/api/v1/knowledge/sources", headers=headers).json()}
+
+    # low-clearance non-admin: public + internal only; restricted/confidential hidden
+    low = {"X-Agent-Forge-Roles": "developer", "X-Agent-Forge-Clearance": "internal"}
+    low_ids = _ids(low)
+    assert public["id"] in low_ids
+    assert internal["id"] in low_ids
+    assert restricted["id"] not in low_ids
+    assert confidential["id"] not in low_ids
+
+    # public-clearance non-admin: only the public source
+    lowest = {"X-Agent-Forge-Roles": "developer", "X-Agent-Forge-Clearance": "public"}
+    lowest_ids = _ids(lowest)
+    assert public["id"] in lowest_ids
+    assert internal["id"] not in lowest_ids
+
+    # restricted-clearance non-admin: sees up to restricted, not confidential
+    mid = {"X-Agent-Forge-Roles": "developer", "X-Agent-Forge-Clearance": "restricted"}
+    mid_ids = _ids(mid)
+    assert restricted["id"] in mid_ids
+    assert confidential["id"] not in mid_ids
+
+    # admin: sees every source regardless of (even low) clearance
+    admin_low = {"X-Agent-Forge-Roles": "admin", "X-Agent-Forge-Clearance": "public"}
+    admin_ids = _ids(admin_low)
+    assert {public["id"], internal["id"], restricted["id"], confidential["id"]} <= admin_ids
+
+
 def test_agent_versions_autonumber_on_create(client):
     agent = client.post(
         "/api/v1/agents",
@@ -616,10 +706,12 @@ def test_agent_versions_autonumber_on_create(client):
 
     first = client.post(
         "/api/v1/agents/versions",
+        headers=_ADMIN,
         json={"agent_id": agent["id"], "config": {"citation_required": True}},
     )
     second = client.post(
         "/api/v1/agents/versions",
+        headers=_ADMIN,
         json={"agent_id": agent["id"], "config": {"citation_required": True}},
     )
 
@@ -635,10 +727,10 @@ def test_rollback_republishes_older_version(client):
         json={"name": "Rollback Agent", "purpose": "rollback.", "owner_department": "Operations"},
     ).json()
     v1 = client.post(
-        "/api/v1/agents/versions", json={"agent_id": agent["id"], "config": {}}
+        "/api/v1/agents/versions", headers=_ADMIN, json={"agent_id": agent["id"], "config": {}}
     ).json()
     v2 = client.post(
-        "/api/v1/agents/versions", json={"agent_id": agent["id"], "config": {}}
+        "/api/v1/agents/versions", headers=_ADMIN, json={"agent_id": agent["id"], "config": {}}
     ).json()
 
     client.post(f"/api/v1/agents/versions/{v1['id']}/publish", headers=_ADMIN, json={"reason": "publish v1"})

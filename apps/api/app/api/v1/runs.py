@@ -140,10 +140,14 @@ def create_run(
         top_k=payload.top_k,
         acl_filter=acl_filter,
     )
-    # Rerank hook: order-preserving no-op by default; a cross-encoder backend plugs in
-    # here once an in-house reranker is available (see research-reranking-options.md).
+    # Rerank hook: order-preserving no-op by default. Chunk content is fetched here
+    # (VectorHit carries no content) so content-aware backends (hybrid_lexical BM25)
+    # can score against the actual chunk text; the same map is reused for context
+    # blocks below, so this is a single DB round-trip either way.
+    content_by_chunk_id = _fetch_chunk_contents(db, vector_result.hits)
+    rank_before_rerank = {hit: rank for rank, hit in enumerate(vector_result.hits, start=1)}
     reranker = get_reranker()
-    ranked_hits = reranker.rerank(payload.input.message, vector_result.hits)
+    ranked_hits = reranker.rerank(payload.input.message, vector_result.hits, content_by_chunk_id)
     _add_step(
         db,
         run=run,
@@ -174,7 +178,7 @@ def create_run(
                 document_id=hit.document_id,
                 title=hit.title,
                 citation_locator=citation_locator,
-                rank_original=rank,
+                rank_original=rank_before_rerank.get(hit, rank),
                 rank_reranked=rank,
                 score_vector=hit.score,
                 score_rerank=None,
@@ -200,7 +204,7 @@ def create_run(
             )
 
     answer_language = resolve_language(payload.language, payload.input.message)
-    context_blocks = _load_context_blocks(db, ranked_hits)
+    context_blocks = _build_context_blocks(ranked_hits, content_by_chunk_id)
     gen_settings = get_settings()
     gen_temperature = clamp_temperature(
         agent_version.config.get("temperature", gen_settings.llm_temperature)
@@ -561,12 +565,17 @@ def _citation_validation_summary(result: CitationValidationResult) -> dict:
     }
 
 
-def _load_context_blocks(db: Session, hits) -> tuple[ContextBlock, ...]:
+def _fetch_chunk_contents(db: Session, hits) -> dict[str, str]:
+    """chunk_id -> content for the given hits (single query; fetched once per run,
+    shared by the reranker and the context-block builder)."""
     chunk_ids = [hit.chunk_id for hit in hits if hit.chunk_id]
-    contents: dict[str, str] = {}
-    if chunk_ids:
-        rows = db.scalars(select(DocumentChunk).where(DocumentChunk.id.in_(chunk_ids)))
-        contents = {row.id: row.content for row in rows}
+    if not chunk_ids:
+        return {}
+    rows = db.scalars(select(DocumentChunk).where(DocumentChunk.id.in_(chunk_ids)))
+    return {row.id: row.content for row in rows}
+
+
+def _build_context_blocks(hits, contents: dict[str, str]) -> tuple[ContextBlock, ...]:
     blocks = []
     for hit in hits:
         text = contents.get(hit.chunk_id or "", "")

@@ -126,6 +126,64 @@ def archive_document(
     return document
 
 
+@router.post("/documents/{document_id}/restore", response_model=DocumentRead)
+def restore_document(
+    document_id: str,
+    reason: str = Query(default="restored via API"),
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_principal),
+) -> Document:
+    """Restore (unarchive) a soft-deleted document so it reappears in listings and
+    ACL-scoped reads. Admin-gated; audited. 409 if the document is not currently
+    archived.
+
+    The document goes back to ``registered`` (not ``indexed``): that is the codebase's
+    pre-index state — it is in ``SEARCHABLE_DOCUMENT_STATUSES`` (visible to authorized
+    non-admins) and passes ``document_can_be_indexed`` so it can be re-indexed. Chunks
+    become ``active``: visible in chunk listings, but excluded from retrieval (which
+    requires ``indexed``) because their vectors are gone.
+
+    Honest limitation: archiving purged this document's vectors from the store, and
+    restore deliberately does NOT re-populate them (no vector-store side effect here,
+    so there is nothing to fail-close around, unlike archive). The restored document is
+    visible/listed again but not retrievable until a fresh index job runs
+    (``POST /documents/{id}/index-jobs`` with ``force_reindex: true`` + ``/process``).
+    """
+    document = db.get(Document, document_id)
+    if document is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    enforce_roles(
+        db, principal, PRIVILEGED_ROLES,
+        action="document.restore", target_type="document", target_id=document_id,
+    )
+
+    if document.status != "archived":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="Document is not archived"
+        )
+
+    document.status = "registered"
+    for chunk in document.chunks:
+        # "active" (not "indexed"): the chunk rows are visible again, but their vectors
+        # were purged at archive time, so they must not be treated as searchable.
+        chunk.status = "active"
+    db.flush()
+
+    write_audit_event(
+        db,
+        principal=principal,
+        event_type="document.restored",
+        target_type="document",
+        target_id=document.id,
+        reason=reason,
+        payload={"knowledge_source_id": document.knowledge_source_id, "title": document.title},
+    )
+    db.commit()
+    db.refresh(document)
+    return document
+
+
 @router.post("/documents", response_model=DocumentRead, status_code=status.HTTP_201_CREATED)
 def register_document(
     payload: DocumentCreate,

@@ -10,6 +10,7 @@ REPO_ROOT = HARNESS_ROOT.parents[1]
 sys.path.insert(0, str(HARNESS_ROOT))
 
 from agentforge_eval.live_runner import run_live_eval  # noqa: E402
+from agentforge_eval.live_scorer import grounding_min_from_env  # noqa: E402
 
 
 def main() -> int:
@@ -17,7 +18,10 @@ def main() -> int:
     corpus = REPO_ROOT / "eval" / "synthetic-corpus" / corpus_name
     base_url = os.environ.get("AGENT_FORGE_EVAL_BASE_URL", "http://127.0.0.1:8000/api/v1")
     prefix = os.environ.get("AGENT_FORGE_EVAL_PREFIX", "evalrun")
-    report = run_live_eval(corpus, base_url=base_url, prefix=prefix)
+    # AGENT_FORGE_EVAL_GROUNDING_MIN: faithfulness threshold; set it to the live
+    # deployment's AGENT_FORGE_GROUNDING_MIN. Defaults to the backend code default 0.0.
+    grounding_min = grounding_min_from_env()
+    report = run_live_eval(corpus, base_url=base_url, prefix=prefix, grounding_min=grounding_min)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
 

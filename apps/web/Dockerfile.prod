@@ -1,0 +1,48 @@
+# Production image for agentforge-web (Next.js standalone output).
+#
+# NOTE: this is intentionally a SEPARATE file from ./Dockerfile.
+# ./Dockerfile is the dev-oriented single-stage image that
+# deploy/compose/docker-compose.dev.yaml builds by default (context with no
+# explicit `dockerfile:`) and runs with `command: npm run dev` plus a bind
+# mount. This file must not replace it, or the dev compose flow breaks
+# (the standalone runner stage below has no `next` binary / dev deps).
+#
+# Build:  docker build -f apps/web/Dockerfile.prod -t agentforge-web:prod apps/web
+# Run:    docker run -p 3000:3000 agentforge-web:prod
+#
+# Wiring this into a full production compose stack (reverse proxy, env,
+# API base URL, etc.) is a separate follow-up item, not covered here.
+
+# ---- deps: install exact locked dependencies -------------------------------
+FROM node:22-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci
+
+# ---- builder: build the production Next.js bundle ---------------------------
+FROM node:22-alpine AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+RUN npm run build
+
+# ---- runner: minimal, non-root runtime image --------------------------------
+FROM node:22-alpine AS runner
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+RUN addgroup --system --gid 1001 nodejs \
+    && adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+CMD ["node", "server.js"]

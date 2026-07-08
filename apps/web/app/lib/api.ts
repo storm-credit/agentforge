@@ -18,7 +18,7 @@ export const MOCK_USERS = {
 export type MockUserKey = keyof typeof MOCK_USERS;
 
 export async function firstAgentId(): Promise<string | null> {
-  const r = await fetch(`${API_BASE}/agents`);
+  const r = await fetch(`${API_BASE}/agents`, { headers: { ...OPERATOR } });
   const list = await r.json();
   return list[0]?.id ?? null;
 }
@@ -56,7 +56,8 @@ export type AgentSummary = {
 };
 
 export async function listAgents(): Promise<AgentSummary[]> {
-  const r = await fetch(`${API_BASE}/agents`);
+  // Builder view is operator/admin; agent list is publish-status-scoped server-side.
+  const r = await fetch(`${API_BASE}/agents`, { headers: { ...OPERATOR } });
   if (!r.ok) throw new Error(`list agents failed: ${r.status}`);
   return r.json();
 }
@@ -152,13 +153,13 @@ export async function createDraftVersion(
 }
 
 export async function getAgent(agentId: string): Promise<AgentSummary> {
-  const r = await fetch(`${API_BASE}/agents/${agentId}`);
+  const r = await fetch(`${API_BASE}/agents/${agentId}`, { headers: { ...OPERATOR } });
   if (!r.ok) throw new Error(`get agent failed: ${r.status}`);
   return r.json();
 }
 
 export async function listVersions(agentId: string): Promise<AgentVersionSummary[]> {
-  const r = await fetch(`${API_BASE}/agents/${agentId}/versions`);
+  const r = await fetch(`${API_BASE}/agents/${agentId}/versions`, { headers: { ...OPERATOR } });
   if (!r.ok) throw new Error(`list versions failed: ${r.status}`);
   return r.json();
 }

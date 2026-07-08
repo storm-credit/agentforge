@@ -211,6 +211,28 @@ def _lexical_score(query: str, *values: str) -> float:
     return round(overlap / len(query_terms), 4)
 
 
+def check_vector_store() -> bool | None:
+    """Cheap read-only connectivity check for the active vector store.
+
+    Returns ``None`` when the configured backend isn't a real Qdrant store
+    (nothing to check — mirrors the ``FakeVectorStore`` default used by tests/CI),
+    or a bool connectivity result otherwise. Never mutates state.
+    """
+    from app.core.config import get_settings
+
+    s = get_settings()
+    if not (s.vector_backend == "qdrant" and s.embedding_base_url):
+        return None
+    try:
+        from qdrant_client import QdrantClient
+
+        client = QdrantClient(url=s.qdrant_url)
+        client.get_collections()
+        return True
+    except Exception:
+        return False
+
+
 def get_vector_store() -> "VectorStore":
     from app.core.config import get_settings
 

@@ -98,6 +98,33 @@ class MinioObjectStore:
             return False
 
 
+def check_object_store() -> bool | None:
+    """Cheap read-only connectivity check for the configured object store.
+
+    Returns ``None`` when the backend is "none"/"memory" (nothing to check),
+    or a bool connectivity result for "minio". Uses a fresh client rather than
+    ``get_object_store()`` so the check never creates a bucket as a side effect.
+    """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    if settings.object_store_backend != "minio":
+        return None
+    try:
+        from minio import Minio
+
+        client = Minio(
+            settings.object_store_endpoint or "localhost:9000",
+            access_key=settings.object_store_access_key,
+            secret_key=settings.object_store_secret_key,
+            secure=settings.object_store_secure,
+        )
+        client.bucket_exists(settings.object_store_bucket)
+        return True
+    except Exception:
+        return False
+
+
 @lru_cache
 def get_object_store() -> ObjectStore | None:
     """Return the configured object store, or ``None`` when disabled (default).

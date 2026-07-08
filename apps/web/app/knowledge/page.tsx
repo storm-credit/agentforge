@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import type { ChangeEvent } from "react";
 import {
+  archiveDocument,
   createSource,
   indexDocument,
   listDocuments,
@@ -41,6 +42,10 @@ export default function KnowledgePage() {
   >(null);
   const [aclBusy, setAclBusy] = useState(false);
 
+  // Archive (soft-delete, per-document)
+  const [archiveEdit, setArchiveEdit] = useState<{ docId: string; reason: string } | null>(null);
+  const [archiveBusy, setArchiveBusy] = useState(false);
+
   function refresh() {
     listSources().then(setSources).catch(() => {});
     listDocuments().then(setDocuments).catch(() => {});
@@ -73,6 +78,25 @@ export default function KnowledgePage() {
       setError(String(e));
     } finally {
       setAclBusy(false);
+    }
+  }
+
+  function startArchive(d: DocumentSummary) {
+    setArchiveEdit({ docId: d.id, reason: "" });
+  }
+
+  async function confirmArchive() {
+    if (!archiveEdit) return;
+    setArchiveBusy(true);
+    setError("");
+    try {
+      await archiveDocument(archiveEdit.docId, archiveEdit.reason.trim() || "archived via Knowledge UI");
+      setArchiveEdit(null);
+      refresh();
+    } catch (e) {
+      setError(String(e));
+    } finally {
+      setArchiveBusy(false);
     }
   }
 
@@ -240,7 +264,24 @@ export default function KnowledgePage() {
                       <button className="button secondary" data-testid="acl-edit"
                         style={{ padding: "2px 8px", fontSize: "12px" }}
                         onClick={() => startAclEdit(d)}>ACL 편집</button>
+                      <button className="button secondary" data-testid="archive-doc"
+                        style={{ padding: "2px 8px", fontSize: "12px" }}
+                        onClick={() => startArchive(d)}>보관</button>
                     </div>
+                    {archiveEdit?.docId === d.id && (
+                      <div className="card" data-testid="archive-form" style={{ marginTop: "6px", padding: "10px" }}>
+                        <input className="field" data-testid="archive-reason" placeholder="보관 사유 (감사 기록)"
+                          value={archiveEdit.reason}
+                          onChange={(e) => setArchiveEdit({ ...archiveEdit, reason: e.target.value })} />
+                        <div className="buttonRow">
+                          <button className="button" data-testid="archive-confirm" disabled={archiveBusy}
+                            onClick={confirmArchive}>
+                            {archiveBusy ? "보관 중…" : "보관 확정"}
+                          </button>
+                          <button className="button secondary" onClick={() => setArchiveEdit(null)}>취소</button>
+                        </div>
+                      </div>
+                    )}
                     {aclEdit?.docId === d.id && (
                       <div className="card" data-testid="acl-form" style={{ marginTop: "6px", padding: "10px" }}>
                         <select value={aclEdit.level}

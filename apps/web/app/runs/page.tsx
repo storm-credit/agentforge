@@ -71,6 +71,7 @@ export default function RunsPage() {
           ) : (
             <>
               <h3>답변</h3>
+              {renderGuardrailSignals(selected, steps)}
               <p data-testid="run-answer">{selected.answer}</p>
               {selected.citations?.length > 0 && (
                 <ul>
@@ -133,5 +134,49 @@ export default function RunsPage() {
         </div>
       </div>
     </section>
+  );
+}
+
+function signalBadge(testId: string, label: string, ok: boolean) {
+  return (
+    <span
+      data-testid={testId}
+      className={`badge ${ok ? "" : "warn"}`}
+      style={{ fontSize: "12px" }}
+    >
+      {label}
+    </span>
+  );
+}
+
+// Surfaces the guardrail signals already returned by listRuns()/getRunSteps() (PII masking,
+// citation validation, confidence gate, grounding guard, reranker, answerability judge) as
+// glanceable badges instead of leaving them buried in the raw step JSON <details> blocks.
+function renderGuardrailSignals(run: RunSummary, steps: RunStep[]) {
+  const guardrail = run.guardrail ?? {};
+  const guardOutput = steps.find((s) => s.step_type === "guard_output")?.output_summary ?? {};
+  const retriever = steps.find((s) => s.step_type === "retriever")?.output_summary ?? {};
+
+  const piiMasked = Boolean(guardrail.pii_masked);
+  const citationPass = Boolean(guardrail.citation_validation_pass);
+  const confidenceTripped = Boolean(guardOutput.confidence_gate_tripped);
+  const groundingTripped = Boolean(guardOutput.guard_tripped);
+  const judgeName = String(guardOutput.judge ?? "none");
+  const judgeRefused = Boolean(guardOutput.judge_refused);
+  const rerankerName = String(retriever.reranker ?? "none");
+
+  return (
+    <div
+      data-testid="guardrail-signals"
+      style={{ display: "flex", gap: "6px", flexWrap: "wrap", margin: "6px 0 12px" }}
+    >
+      {signalBadge("guardrail-pii", piiMasked ? "PII 마스킹 적용" : "PII 마스킹 미적용", !piiMasked)}
+      {signalBadge("guardrail-citation", citationPass ? "인용 검증 통과" : "인용 검증 실패", citationPass)}
+      {signalBadge("guardrail-confidence", confidenceTripped ? "신뢰도 게이트 차단" : "신뢰도 게이트 통과", !confidenceTripped)}
+      {signalBadge("guardrail-grounding", groundingTripped ? "그라운딩 가드 차단" : "그라운딩 가드 통과", !groundingTripped)}
+      {judgeName !== "none" &&
+        signalBadge("guardrail-judge", `판정 모델(${judgeName}) ${judgeRefused ? "거부" : "통과"}`, !judgeRefused)}
+      {rerankerName !== "none" && signalBadge("guardrail-reranker", `재정렬: ${rerankerName}`, true)}
+    </div>
   );
 }

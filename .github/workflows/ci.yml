@@ -13,6 +13,20 @@ jobs:
   backend:
     name: Backend (ruff + pytest)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: agentforge
+          POSTGRES_USER: agentforge
+          POSTGRES_PASSWORD: agentforge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agentforge -d agentforge"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     defaults:
       run:
         working-directory: apps/api
@@ -28,6 +42,20 @@ jobs:
 
       - name: Ruff lint
         run: python -m ruff check app tests
+
+      # Migrations are exercised against a real Postgres service container
+      # (matching deploy/compose/docker-compose.dev.yaml's credentials) since
+      # the pytest suite below is hermetic/SQLite and never runs Alembic
+      # against Postgres. Upgrade to head, then round-trip down to base and
+      # back up, so downgrade paths are also checked. This runs before pytest
+      # so a broken migration fails clearly, separate from test failures.
+      - name: Alembic migration check (Postgres upgrade + downgrade round trip)
+        env:
+          AGENT_FORGE_DATABASE_URL: postgresql+psycopg://agentforge:agentforge@localhost:5432/agentforge
+        run: |
+          alembic upgrade head
+          alembic downgrade base
+          alembic upgrade head
 
       # The full suite is hermetic: tests spin up their own in-memory SQLite
       # engines and the vector store defaults to an in-memory fake unless a

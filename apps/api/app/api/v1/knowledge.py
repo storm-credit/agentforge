@@ -447,6 +447,31 @@ def create_index_job(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this document"
         )
 
+    # Two-tier authorization for the destructive re-embed. The read-ACL gate above is the
+    # BASELINE bar (matches the sibling read endpoints). This adds a SECOND, higher bar for
+    # the one dangerous case:
+    #   * FIRST-TIME indexing -- the document has no trusted content yet (status
+    #     'registered'/'ready') -- stays at the read-ACL bar. There are no real vectors to
+    #     poison, so self-service ingest by any read-authorized principal is intended.
+    #   * RE-INDEXING an already-'indexed' document is a PRIVILEGED_ROLES-only mutation
+    #     (same bar as archive_document / restore_document / update_document_acl below).
+    #     run_index_job purges the document's real vectors (store.delete_document) and
+    #     re-embeds caller-supplied text under the document's UNCHANGED confidentiality/ACL
+    #     tag, so an authorized-but-untrusted CO-READER could otherwise serve fabricated
+    #     content to every other legitimate reader as a trusted citation.
+    #     NOTE: that purge in run_index_job (indexing.py) is UNCONDITIONAL on the success
+    #     path -- it is NOT gated on force_reindex (force_reindex only additionally drops
+    #     the stale DB chunk rows). So gating force_reindex alone would leave the identical
+    #     exploit open via a plain source_text re-index; the bar therefore keys on the
+    #     document already holding trusted content (status == 'indexed'), covering both.
+    # Follow-on to PR #66, which closed the UNAUTHORIZED-reader variant of this same bug;
+    # this closes the authorized-but-untrusted CO-READER variant against trusted content.
+    if document.status == "indexed":
+        enforce_roles(
+            db, principal, PRIVILEGED_ROLES,
+            action="document.reindex", target_type="document", target_id=document.id,
+        )
+
     job = IndexJob(
         document_id=document.id,
         status="queued",
@@ -515,6 +540,22 @@ def process_index_job(
     if "admin" not in principal.roles and not principal_can_access_document(principal, document):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized for this index job"
+        )
+
+    # Two-tier authorization (see create_index_job for the full rationale). Processing a
+    # queued job whose target document is ALREADY 'indexed' is a RE-INDEX of trusted
+    # content, so it requires PRIVILEGED_ROLES on top of the read-ACL gate above.
+    # run_index_job purges the real vectors (unconditional store.delete_document) and
+    # re-embeds; even the fail-closed no-content branch below flips a trusted 'indexed'
+    # document to 'index_failed' (dropping it from search). force_reindex was captured in
+    # job.config at create time, but the destructive purge is not conditional on it, so
+    # the bar keys on the document already holding trusted content. First-time processing
+    # (document still 'registered'/'ready') stays at the read-ACL bar so normal
+    # self-service ingest of a freshly-registered document keeps working.
+    if document.status == "indexed":
+        enforce_roles(
+            db, principal, PRIVILEGED_ROLES,
+            action="document.reindex", target_type="document", target_id=document.id,
         )
 
     source_text = payload.source_text

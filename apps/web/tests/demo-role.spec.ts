@@ -85,3 +85,36 @@ test("demo role switcher changes privileged controls and server-scoped lists", a
     await expect(page.getByTestId("doc-row").filter({ hasText: title })).toHaveCount(0);
   }
 });
+
+// The audit page's GET /audit/events is admin-scoped server-side (403 for other
+// roles). Verifies the frontend skips the doomed fetch for non-privileged roles
+// and shows the same friendly role-restricted-note pattern used on Knowledge,
+// while the admin (default) role keeps seeing real events — no regression.
+test("audit page shows friendly placeholder for non-privileged role, real events for admin", async ({ page }) => {
+  await page.goto("/audit");
+  await expect(page.getByRole("heading", { name: "Audit" })).toBeVisible();
+
+  // --- Admin (default role): real audit list, no restriction note.
+  await expect(page.getByTestId("demo-role-switcher")).toHaveValue("admin");
+  await expect(page.getByTestId("role-restricted-note")).toHaveCount(0);
+  await expect(page.getByTestId("audit-row").first()).toBeVisible({ timeout: 15_000 });
+
+  // --- Switch to developer (reloads the page with the developer header bundle).
+  await page.getByTestId("demo-role-switcher").selectOption("developer");
+  await page.waitForLoadState("load");
+  await expect(page.getByRole("heading", { name: "Audit" })).toBeVisible();
+  await expect(page.getByTestId("demo-role-switcher")).toHaveValue("developer");
+
+  // Friendly placeholder shown; no attempt to render the (403'd) event list/filter.
+  await expect(page.getByTestId("role-restricted-note")).toBeVisible();
+  await expect(page.getByTestId("audit-filter")).toHaveCount(0);
+  await expect(page.getByTestId("audit-row")).toHaveCount(0);
+  await expect(page.getByTestId("audit-list")).toHaveCount(0);
+
+  // --- Switch back to admin: full view restored.
+  await page.getByTestId("demo-role-switcher").selectOption("admin");
+  await page.waitForLoadState("load");
+  await expect(page.getByRole("heading", { name: "Audit" })).toBeVisible();
+  await expect(page.getByTestId("role-restricted-note")).toHaveCount(0);
+  await expect(page.getByTestId("audit-row").first()).toBeVisible({ timeout: 15_000 });
+});

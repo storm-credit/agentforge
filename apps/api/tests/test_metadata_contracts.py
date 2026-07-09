@@ -1524,6 +1524,184 @@ def test_index_job_admin_bypass_regardless_of_acl(client):
     assert processed.json()["status"] == "succeeded"
 
 
+# --- Follow-on to PR #66: two-tier authz for re-indexing ALREADY-INDEXED documents. ---
+# PR #66 gated indexing behind read-ACL, closing the UNAUTHORIZED-reader poisoning bug.
+# The follow-on gap: read-ACL alone still let any authorized-but-untrusted CO-READER (e.g.
+# a developer with the default all-employees access every doc grants) re-index a document
+# that already holds real, trusted vectors -- purging them and re-embedding fabricated text
+# under the document's unchanged ACL, poisoning citations for every other reader. Re-indexing
+# an already-'indexed' document is therefore now a PRIVILEGED_ROLES mutation, while first-time
+# indexing of a document with no trusted content yet stays at the read-ACL bar.
+#
+# _DEVELOPER = developer role + (defaulted) all-employees group + internal clearance, so it
+# CAN read the all-employees/internal document _create_indexable_document builds -- it is the
+# authorized-but-untrusted co-reader, distinct from the unauthorized Finance principal in the
+# PR #66 tests above.
+
+
+def test_first_time_indexing_allowed_for_nonprivileged_reader(client):
+    # (a) NO REGRESSION: a non-privileged but read-authorized principal can still do
+    # first-time self-service indexing of a freshly-registered document. Nothing trusted
+    # exists yet to poison, so the read-ACL bar (not PRIVILEGED_ROLES) governs this.
+    document = _create_indexable_document(client)
+    assert document["status"] == "registered"
+
+    created = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={"source_text": "# Policy\n\noriginal first-time content."},
+    )
+    assert created.status_code == 201
+    assert created.json()["status"] == "succeeded"
+    # The document is now 'indexed' -- it holds trusted content from here on.
+    doc_now = client.get("/api/v1/knowledge/documents", headers=_ADMIN).json()
+    assert next(d for d in doc_now if d["id"] == document["id"])["status"] == "indexed"
+
+
+def test_reindex_of_indexed_document_denied_for_nonprivileged_reader(client, monkeypatch):
+    # (b) A non-privileged (developer) but read-authorized CO-READER is DENIED (403) when
+    # re-indexing an ALREADY-INDEXED document -- proven via a vector-store spy (no purge)
+    # AND a chunk snapshot (real content byte-identical). Covers BOTH the force_reindex=true
+    # path and the plain source_text path (the purge in run_index_job is unconditional, so
+    # gating force_reindex alone would leave the source_text path exploitable).
+    from app.domain import indexing, vector
+
+    document = _create_indexable_document(client)
+    # Legitimate first index (developer, allowed) so the document holds REAL vectors/chunks.
+    good = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={"source_text": "# Policy\n\ntrusted remote work content."},
+    ).json()
+    assert good["status"] == "succeeded"
+
+    def _chunk_fingerprint():
+        rows = client.get(
+            f"/api/v1/knowledge/documents/{document['id']}/chunks", headers=_ADMIN
+        ).json()
+        return [(c["id"], c["content_hash"]) for c in rows]
+
+    before = _chunk_fingerprint()
+    assert before  # real indexed chunks exist
+
+    # Spy the vector store AFTER the legitimate index so a purge here would be visible.
+    spy = vector.FakeVectorStore()
+    monkeypatch.setattr(indexing, "get_vector_store", lambda: spy)
+
+    # (b1) force_reindex=true: the classic exploit -> 403.
+    denied_force = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={
+            "source_text": "# Fabricated\n\nattacker poison via force_reindex.",
+            "force_reindex": True,
+        },
+    )
+    assert denied_force.status_code == 403
+
+    # (b2) plain source_text, NO force_reindex: the same-class exploit (run_index_job's
+    # store.delete_document purge is unconditional on the success path) -> also 403.
+    denied_plain = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={"source_text": "# Fabricated\n\nattacker poison without force_reindex."},
+    )
+    assert denied_plain.status_code == 403
+
+    # Exploit closed: no purge reached the store, and the real chunks are untouched.
+    assert document["id"] not in spy._deleted_document_ids
+    assert _chunk_fingerprint() == before
+
+    # The denial was audited as a policy.denied for the reindex action.
+    denied_events = client.get(
+        "/api/v1/audit/events?event_type=policy.denied", headers=_ADMIN
+    ).json()
+    assert any(
+        e["target_id"] == document["id"] and e["payload"].get("action") == "document.reindex"
+        for e in denied_events
+    )
+
+
+def test_admin_can_reindex_indexed_document(client):
+    # (c) NO REGRESSION for the legitimate admin workflow: an admin can still force-reindex
+    # an already-indexed document.
+    document = _create_indexable_document(client)
+    first = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={"source_text": "# Policy\n\noriginal content."},
+    )
+    assert first.json()["status"] == "succeeded"
+
+    reindexed = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_ADMIN,
+        json={"source_text": "# Policy\n\nadmin-revised content.", "force_reindex": True},
+    )
+    assert reindexed.status_code == 201
+    assert reindexed.json()["status"] == "succeeded"
+
+
+def test_process_reindex_of_indexed_document_denied_for_nonprivileged_reader(client, monkeypatch):
+    # (d) The same privileged bar applies to /process: a queued force_reindex job against an
+    # already-indexed document cannot be driven through the pipeline by a non-privileged
+    # (developer) caller, even though it can read the document.
+    from app.domain import indexing, vector
+
+    document = _create_indexable_document(client)
+    client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={"source_text": "# Policy\n\ntrusted content."},
+    )
+    # Queue a force_reindex job (source_text=None => queued, not run inline). Creating it
+    # against an indexed document is itself privileged, so the admin queues it.
+    queued = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_ADMIN,
+        json={"force_reindex": True},
+    ).json()
+    assert queued["status"] == "queued"
+    assert queued["config"]["force_reindex"] is True
+
+    spy = vector.FakeVectorStore()
+    monkeypatch.setattr(indexing, "get_vector_store", lambda: spy)
+
+    denied = client.post(
+        f"/api/v1/knowledge/index-jobs/{queued['id']}/process",
+        headers=_DEVELOPER,
+        json={"source_text": "# Fabricated\n\npoison via process reindex."},
+    )
+    assert denied.status_code == 403
+    # No purge, and the job stays queued (unprocessed) after the denied attempt.
+    assert document["id"] not in spy._deleted_document_ids
+    assert client.get(
+        f"/api/v1/knowledge/index-jobs/{queued['id']}", headers=_ADMIN
+    ).json()["status"] == "queued"
+
+
+def test_process_first_time_index_allowed_for_nonprivileged_reader(client):
+    # (e) NO REGRESSION: a non-privileged reader can still queue AND process a first-time
+    # index of a freshly-registered document (the document is not yet 'indexed', so the
+    # read-ACL bar governs, not PRIVILEGED_ROLES).
+    document = _create_indexable_document(client)
+    queued = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={},
+    )
+    assert queued.status_code == 201
+    assert queued.json()["status"] == "queued"
+
+    processed = client.post(
+        f"/api/v1/knowledge/index-jobs/{queued.json()['id']}/process",
+        headers=_DEVELOPER,
+        json={"source_text": "# Policy\n\nfirst-time processed content."},
+    )
+    assert processed.status_code == 200
+    assert processed.json()["status"] == "succeeded"
+
+
 def _create_indexable_document(client) -> dict:
     source = client.post(
         "/api/v1/knowledge/sources",
@@ -1669,8 +1847,11 @@ def test_reindex_purges_old_vectors(client, monkeypatch):
         f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
         json={"source_text": "# Policy\n\noriginal remote work text."},
     )
+    # Re-indexing an already-'indexed' document is now a PRIVILEGED_ROLES mutation
+    # (security/reindex-privileged-role, follow-on to PR #66): use an admin caller here.
     client.post(
         f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_ADMIN,
         json={"source_text": "# Policy\n\nrevised remote work text.", "force_reindex": True},
     )
 

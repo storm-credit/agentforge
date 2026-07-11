@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     object_store_bucket: str = "agentforge"
     object_store_secure: bool = False
     rerank_backend: Literal["none", "hybrid_lexical"] = "none"  # hybrid_lexical = BM25+RRF, no model — see research-reranking-options.md. (A future vllm cross-encoder backend would be added here as a new literal value; get_reranker()'s warn-and-fallback branch for backends it doesn't recognize stays as defense-in-depth for direct settings mutation, e.g. in tests.)
+    rerank_top_k: int | None = Field(default=None, ge=1)  # post-rerank cutoff: only the best-K reranked hits become context/citations; hits beyond K keep RetrievalHit rows with used_in_context=False (retrieval stays auditable). None (default) = unbounded — every surviving hit is used, exactly the pre-cutoff behavior. Pairs with retrieval_min_score: loosening the score gate only makes sense with a cutoff, or extra low-relevance hits flow straight into context/citations.
     judge_backend: Literal["none", "llm"] = "none"  # llm = LLM answerability judge (refusal discipline); runs on local Ollama
 
     @model_validator(mode="after")

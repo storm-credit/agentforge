@@ -87,6 +87,24 @@ def test_qdrant_backend_with_embedding_url_constructs_successfully():
 
 
 # ---------------------------------------------------------------------------
+# rerank_top_k: None (unbounded) or a positive int. 0/negative would silently
+# empty every context/citation list, so they are rejected at construction time.
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("bad_value", [0, -1, -100])
+def test_rerank_top_k_zero_or_negative_rejected(bad_value):
+    with pytest.raises(ValidationError, match="rerank_top_k"):
+        Settings(rerank_top_k=bad_value)
+
+
+@pytest.mark.parametrize("good_value", [None, 1, 3, 50])
+def test_rerank_top_k_none_or_positive_accepted(good_value):
+    settings = Settings(rerank_top_k=good_value)
+    assert settings.rerank_top_k == good_value
+
+
+# ---------------------------------------------------------------------------
 # Defaults must still work out of the box (local dev / hermetic CI).
 # ---------------------------------------------------------------------------
 
@@ -97,3 +115,4 @@ def test_default_settings_construct_successfully():
     assert settings.object_store_backend == "none"
     assert settings.rerank_backend == "none"
     assert settings.judge_backend == "none"
+    assert settings.rerank_top_k is None

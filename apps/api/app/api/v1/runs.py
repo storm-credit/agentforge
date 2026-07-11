@@ -148,6 +148,15 @@ def create_run(
     rank_before_rerank = {hit: rank for rank, hit in enumerate(vector_result.hits, start=1)}
     reranker = get_reranker()
     ranked_hits = reranker.rerank(payload.input.message, vector_result.hits, content_by_chunk_id)
+    # Post-rerank top-k cutoff (opt-in, default None = unbounded/no-op): without it,
+    # EVERY hit surviving the retrieval_min_score gate becomes context AND a citation,
+    # so loosening the score gate to give the reranker more candidates would feed the
+    # extra low-relevance chunks straight into the answer. With a cutoff, only the
+    # best-K reranked hits enter context/citations; hits beyond K still get
+    # RetrievalHit rows (used_in_context=False) so what-was-retrieved-but-dropped
+    # stays visible to audit/eval.
+    rerank_top_k = get_settings().rerank_top_k
+    context_hits = ranked_hits if rerank_top_k is None else ranked_hits[:rerank_top_k]
     _add_step(
         db,
         run=run,
@@ -164,13 +173,21 @@ def create_run(
             "vector_adapter": vector_adapter,
             "degraded": vector_degraded,
             "reranker": reranker.name,
+            # Only recorded when the cutoff is active, so the default trace stays
+            # byte-identical to the pre-cutoff pipeline.
+            **(
+                {"rerank_top_k": rerank_top_k, "context_hit_count": len(context_hits)}
+                if rerank_top_k is not None
+                else {}
+            ),
         },
     )
 
     citations = []
     for rank, hit in enumerate(ranked_hits, start=1):
         citation_locator = _hit_locator(hit)
-        usable_as_citation = bool(hit.chunk_id and citation_locator)
+        in_context = rerank_top_k is None or rank <= rerank_top_k
+        usable_as_citation = in_context and bool(hit.chunk_id and citation_locator)
         db.add(
             RetrievalHit(
                 run_id=run.id,
@@ -182,7 +199,7 @@ def create_run(
                 rank_reranked=rank,
                 score_vector=hit.score,
                 score_rerank=None,
-                used_in_context=True,
+                used_in_context=in_context,
                 used_as_citation=usable_as_citation,
                 acl_filter_snapshot={
                     "subjects": list(acl_filter.subjects),
@@ -204,7 +221,7 @@ def create_run(
             )
 
     answer_language = resolve_language(payload.language, payload.input.message)
-    context_blocks = _build_context_blocks(ranked_hits, content_by_chunk_id)
+    context_blocks = _build_context_blocks(context_hits, content_by_chunk_id)
     gen_settings = get_settings()
     gen_temperature = clamp_temperature(
         agent_version.config.get("temperature", gen_settings.llm_temperature)

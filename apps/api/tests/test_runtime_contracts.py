@@ -509,6 +509,139 @@ def test_run_with_hybrid_lexical_reranker_produces_valid_citations(client, monke
         get_reranker.cache_clear()
 
 
+def _seed_agent_with_three_indexed_docs(client):
+    """Like _seed_agent_with_indexed_doc, but with three query-matching documents so
+    a single run retrieves multiple hits (needed to exercise the rerank_top_k cutoff)."""
+    source = _create_source(client)
+    agent = _create_agent(client)
+    _create_and_publish_version(client, agent_id=agent["id"], source_id=source["id"])
+    for idx in range(3):
+        doc = _register_document(
+            client,
+            source_id=source["id"],
+            title=f"Holiday Policy {idx}",
+            object_uri=f"object://holiday-{idx}.md",
+            checksum=f"sha256-holiday-{idx}",
+            access_groups=["all-employees"],
+        )
+        _index_document(
+            client,
+            document_id=doc["id"],
+            source_text=f"# 휴가 안내 {idx}\n\n연 {5 + idx}일 유급 휴가가 제공됩니다.",
+        )
+    return {"agent_id": agent["id"], "source_id": source["id"]}
+
+
+def _run_against_three_docs(client, ids) -> dict:
+    resp = client.post(
+        "/api/v1/runs",
+        json={
+            "agent_id": ids["agent_id"],
+            "input": {"message": "휴가 며칠?"},
+            "knowledge_source_ids": [ids["source_id"]],
+        },
+    )
+    assert resp.status_code == 201
+    return resp.json()
+
+
+@pytest.mark.parametrize("backend", ["none", "hybrid_lexical"])
+def test_rerank_top_k_default_none_keeps_every_hit_in_context(client, monkeypatch, backend):
+    # Regression guard for the opt-in cutoff: with rerank_top_k unset (default None)
+    # the pipeline must behave exactly as before the setting existed — every surviving
+    # hit is context AND a citation, and no cutoff bookkeeping appears in the trace.
+    from app.core.config import get_settings
+    from app.services.reranker import get_reranker
+
+    monkeypatch.setenv("AGENT_FORGE_RERANK_BACKEND", backend)
+    monkeypatch.delenv("AGENT_FORGE_RERANK_TOP_K", raising=False)
+    get_settings.cache_clear()
+    get_reranker.cache_clear()
+    try:
+        ids = _seed_agent_with_three_indexed_docs(client)
+        run = _run_against_three_docs(client, ids)
+        assert len(run["citations"]) == 3
+
+        hits = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits").json()
+        assert len(hits) == 3
+        assert all(h["used_in_context"] is True for h in hits)
+        assert all(h["used_as_citation"] is True for h in hits)
+
+        steps = client.get(f"/api/v1/runs/{run['id']}/steps").json()
+        retriever = next(s for s in steps if s["step_type"] == "retriever")
+        assert "rerank_top_k" not in retriever["output_summary"]
+        assert "context_hit_count" not in retriever["output_summary"]
+        generator = next(s for s in steps if s["step_type"] == "generator")
+        assert generator["input_summary"]["context_count"] == 3
+    finally:
+        get_settings.cache_clear()
+        get_reranker.cache_clear()
+
+
+@pytest.mark.parametrize("backend", ["none", "hybrid_lexical"])
+def test_rerank_top_k_cutoff_limits_context_and_citations(client, monkeypatch, backend):
+    # With rerank_top_k=2 and 3 retrieved hits: exactly the best-2 reranked hits become
+    # context/citations; the third KEEPS its RetrievalHit row (retrieved-but-dropped
+    # visibility for audit/eval) but with used_in_context=False and never as a citation.
+    from app.core.config import get_settings
+    from app.services.reranker import get_reranker
+
+    monkeypatch.setenv("AGENT_FORGE_RERANK_BACKEND", backend)
+    monkeypatch.setenv("AGENT_FORGE_RERANK_TOP_K", "2")
+    get_settings.cache_clear()
+    get_reranker.cache_clear()
+    try:
+        ids = _seed_agent_with_three_indexed_docs(client)
+        run = _run_against_three_docs(client, ids)
+        assert len(run["citations"]) == 2
+
+        hits = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits").json()
+        assert len(hits) == 3  # dropped hit still recorded — full retrieval visibility
+        in_context = [h for h in hits if h["used_in_context"]]
+        dropped = [h for h in hits if not h["used_in_context"]]
+        assert len(in_context) == 2
+        assert len(dropped) == 1
+        # The dropped hit is the one reranked past the cutoff, and never a citation.
+        assert dropped[0]["rank_reranked"] == 3
+        assert dropped[0]["used_as_citation"] is False
+        cited_chunk_ids = {c["chunk_id"] for c in run["citations"]}
+        assert dropped[0]["chunk_id"] not in cited_chunk_ids
+        assert {h["chunk_id"] for h in in_context} == cited_chunk_ids
+
+        steps = client.get(f"/api/v1/runs/{run['id']}/steps").json()
+        retriever = next(s for s in steps if s["step_type"] == "retriever")
+        assert retriever["output_summary"]["hit_count"] == 3  # retrieved, pre-cutoff
+        assert retriever["output_summary"]["rerank_top_k"] == 2
+        assert retriever["output_summary"]["context_hit_count"] == 2
+        generator = next(s for s in steps if s["step_type"] == "generator")
+        assert generator["input_summary"]["context_count"] == 2
+    finally:
+        get_settings.cache_clear()
+        get_reranker.cache_clear()
+
+
+def test_rerank_top_k_larger_than_hit_count_is_a_safe_noop(client, monkeypatch):
+    from app.core.config import get_settings
+
+    monkeypatch.setenv("AGENT_FORGE_RERANK_TOP_K", "10")
+    get_settings.cache_clear()
+    try:
+        ids = _seed_agent_with_three_indexed_docs(client)
+        run = _run_against_three_docs(client, ids)
+        assert len(run["citations"]) == 3  # no crash, no padding
+
+        hits = client.get(f"/api/v1/runs/{run['id']}/retrieval-hits").json()
+        assert len(hits) == 3
+        assert all(h["used_in_context"] is True for h in hits)
+
+        steps = client.get(f"/api/v1/runs/{run['id']}/steps").json()
+        retriever = next(s for s in steps if s["step_type"] == "retriever")
+        assert retriever["output_summary"]["rerank_top_k"] == 10
+        assert retriever["output_summary"]["context_hit_count"] == 3
+    finally:
+        get_settings.cache_clear()
+
+
 def test_run_read_scoped_to_owner_or_admin(client):
     ids = _seed_agent_with_indexed_doc(client)
     alice = {

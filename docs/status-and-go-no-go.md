@@ -181,8 +181,11 @@ CLAUDE.md 규칙 2-c에 따라 6직무 재실행.
 2. ⛔→✅ **결정 완료(사용자, 2026-07-11): `create_source`/`register_document`/`upload_document_and_index`에 RBAC 추가 안 함** — 자기서비스형 지식 기여가 의도된 플랫폼 사용모델임을 확인, 현행 유지. 코드 변경 없음(정책 확인이 결론). 이 항목은 재논의 전까지 종결.
 3. ✅ **CI에 `alembic upgrade head`(+downgrade/재upgrade)를 실 Postgres 서비스 컨테이너 대상으로 추가** (PR #85, sonnet) — `.github/workflows/ci.yml` backend job에 `postgres:16-alpine` service+healthcheck 추가, pytest 전에 마이그레이션 체인(0001→head→base→head) 실행. 로컬에서도 **별도 스크래치 컨테이너**(공유 세션 `compose-postgres-1`은 건드리지 않음)로 동일 시퀀스 실제 라이브 검증 후 삭제. **실 GitHub Actions 그린 확인**(머지 전 `gh pr checks`로 backend/frontend 둘 다 pass 재확인). pytest는 여전히 헌메틱(SQLite) 유지, 마이그레이션 체크만 분리된 별도 스텝.
 4. ✅ **`/audit` 페이지를 데모 역할 스위처 패턴(PR #63)에 포함** (PR #86, sonnet) — 비admin은 fetch 자체를 스킵(403 왕복 없음)하고 Knowledge 페이지와 동일한 `role-restricted-note` 표시. **네비게이션 링크는 숨기지 않기로 결정**(의도적 설계 판단): 데모 역할 기능의 목적이 "역할별로 뭘 할 수 있는지 보여주는 것"이라 링크를 숨기는 것보다 제한 화면을 보여주는 게 RBAC 경계를 더 잘 시연함. e2e 4/4(신규)+전체 20/20 라이브 통과, tsc 클린. 백엔드 무변경(서버는 이미 정상 강제 중이었음).
-5. (선택) 리랭커 `rerank_top_k` 컷오프 추가 — `retrieval_min_score` 완화 실험의 전제조건(현재는 리랭킹 후 컷오프가 없어 그냥 완화하면 저관련 청크가 그대로 인용됨). S, RAG, 실험적.
-- **QA/PM 종합**: 이번 패스는 자연 감소 패턴과 다르게 **실제 보안 이슈 재발견**(패널의 "완결 선언 보류" 판단 근거). 나머지(hard-delete는 moot로 확인, self-commit 패턴은 안전, Alembic downgrade는 3번으로 승격)는 심각도 낮음. **"코드 완결" 선언 시기 아님.**
+5. ✅ **리랭커 `rerank_top_k` 컷오프 추가** (PR #89, fable) — 신규 `AGENT_FORGE_RERANK_TOP_K`(기본 None=무제한, 기존 동작 완전 동일). 컷오프 밖 히트도 `RetrievalHit` 행은 유지하되 `used_in_context=False`(감사/eval 가시성 보존 — eval의 top_score 계산이 리랭크로 밀린 히트를 놓치지 않도록). 테스트 12종, apps/api 215 passed. **라이브 실험 실제 수행**(`docs/eval-results-live-v0.5.md`): 패널 원안(min_score 0.35+hybrid+top_k2)은 **거부규율 88.9→22.2로 붕괴**(retrieval_min_score가 사실상 거부 게이트 겸임을 발견, 정직 보고) → `answer_min_score=0.53`으로 거부 게이트 분리 유지하니 거부규율 그대로+**useful_answer 83.3→91.7**(+8.4pt, 회귀 0, 2회 재현 안정). **이 조합(config C)을 실 배포 기본값으로 채택할지는 별도 결정 사항으로 남김**(코드에 반영 안 됨, `.env` 실험 후 원복). c07은 여전히 실패(스칼라로 못 잡는 시맨틱 케이스, 사내모델 대기 — 변함없음).
+- **QA/PM 종합**: 이번 패스는 자연 감소 패턴과 다르게 **실제 보안 이슈 재발견**(패널의 "완결 선언 보류" 판단 근거). 나머지(hard-delete는 moot로 확인, self-commit 패턴은 안전, Alembic downgrade는 3번으로 승격)는 심각도 낮음. **"코드 완결" 선언 시기 아님.** **→ 4차 패널 5개 항목 전부 처리 완료**(1·3·4·5는 코드로 닫힘, 2는 사용자 결정으로 종결).
+
+### 대기 중인 결정 사항 (사용자)
+- **eval-results-live-v0.5의 config C**(`retrieval_min_score=0.35`+`rerank_backend=hybrid_lexical`+`rerank_top_k=2`+`answer_min_score=0.53`)를 실 `.env` 기본값으로 채택할지 — useful_answer +8.4pt 개선, 회귀 0, 2회 재현. 다만 로컬 qwen3:1.7b·소형 코퍼스(12케이스 중 1건 개선) 기준이라 사내모델(qwen3-30b-a3b) 이관 후 재검증 권장. **코드 변경 없음(순수 설정값 결정)** — 반영 시 `.env`만 교체.
 
 ## Go/No-Go 권고
 - **기술 MVP: GO 가능** — 핵심 가치(권한 기반 인용 답변 + 누출 0)가 코드·eval로 성립.

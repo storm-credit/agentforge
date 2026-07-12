@@ -187,6 +187,20 @@ CLAUDE.md 규칙 2-c에 따라 6직무 재실행.
 ### 대기 중인 결정 사항 (사용자)
 - **eval-results-live-v0.5의 config C**(`retrieval_min_score=0.35`+`rerank_backend=hybrid_lexical`+`rerank_top_k=2`+`answer_min_score=0.53`)를 실 `.env` 기본값으로 채택할지 — useful_answer +8.4pt 개선, 회귀 0, 2회 재현. 다만 로컬 qwen3:1.7b·소형 코퍼스(12케이스 중 1건 개선) 기준이라 사내모델(qwen3-30b-a3b) 이관 후 재검증 권장. **코드 변경 없음(순수 설정값 결정)** — 반영 시 `.env`만 교체.
 
+## 2026-07-12 (5차) PM 오케스트라 종합 점검 — 4차 패널 5건 완료 후 재실행
+
+CLAUDE.md 규칙 2-c에 따라 6직무 재실행(이번 패널은 Sonnet 5 실행, 이후 세션은 Fable 5로 전환됨).
+
+### 🚨 신규 발견 — 보안 취약점 (PR #66·#83의 3번째 같은-계열 갭, 최우선)
+PR #83의 재색인 인가 상향이 `document.status == "indexed"`만 기준으로 삼는데, `run_index_job`이 벡터 퍼지 **이후** 실패하면 문서가 `"index_failed"`로 떨어짐(VECTOR_UPSERT_FAILED 등). 그 상태에선 `create_index_job`/`process_index_job`이 `status=="indexed"`를 못 봐서 `PRIVILEGED_ROLES` 게이트가 조용히 미적용 → 비특권 co-reader가 임의 `source_text`로 재색인해 다시 `"indexed"`로 뒤집을 수 있음(원래 ACL/등급 태그 유지). PR #83이 닫은 co-reader 포이즈닝을 운영-실패 side door로 재개방. 테스트 부재 확인. **QA/PM 지적**: PR #66→#83→이번이 같은 근본 혼동("read-access ≠ 기존 신뢰콘텐츠 변경 권한")의 연속이라, 상태별 패치가 아니라 "이 문서가 신뢰 콘텐츠를 가진 적 있는가"를 추적하는 근본 수정이 맞음.
+
+### PM 권고 (전 도메인 종합, 우선순위) — 5차
+1. **🚨 (최우선, opus) 재색인 인가를 "신뢰 콘텐츠 보유 이력" 기준으로 근본 수정** — `status in {"indexed"}` 단일 체크 대신 index_failed side door까지 닫기.
+2. `create_source`에 `default_confidentiality_level` 검증 추가 — 형제 엔드포인트(register/upload/update_acl)는 전부 `_validate_confidentiality`하는데 이것만 누락. 오타 시 소스가 clearance 필터에 걸려 조용히 사라짐. S, 백엔드.
+3. chat/agents-new의 ask 실패 에러렌더 수정 — `setAnswer(String(e))`가 raw 에러를 답변처럼 표시. 별도 에러 상태로 분리(+로딩상태/a11y 묶음 가능). S, 프론트.
+4. e2e를 CI에서 실행 — fake OpenAI-호환 LLM 스텁 + Postgres/Qdrant 서비스 컨테이너(PR #85가 Postgres 컨테이너 패턴 입증). 이전엔 infra-blocked로 판정했으나 이제 buildable. M, DevOps. (JSON 로깅+request_id 미들웨어는 여전히 열려있으나 가치 낮아 후순위.)
+- **QA/PM 종합**: 백로그 매우 얇음. QA/PM 자체 스윕은 새 코드-now 못 냄(패널 시리즈 최초) — "코드 완결" 문턱 도달. 다만 5회 연속 매번 뭔가 나온 뒤 첫 클린 패스라, 한 번 더 확인 패스 후 정식 선언 권고. 비코드 불변 4건(SSO·사내모델·실문서·폐쇄망) + config-C 채택 결정만 남음.
+
 ## Go/No-Go 권고
 - **기술 MVP: GO 가능** — 핵심 가치(권한 기반 인용 답변 + 누출 0)가 코드·eval로 성립.
 - **파일럿 진입: 조건부 HOLD** — 코드 문제 아님. 위 "결정 → 해제 표"의 4개 입력(파일럿 부서/실문서·SSO·사내모델·폐쇄망)이 채워져야 진입 가능.

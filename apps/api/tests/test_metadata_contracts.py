@@ -1031,6 +1031,64 @@ def test_knowledge_source_and_document_contract(client):
     assert [item["id"] for item in list_response.json()] == [document["id"]]
 
 
+def test_create_source_accepts_all_known_confidentiality_levels(client):
+    for level in ("public", "internal", "restricted", "confidential"):
+        response = client.post(
+            "/api/v1/knowledge/sources",
+            json={
+                "name": f"Source {level}",
+                "description": "Confidentiality-level regression corpus.",
+                "owner_department": "Operations",
+                "default_confidentiality_level": level,
+            },
+        )
+        assert response.status_code == 201
+        assert response.json()["default_confidentiality_level"] == level
+
+
+def test_create_source_accepts_mixed_case_confidentiality_level(client):
+    # _validate_confidentiality lower()s before checking membership, matching the
+    # document endpoints -- case is not significant.
+    response = client.post(
+        "/api/v1/knowledge/sources",
+        json={
+            "name": "Mixed Case Source",
+            "description": "Confidentiality-level regression corpus.",
+            "owner_department": "Operations",
+            "default_confidentiality_level": "Internal",
+        },
+    )
+    assert response.status_code == 201
+
+
+def test_create_source_rejects_invalid_confidentiality_level(client):
+    response = client.post(
+        "/api/v1/knowledge/sources",
+        json={
+            "name": "Typo Source",
+            "description": "Confidentiality-level regression corpus.",
+            "owner_department": "Operations",
+            "default_confidentiality_level": "interal",
+        },
+    )
+    assert response.status_code == 422
+
+
+def test_create_source_rejects_confidentiality_level_with_whitespace(client):
+    # Matches document-endpoint behavior: lower() does not strip whitespace, so a
+    # trailing space is NOT recognized as a known level.
+    response = client.post(
+        "/api/v1/knowledge/sources",
+        json={
+            "name": "Whitespace Source",
+            "description": "Confidentiality-level regression corpus.",
+            "owner_department": "Operations",
+            "default_confidentiality_level": "internal ",
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_retrieval_preview_applies_document_acl(client):
     source_response = client.post(
         "/api/v1/knowledge/sources",

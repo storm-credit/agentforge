@@ -213,6 +213,13 @@ def run_index_job(
     job.artifact_uri = f"db://document_chunks/{document.id}"
     job.finished_at = datetime.now(UTC)
     document.status = "indexed"
+    # Durable trust marker: once a document has successfully held indexed content it is
+    # forever treated as "previously trusted" for reindex-authorization purposes. This is
+    # set once here and NEVER reset (not on a later index_failed, archive, or restore), so
+    # a document that drops back to 'index_failed' after its vectors are purged still
+    # requires PRIVILEGED_ROLES to reindex -- closing the index_failed side door that a
+    # status-only gate leaves open.
+    document.has_been_indexed = True
     write_audit_event(
         db,
         principal=principal,

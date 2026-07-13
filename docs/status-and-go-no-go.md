@@ -201,7 +201,14 @@ PR #83의 재색인 인가 상향이 `document.status == "indexed"`만 기준으
 4. ✅ **e2e를 CI에서 실행** (PR #97, fable) — **패널이 제안한 fake LLM 스텁이 불필요함을 확인**(최소 충실 구성 우선 탐색): `AGENT_FORGE_LLM_BASE_URL` 미설정 시 결정적 fallback 답변 + `FakeVectorStore` 기본값이라 **Qdrant·Ollama·fake-LLM 전부 없이** Postgres 서비스 컨테이너만으로 실제 파이프라인(색인·ACL·검색) 구동. 모든 e2e 스펙이 LLM 답변 문구가 아닌 구조/RBAC를 검증함을 코드로 확인(chat.spec는 route 목킹). CI e2e job: Postgres 컨테이너 + alembic + seed_demo/seed_demo_rich + 라이브 run 1개 시드 + 프로덕션 standalone 빌드(Dockerfile.prod 미러) + Playwright. **실 GitHub Actions 첫 런에 green**(21/21, push-observe-fix 반복 불필요). 기존 backend/frontend job 무변경. `--retries=1`+실패 시 trace/log 아티팩트 업로드. **→ 5차 패널 4개 항목 전부 완료.**
 
 ### 코드-now 백로그 소진 상태 (2026-07-14)
-5차 패널 4건 완료 후, 현재까지 도출된 모든 코드-now 항목이 닫힘. QA/PM 5차 판정은 "코드 완결 문턱 도달, 5회 연속 매번 뭔가 나온 뒤라 한 번 더 확인 패스 후 정식 선언 권고". 다음: 6차 확인 패널이 코드-now를 못 내면 CLAUDE.md 2-c에 따라 **"코드 완결"(남은 건 전부 비코드 의존) 선언**. 비코드 불변: SSO IdP · qwen3-30b-a3b/cross-encoder 실측 · 실문서/파일럿 부서 · 폐쇄망 EP-07 · config-C 채택 결정.
+5차 패널 4건 완료 후, 현재까지 도출된 모든 코드-now 항목이 닫힘. QA/PM 5차 판정은 "코드 완결 문턱 도달, 5회 연속 매번 뭔가 나온 뒤라 한 번 더 확인 패스 후 정식 선언 권고".
+
+### 6차 확인 패널 — **자원 한도로 미완(부분 결과)** (2026-07-14)
+CLAUDE.md 2-c 정식 트리거를 위한 6차 확인 패널을 실행했으나 **하드 세션 사용량 한도**에 걸려 6직무 중 5개(보안·RAG·백엔드·프론트·QA/PM) 실행 실패(한도 리셋: 06:00 KST). **DevOps 1개만 완주** — "DevOps 코드-now 소진, EP-07(폐쇄망) 결정 대기, 정식 코드완결 선언 찬성" 결론(Dockerfile.prod 배선·JSON로깅 미들웨어 둘 다 EP-07 전까지 shelfware로 재확인, bitrot은 PR #97 e2e가 standalone 번들을 매 PR 빌드·구동해 이미 커버).
+
+**잠정 판정(정식 아님)**: 5개 완주 패널이 도출한 모든 코드-now 항목이 닫히고 검증됨(보안 3건 리뷰통과, e2e 실CI green). 6차 확인 패널 1/6만 완주했고 그것도 소진 확인 → 코드-now 백로그는 **실질 소진**으로 보이나, 2-c 문언("패널이 더는 못 냄")의 정식 트리거는 확인 패널이 **깨끗이 무-산출로 완주**하는 것이므로 아직 **정식 "코드 완결" 선언 보류**. 자원 리셋(06:00 KST) 후 6차 확인 패널 재실행 → 무-산출이면 그때 정식 선언.
+
+**다음 작업(자원 리셋 후)**: 6차 확인 패널 재실행(6직무, Fable). 무-산출 시 CLAUDE.md 2-c에 따라 **"코드 완결"(남은 건 전부 비코드 의존) 정식 선언**. 비코드 불변: SSO IdP · qwen3-30b-a3b/cross-encoder 실측 · 실문서/파일럿 부서 · 폐쇄망 EP-07 · config-C 채택 결정.
 - **QA/PM 종합**: 백로그 매우 얇음. QA/PM 자체 스윕은 새 코드-now 못 냄(패널 시리즈 최초) — "코드 완결" 문턱 도달. 다만 5회 연속 매번 뭔가 나온 뒤 첫 클린 패스라, 한 번 더 확인 패스 후 정식 선언 권고. 비코드 불변 4건(SSO·사내모델·실문서·폐쇄망) + config-C 채택 결정만 남음.
 
 ## Go/No-Go 권고

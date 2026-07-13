@@ -85,5 +85,165 @@ jobs:
       - name: TypeScript type check
         run: npx tsc --noEmit
 
-# Follow-up (out of scope for this slice): Playwright e2e tests require a live
-# backend + Postgres + Qdrant + LLM stack and are intentionally NOT run here.
+  # Playwright e2e against a REAL backend + Postgres service container.
+  #
+  # Minimal faithful config (verified against the code, not assumed):
+  # - AGENT_FORGE_LLM_BASE_URL unset  -> llm_gateway.generate() returns the
+  #   deterministic "(LLM 미연결) 관련 출처: ..." fallback (with citation
+  #   locators) whenever retrieval found context, and the refusal string when
+  #   it didn't. No LLM server is needed and answers are deterministic.
+  # - AGENT_FORGE_VECTOR_BACKEND unset -> defaults to "fake", i.e. the
+  #   deterministic lexical FakeVectorStore. No Qdrant and no embedding
+  #   server are needed; indexing + ACL filtering + retrieval all run.
+  # None of the specs assert on LLM-generated answer wording (chat.spec.ts
+  # route-mocks its API calls; the rest assert structural/RBAC behavior:
+  # headings, badges, ACL-scoped lists, archive/restore, audit rows), so this
+  # config exercises the real pipeline without any model stubs.
+  e2e:
+    name: E2E (Playwright, live backend + Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: agentforge
+          POSTGRES_USER: agentforge
+          POSTGRES_PASSWORD: agentforge
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agentforge -d agentforge"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      AGENT_FORGE_DATABASE_URL: postgresql+psycopg://agentforge:agentforge@localhost:5432/agentforge
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install backend package (editable, with dev extras)
+        working-directory: apps/api
+        run: pip install -e ".[dev]"
+
+      - name: Install frontend dependencies (lockfile-exact)
+        working-directory: apps/web
+        run: npm ci
+
+      - name: Install Playwright chromium
+        working-directory: apps/web
+        run: npx playwright install --with-deps chromium
+
+      - name: Migrate database (alembic upgrade head)
+        working-directory: apps/api
+        run: alembic upgrade head
+
+      # Seed data the specs assume exists: published agents + indexed docs
+      # (agent-version-lifecycle, acl-and-audit, and the knowledge specs pick
+      # "the first" agent/source/doc row) and audit events (written by the
+      # indexing pipeline during seeding, asserted by acl-and-audit/demo-role).
+      - name: Seed demo data
+        working-directory: apps/api
+        run: |
+          python -m app.seed_demo
+          python -m app.seed_demo_rich
+
+      - name: Start backend (uvicorn, FakeVectorStore + no-LLM fallback)
+        working-directory: apps/api
+        run: |
+          nohup python -m uvicorn app.main:app --host 127.0.0.1 --port 8000 \
+            > /tmp/uvicorn.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/healthz > /dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:8000/healthz
+
+      # runs.spec.ts asserts guardrail badges on "at least one seeded run";
+      # the seed scripts create agents/docs but no runs, so execute one real
+      # run through the live pipeline (deterministic fallback answer).
+      - name: Seed one run via the live API
+        working-directory: apps/api
+        run: |
+          python - <<'EOF'
+          import httpx
+
+          HEADERS = {
+              "X-Agent-Forge-User": "operator",
+              "X-Agent-Forge-Department": "Operations",
+              "X-Agent-Forge-Roles": "admin",
+              "X-Agent-Forge-Groups": "all-employees",
+              "X-Agent-Forge-Clearance": "internal",
+          }
+          BASE = "http://127.0.0.1:8000/api/v1"
+          agents = httpx.get(f"{BASE}/agents", headers=HEADERS, timeout=30).json()
+          assert agents, "seeded agents missing"
+          r = httpx.post(
+              f"{BASE}/runs",
+              headers=HEADERS,
+              json={
+                  "agent_id": agents[0]["id"],
+                  "input": {"message": "연차 휴가는 며칠인가요?"},
+                  "language": "ko",
+              },
+              timeout=60,
+          )
+          r.raise_for_status()
+          body = r.json()
+          print("seed run:", body["id"], body.get("status"))
+          EOF
+
+      # Production build + the standalone server (next.config.ts sets
+      # output:"standalone"), mirroring Dockerfile.prod — more stable for e2e
+      # than `next dev` (no on-demand compilation timeouts) and it exercises
+      # the same bundle that ships. NEXT_PUBLIC_API_BASE_URL is unset, so the
+      # built-in default http://localhost:8000/api/v1 points at the uvicorn
+      # above; the page origin 127.0.0.1:3300 is in the backend's default
+      # CORS allowlist.
+      - name: Build frontend (production)
+        working-directory: apps/web
+        run: npm run build
+
+      - name: Start frontend (standalone server on 3300)
+        working-directory: apps/web
+        run: |
+          cp -r public .next/standalone/public
+          cp -r .next/static .next/standalone/.next/static
+          PORT=3300 HOSTNAME=127.0.0.1 nohup node .next/standalone/server.js \
+            > /tmp/next.log 2>&1 &
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3300/ > /dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          curl -fsS -o /dev/null http://127.0.0.1:3300/
+
+      # --retries=1 gives flaky-on-shared-backend specs one second chance and
+      # produces a trace (trace: on-first-retry) when the first attempt fails.
+      - name: Run Playwright e2e suite
+        working-directory: apps/web
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3300
+          PLAYWRIGHT_API_BASE_URL: http://127.0.0.1:8000/api/v1
+        run: npx playwright test --retries=1
+
+      - name: Upload Playwright report and server logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-artifacts
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+            /tmp/uvicorn.log
+            /tmp/next.log
+          if-no-files-found: ignore

@@ -450,23 +450,31 @@ def create_index_job(
     # Two-tier authorization for the destructive re-embed. The read-ACL gate above is the
     # BASELINE bar (matches the sibling read endpoints). This adds a SECOND, higher bar for
     # the one dangerous case:
-    #   * FIRST-TIME indexing -- the document has no trusted content yet (status
-    #     'registered'/'ready') -- stays at the read-ACL bar. There are no real vectors to
-    #     poison, so self-service ingest by any read-authorized principal is intended.
-    #   * RE-INDEXING an already-'indexed' document is a PRIVILEGED_ROLES-only mutation
-    #     (same bar as archive_document / restore_document / update_document_acl below).
-    #     run_index_job purges the document's real vectors (store.delete_document) and
-    #     re-embeds caller-supplied text under the document's UNCHANGED confidentiality/ACL
-    #     tag, so an authorized-but-untrusted CO-READER could otherwise serve fabricated
-    #     content to every other legitimate reader as a trusted citation.
+    #   * FIRST-TIME indexing -- the document has never successfully held trusted content
+    #     (has_been_indexed is False) -- stays at the read-ACL bar. There are no real
+    #     vectors to poison, so self-service ingest by any read-authorized principal is
+    #     intended. This INCLUDES retrying a first-ever index that failed (status
+    #     'index_failed' but has_been_indexed still False): nothing trusted ever existed.
+    #   * RE-INDEXING a document that HAS previously held trusted content is a
+    #     PRIVILEGED_ROLES-only mutation (same bar as archive_document / restore_document /
+    #     update_document_acl below). run_index_job purges the document's real vectors
+    #     (store.delete_document) and re-embeds caller-supplied text under the document's
+    #     UNCHANGED confidentiality/ACL tag, so an authorized-but-untrusted CO-READER could
+    #     otherwise serve fabricated content to every other legitimate reader as a trusted
+    #     citation.
     #     NOTE: that purge in run_index_job (indexing.py) is UNCONDITIONAL on the success
     #     path -- it is NOT gated on force_reindex (force_reindex only additionally drops
     #     the stale DB chunk rows). So gating force_reindex alone would leave the identical
-    #     exploit open via a plain source_text re-index; the bar therefore keys on the
-    #     document already holding trusted content (status == 'indexed'), covering both.
-    # Follow-on to PR #66, which closed the UNAUTHORIZED-reader variant of this same bug;
-    # this closes the authorized-but-untrusted CO-READER variant against trusted content.
-    if document.status == "indexed":
+    #     exploit open via a plain source_text re-index.
+    # The bar keys on the DURABLE has_been_indexed flag, NOT the volatile status. An earlier
+    # fix keyed on status == 'indexed', but run_index_job purges vectors unconditionally and
+    # then, on any parse/upsert failure, flips a previously-'indexed' document to
+    # 'index_failed'. A status-only gate silently stops applying in that state, reopening the
+    # co-reader poisoning via an operational-failure side door. has_been_indexed is set once
+    # on first success and never reset, so the privileged bar sticks. Third fix in this
+    # trust-boundary family: PR #66 (unauthorized reader), PR #83 (authorized-but-untrusted
+    # co-reader vs status=='indexed'), and this (the index_failed side door).
+    if document.has_been_indexed:
         enforce_roles(
             db, principal, PRIVILEGED_ROLES,
             action="document.reindex", target_type="document", target_id=document.id,
@@ -543,16 +551,18 @@ def process_index_job(
         )
 
     # Two-tier authorization (see create_index_job for the full rationale). Processing a
-    # queued job whose target document is ALREADY 'indexed' is a RE-INDEX of trusted
-    # content, so it requires PRIVILEGED_ROLES on top of the read-ACL gate above.
+    # queued job whose target document HAS previously held trusted content (has_been_indexed)
+    # is a RE-INDEX, so it requires PRIVILEGED_ROLES on top of the read-ACL gate above.
     # run_index_job purges the real vectors (unconditional store.delete_document) and
-    # re-embeds; even the fail-closed no-content branch below flips a trusted 'indexed'
-    # document to 'index_failed' (dropping it from search). force_reindex was captured in
-    # job.config at create time, but the destructive purge is not conditional on it, so
-    # the bar keys on the document already holding trusted content. First-time processing
-    # (document still 'registered'/'ready') stays at the read-ACL bar so normal
-    # self-service ingest of a freshly-registered document keeps working.
-    if document.status == "indexed":
+    # re-embeds; even the fail-closed no-content branch below flips a previously-indexed
+    # document to 'index_failed' (dropping it from search). The bar keys on the DURABLE
+    # has_been_indexed flag rather than status == 'indexed': a status-only gate would stop
+    # applying once a prior reindex failure dropped the document to 'index_failed' with its
+    # vectors already purged, reopening the co-reader poisoning via that side door.
+    # First-time processing (has_been_indexed still False, including retrying a first-ever
+    # index that failed) stays at the read-ACL bar so normal self-service ingest keeps
+    # working.
+    if document.has_been_indexed:
         enforce_roles(
             db, principal, PRIVILEGED_ROLES,
             action="document.reindex", target_type="document", target_id=document.id,

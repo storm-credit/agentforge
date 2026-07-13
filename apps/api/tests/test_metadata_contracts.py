@@ -516,10 +516,14 @@ def test_restore_does_not_resurrect_vectors(client, monkeypatch):
     assert all(h["chunk_id"] is None for h in _doc_hits())
 
     # ...until a fresh (forced) index job runs: the restored "registered" status must
-    # be re-indexable, and re-indexing makes chunk-backed retrieval work again.
+    # be re-indexable, and re-indexing makes chunk-backed retrieval work again. Because the
+    # document previously held trusted content (has_been_indexed stays True across
+    # archive+restore), re-indexing it is a PRIVILEGED_ROLES mutation now
+    # (security/reindex-durable-flag), so an admin drives the re-index here.
     monkeypatch.undo()
     job = client.post(
         f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_ADMIN,
         json={
             "source_text": "# Remote Work\n\nremote work after manager approval.",
             "force_reindex": True,
@@ -1700,6 +1704,243 @@ def test_process_first_time_index_allowed_for_nonprivileged_reader(client):
     )
     assert processed.status_code == 200
     assert processed.json()["status"] == "succeeded"
+
+
+# --- Third fix in the reindex trust-boundary family (PR #66, PR #83, this). ---
+# PR #83 gated re-indexing an already-'indexed' document behind PRIVILEGED_ROLES, but keyed
+# on the VOLATILE status == 'indexed'. run_index_job purges a document's vectors
+# UNCONDITIONALLY and, on any parse/upsert failure, flips a previously-'indexed' document to
+# 'index_failed'; an admin archive+restore returns it to the searchable 'registered' status.
+# In any of those non-'indexed' states a status-only gate silently stops applying, reopening
+# the co-reader poisoning against a document that HAS held trusted content. The fix keys the
+# privileged bar on the DURABLE has_been_indexed flag (set True on first successful index,
+# never reset), so it survives status changes.
+#
+# Reachability note (honest): the archive->restore->'registered' path below is the directly
+# reachable exploit -- 'registered' is a SEARCHABLE status, so a non-privileged co-reader
+# passes the read-ACL tier and only the durable flag stops the poison. The 'index_failed'
+# path is additionally guarded by the pre-existing read-ACL/searchable-status coupling
+# ('index_failed' is not searchable, so non-admins are already denied there); the durable
+# flag closes it as defense-in-depth regardless.
+
+
+def test_reindex_after_restore_denied_for_nonprivileged_reader(client, monkeypatch):
+    # THE directly-reachable instance + the durability proof. An admin archive+restore
+    # returns a previously-indexed document to the searchable 'registered' status (chunks
+    # 'active', vectors purged) while has_been_indexed stays True. A status-only gate would
+    # NOT fire (status is 'registered'), letting a non-privileged co-reader re-embed poison
+    # under the document's unchanged ACL. The durable flag keeps the re-index privileged.
+    from app.domain import indexing, vector
+
+    document = _create_indexable_document(client)
+    # Developer first-index (self-service, allowed): the document now holds trusted content.
+    assert client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={"source_text": "# Policy\n\ntrusted remote work content."},
+    ).json()["status"] == "succeeded"
+
+    # Admin archive + restore -> status back to 'registered' (searchable); has_been_indexed
+    # is durable across archive/restore and stays True.
+    client.delete(f"/api/v1/knowledge/documents/{document['id']}", headers=_ADMIN)
+    restored = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/restore", headers=_ADMIN
+    )
+    assert restored.json()["status"] == "registered"
+
+    spy = vector.FakeVectorStore()
+    monkeypatch.setattr(indexing, "get_vector_store", lambda: spy)
+
+    # The developer CAN read the 'registered' document (read-ACL passes) but is DENIED the
+    # re-index at the PRIVILEGED tier. The "Insufficient role" detail (from enforce_roles)
+    # proves the denial is the durable-flag gate, NOT the read-ACL gate ("Not authorized").
+    # Cover both the force_reindex path and the plain source_text path (the purge in
+    # run_index_job is unconditional, so gating force_reindex alone would leave a hole).
+    for body in (
+        {"source_text": "# Fabricated\n\npoison via force.", "force_reindex": True},
+        {"source_text": "# Fabricated\n\npoison via plain source_text."},
+    ):
+        denied = client.post(
+            f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+            headers=_DEVELOPER,
+            json=body,
+        )
+        assert denied.status_code == 403
+        assert denied.json()["detail"] == "Insufficient role for this action"
+
+    # No purge reached the store on the denied attempts.
+    assert document["id"] not in spy._deleted_document_ids
+    # Audited as policy.denied for the reindex action (the privileged tier).
+    denied_events = client.get(
+        "/api/v1/audit/events?event_type=policy.denied", headers=_ADMIN
+    ).json()
+    assert any(
+        e["target_id"] == document["id"] and e["payload"].get("action") == "document.reindex"
+        for e in denied_events
+    )
+
+    # CONTRAST (no over-restriction): a genuinely fresh 'registered' document -- SAME status,
+    # but has_been_indexed=False -- is still first-time-indexable by the same developer. This
+    # isolates the durable flag: identical status, opposite outcome, driven only by the flag.
+    monkeypatch.undo()
+    fresh = _create_indexable_document(client)
+    assert fresh["status"] == "registered"
+    assert client.post(
+        f"/api/v1/knowledge/documents/{fresh['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={"source_text": "# Policy\n\nfresh first-time content."},
+    ).json()["status"] == "succeeded"
+
+
+def test_process_reindex_after_restore_denied_for_nonprivileged_reader(client, monkeypatch):
+    # The /process path enforces the same durable-flag bar on a restored ('registered')
+    # previously-indexed document.
+    from app.domain import indexing, vector
+
+    document = _create_indexable_document(client)
+    client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={"source_text": "# Policy\n\ntrusted content."},
+    )
+    client.delete(f"/api/v1/knowledge/documents/{document['id']}", headers=_ADMIN)
+    client.post(f"/api/v1/knowledge/documents/{document['id']}/restore", headers=_ADMIN)
+
+    # Queue a re-index job as admin (creating it against a has_been_indexed document is
+    # itself privileged); source_text omitted so it stays queued rather than running inline.
+    queued = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_ADMIN,
+        json={"force_reindex": True},
+    ).json()
+    assert queued["status"] == "queued"
+
+    spy = vector.FakeVectorStore()
+    monkeypatch.setattr(indexing, "get_vector_store", lambda: spy)
+    denied = client.post(
+        f"/api/v1/knowledge/index-jobs/{queued['id']}/process",
+        headers=_DEVELOPER,
+        json={"source_text": "# Fabricated\n\npoison via process after restore."},
+    )
+    assert denied.status_code == 403
+    assert denied.json()["detail"] == "Insufficient role for this action"
+    assert document["id"] not in spy._deleted_document_ids
+    # Job stays queued (unprocessed) after the denied attempt.
+    assert client.get(
+        f"/api/v1/knowledge/index-jobs/{queued['id']}", headers=_ADMIN
+    ).json()["status"] == "queued"
+
+
+def test_reindex_of_previously_indexed_then_index_failed_denied(client, monkeypatch):
+    # The 'index_failed' side door, reproduced faithfully: a previously-'indexed' document
+    # (has_been_indexed=True) whose re-index PURGES its vectors and then fails at the upsert
+    # stage is left at status='index_failed' with its vectors already gone. The durable flag
+    # keeps re-indexing privileged in that state. (Non-admins are ALSO blocked here by the
+    # read-ACL tier since 'index_failed' is not searchable -- this asserts defense-in-depth:
+    # denied AND no purge either way.)
+    from app.domain import indexing, vector
+
+    document = _create_indexable_document(client)
+    client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={"source_text": "# Policy\n\ntrusted content."},
+    )
+
+    # Admin re-index that purges then fails at upsert -> index_failed with vectors purged,
+    # exactly as run_index_job leaves it.
+    class _PurgeThenFailStore(vector.FakeVectorStore):
+        def upsert_chunks(self, inputs):
+            raise RuntimeError("simulated upsert failure after purge")
+
+    failing = _PurgeThenFailStore()
+    monkeypatch.setattr(indexing, "get_vector_store", lambda: failing)
+    admin_failed = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_ADMIN,
+        json={"source_text": "# Policy\n\nadmin revised content.", "force_reindex": True},
+    )
+    assert admin_failed.json()["status"] == "failed"
+    assert admin_failed.json()["error_code"] == "VECTOR_UPSERT_FAILED"
+    assert document["id"] in failing._deleted_document_ids  # vectors were purged
+    status_now = next(
+        d for d in client.get("/api/v1/knowledge/documents", headers=_ADMIN).json()
+        if d["id"] == document["id"]
+    )["status"]
+    assert status_now == "index_failed"
+
+    # A non-privileged co-reader tries to re-index the vector-less, index_failed document.
+    spy = vector.FakeVectorStore()
+    monkeypatch.setattr(indexing, "get_vector_store", lambda: spy)
+    denied = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={"source_text": "# Fabricated\n\npoison.", "force_reindex": True},
+    )
+    assert denied.status_code == 403
+    assert document["id"] not in spy._deleted_document_ids  # no purge on the denied attempt
+
+
+def test_first_ever_failed_index_not_treated_as_previously_indexed(client):
+    # NO OVER-RESTRICTION regression guard: a document whose FIRST-EVER index attempt failed
+    # NEVER held trusted content, so has_been_indexed stays False and the durable-flag gate
+    # must NOT fire for it. (In the current code such a document is 'index_failed', which is
+    # not a searchable status, so a non-admin retry is denied at the READ-ACL tier -- detail
+    # "Not authorized for this document" -- NOT at the privileged reindex tier. This asserts
+    # the failure never got mis-marked as previously-trusted, distinguishing this fix from a
+    # naive `status in {'indexed','index_failed'}` gate.)
+    document = _create_indexable_document(client)
+    failed = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={"source_text": "   "},  # whitespace -> zero chunks -> EMPTY_EXTRACTED_TEXT
+    )
+    assert failed.status_code == 201
+    assert failed.json()["status"] == "failed"
+    assert failed.json()["error_code"] == "EMPTY_EXTRACTED_TEXT"
+
+    retry = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={"source_text": "# Policy\n\nreal content on retry."},
+    )
+    assert retry.status_code == 403
+    # Denied at the READ-ACL tier, NOT the privileged reindex tier: the durable flag was
+    # never set for this never-trusted document, so it was not mis-classified as a reindex.
+    assert retry.json()["detail"] == "Not authorized for this document"
+    # PRE-EXISTING (orthogonal to this fix): 'index_failed' is not a searchable status, so
+    # document_can_be_indexed() rejects it and even an admin re-index fails closed with
+    # DOCUMENT_NOT_INDEXABLE (an index_failed document is stuck for everyone). This confirms
+    # the 'index_failed' state is governed by the read-ACL/searchable-status coupling, not by
+    # the has_been_indexed flag.
+    admin_retry = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_ADMIN,
+        json={"source_text": "# Policy\n\nadmin first index after transient failure."},
+    )
+    assert admin_retry.status_code == 201
+    assert admin_retry.json()["status"] == "failed"
+    assert admin_retry.json()["error_code"] == "DOCUMENT_NOT_INDEXABLE"
+
+
+def test_admin_can_reindex_previously_indexed_after_restore(client):
+    # NO REGRESSION: an admin can re-index a previously-indexed document regardless of its
+    # current status, including after an archive+restore drops it to 'registered'.
+    document = _create_indexable_document(client)
+    client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_DEVELOPER,
+        json={"source_text": "# Policy\n\ntrusted content."},
+    )
+    client.delete(f"/api/v1/knowledge/documents/{document['id']}", headers=_ADMIN)
+    client.post(f"/api/v1/knowledge/documents/{document['id']}/restore", headers=_ADMIN)
+    reindexed = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        headers=_ADMIN,
+        json={"source_text": "# Policy\n\nadmin re-established content.", "force_reindex": True},
+    )
+    assert reindexed.status_code == 201
+    assert reindexed.json()["status"] == "succeeded"
 
 
 def _create_indexable_document(client) -> dict:

@@ -89,6 +89,14 @@ class Document(Base):
     confidentiality_level: Mapped[str] = mapped_column(String(40), nullable=False)
     access_groups: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     status: Mapped[str] = mapped_column(String(40), default="registered", nullable=False)
+    # Durable "this document has, at some point, successfully held trusted indexed
+    # content" marker. Set True the first time run_index_job reaches status='indexed'
+    # and NEVER reset (not on index_failed, not on archive, not on restore). Unlike the
+    # volatile ``status`` field, it survives a document dropping back to 'index_failed'
+    # (e.g. a reindex whose vector upsert fails after the unconditional vector purge), so
+    # the reindex authorization gate cannot be bypassed through that operational-failure
+    # side door. See create_index_job / process_index_job in api/v1/knowledge.py.
+    has_been_indexed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     effective_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(

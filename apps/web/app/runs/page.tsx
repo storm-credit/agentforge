@@ -15,11 +15,13 @@ export default function RunsPage() {
   const [steps, setSteps] = useState<RunStep[]>([]);
   const [hits, setHits] = useState<RetrievalHit[]>([]);
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     listRuns()
       .then((rs) => { setRuns(rs); if (rs.length) setSelected(rs[0]); })
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading(false));
   }, []);
 
   useEffect(() => {
@@ -37,7 +39,7 @@ export default function RunsPage() {
       </div>
 
       {error && <p style={{ color: "#b91c1c" }}>{error}</p>}
-      {!error && runs.length === 0 && (
+      {!error && !loading && runs.length === 0 && (
         <p>아직 실행 내역이 없습니다. /chat이나 빌더 테스트에서 질문해 보세요.</p>
       )}
 

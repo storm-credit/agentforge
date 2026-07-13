@@ -36,6 +36,7 @@ export default function NewAgentPage() {
     Array<{ title: string; citation_locator: string | null }>
   >([]);
   const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState("");
 
   useEffect(() => {
     Promise.all([listSources(), indexedDocCountBySource()])
@@ -79,12 +80,15 @@ export default function NewAgentPage() {
   async function onAsk() {
     if (!agentId || !message) return;
     setAsking(true);
+    setAskError("");
     try {
       const run = await ask({ agentId, message, language, user });
       setAnswer(run.answer);
       setCitations(run.citations ?? []);
     } catch (e) {
-      setAnswer(String(e));
+      setAnswer("");
+      setCitations([]);
+      setAskError(String(e));
     } finally {
       setAsking(false);
     }
@@ -175,6 +179,9 @@ export default function NewAgentPage() {
           <button className="button" onClick={onAsk} disabled={!published || asking || !message}>
             {asking ? "답변 생성 중… (첫 질문은 모델 로딩으로 느릴 수 있어요)" : "질문"}
           </button>
+          {askError && (
+            <p data-testid="ask-error" style={{ color: "#b91c1c" }}>{askError}</p>
+          )}
           {answer && (
             <article className="card" style={{ marginTop: "12px" }}>
               <h4>답변</h4>

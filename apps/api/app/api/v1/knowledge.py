@@ -81,6 +81,7 @@ def create_source(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> KnowledgeSource:
+    _validate_confidentiality(payload.default_confidentiality_level)
     source = KnowledgeSource(**payload.model_dump())
     db.add(source)
     db.flush()

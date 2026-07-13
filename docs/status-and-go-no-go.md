@@ -196,8 +196,8 @@ PR #83의 재색인 인가 상향이 `document.status == "indexed"`만 기준으
 
 ### PM 권고 (전 도메인 종합, 우선순위) — 5차
 1. ✅ **재색인 인가를 "신뢰 콘텐츠 보유 이력" 기준으로 근본 수정** (PR #92, opus, security-review 통과) — 신규 durable 컬럼 `documents.has_been_indexed`(최초 성공 색인 시 True, **절대 리셋 안 됨** — archive/restore/index_failed 어디서도) + 마이그레이션 0005(server_default false + **기존 행 백필**: status="indexed" OR `document.indexed` 감사이벤트 보유 → True, 이미 신뢰콘텐츠 가진 문서 재노출 방지). 두 엔드포인트 게이트를 `status=="indexed"` → `has_been_indexed`로 변경. **에이전트가 실제 재현 가능 경로를 재특정**: 패널이 지목한 index_failed는 이미 `SEARCHABLE_DOCUMENT_STATUSES` 미포함이라 read-ACL tier에서 차단됨(defense-in-depth로 함께 닫음), 진짜 도달가능한 건 **archive→restore→registered**(searchable 상태) 경로 — durable 플래그가 이걸 닫음. security-review: 백필 이벤트명(`document.indexed`) 실제 emitter와 일치·플래그 리셋 경로 없음·최초색인/재시도 회귀 없음 모두 재확인, 발견 0건. 실 GitHub Actions CI(마이그레이션 0005 up/down/up 대상 Postgres 포함) 그린 확인 후 머지. 테스트 +5, baseline 220.
-2. `create_source`에 `default_confidentiality_level` 검증 추가 — 형제 엔드포인트(register/upload/update_acl)는 전부 `_validate_confidentiality`하는데 이것만 누락. 오타 시 소스가 clearance 필터에 걸려 조용히 사라짐. S, 백엔드.
-3. chat/agents-new의 ask 실패 에러렌더 수정 — `setAnswer(String(e))`가 raw 에러를 답변처럼 표시. 별도 에러 상태로 분리(+로딩상태/a11y 묶음 가능). S, 프론트.
+2. ✅ **`create_source`에 `default_confidentiality_level` 검증 추가** (PR #94, sonnet) — 형제 엔드포인트와 동일한 `_validate_confidentiality` 호출(db.add 전), 미인식 값은 422. 대소문자 무시·공백 미허용 모두 문서 엔드포인트와 일치. 테스트 4종(유효 4등급·mixed case·오타·공백). baseline 224.
+3. ✅ **chat/agents-new의 ask 실패 에러렌더 수정** (PR #95, sonnet) — `setAnswer(String(e))` → 별도 `askError` 상태로 분리(실패 시 answer/citations 비우고 빨간 `ask-error` 요소로 표시, 답변카드 오염 안 됨). 부수: runs 페이지 로딩상태(false empty-state flash 제거)·chat textarea aria-label. e2e는 **route 목킹**으로 라이브 스택 없이 실패경로 검증(2 passed, Docker 데몬 다운 상태라 나머지 전체 라이브 스위트는 미실행·정직 명시). tsc 클린.
 4. e2e를 CI에서 실행 — fake OpenAI-호환 LLM 스텁 + Postgres/Qdrant 서비스 컨테이너(PR #85가 Postgres 컨테이너 패턴 입증). 이전엔 infra-blocked로 판정했으나 이제 buildable. M, DevOps. (JSON 로깅+request_id 미들웨어는 여전히 열려있으나 가치 낮아 후순위.)
 - **QA/PM 종합**: 백로그 매우 얇음. QA/PM 자체 스윕은 새 코드-now 못 냄(패널 시리즈 최초) — "코드 완결" 문턱 도달. 다만 5회 연속 매번 뭔가 나온 뒤 첫 클린 패스라, 한 번 더 확인 패스 후 정식 선언 권고. 비코드 불변 4건(SSO·사내모델·실문서·폐쇄망) + config-C 채택 결정만 남음.
 

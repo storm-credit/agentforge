@@ -12,6 +12,7 @@ export default function ChatPage() {
     Array<{ title: string; citation_locator: string | null }>
   >([]);
   const [loading, setLoading] = useState(false);
+  const [askError, setAskError] = useState("");
 
   useEffect(() => {
     firstAgentId().then(setAgentId);
@@ -20,12 +21,15 @@ export default function ChatPage() {
   async function onAsk() {
     if (!agentId || !message) return;
     setLoading(true);
+    setAskError("");
     try {
       const run = await ask({ agentId, message, language, user });
       setAnswer(run.answer);
       setCitations(run.citations ?? []);
     } catch (e) {
-      setAnswer(String(e));
+      setAnswer("");
+      setCitations([]);
+      setAskError(String(e));
     } finally {
       setLoading(false);
     }
@@ -68,6 +72,7 @@ export default function ChatPage() {
         </div>
 
         <textarea
+          aria-label="질문을 입력하세요"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           placeholder="질문을 입력하세요"
@@ -92,6 +97,10 @@ export default function ChatPage() {
           {loading ? "..." : "질문"}
         </button>
       </div>
+
+      {askError && (
+        <p data-testid="ask-error" style={{ color: "#b91c1c" }}>{askError}</p>
+      )}
 
       {answer && (
         <article className="card">

@@ -19,14 +19,13 @@ export default function AgentsPage() {
         <p>에이전트를 만들고 게시한 뒤 바로 테스트하세요.</p>
       </div>
       <Link className="button" href="/agents/new">새 에이전트 만들기</Link>
-      {error && <p style={{ color: "#b91c1c" }}>{error}</p>}
-      <div className="cardGrid" style={{ marginTop: "16px" }}>
+      {error && <p className="error-text">{error}</p>}
+      <div className="cardGrid" style={{ marginTop: "var(--space-4)" }}>
         {agents.map((a) => (
-          <Link className="card" data-testid="agent-card" key={a.id} href={`/agents/${a.id}`}
-            style={{ textDecoration: "none", color: "inherit" }}>
+          <Link className="card" data-testid="agent-card" key={a.id} href={`/agents/${a.id}`}>
             <h3>{a.name}</h3>
             <p>{a.purpose}</p>
-            <p><span className="badge">{a.status}</span> · {a.owner_department}</p>
+            <p><span className={a.status === "published" ? "badge success" : "badge"}>{a.status}</span> · {a.owner_department}</p>
           </Link>
         ))}
       </div>

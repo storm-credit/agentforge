@@ -51,7 +51,7 @@ export default function Home() {
           {workstreams.map((item) => (
             <li key={item.name}>
               <span>{item.name}</span>
-              <span className={item.status === "Planned" ? "badge warn" : "badge"}>
+              <span className={item.status === "Planned" ? "badge warn" : "badge success"}>
                 {item.status}
               </span>
             </li>

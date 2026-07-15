@@ -112,8 +112,8 @@ export default function NewAgentPage() {
           <input className="field" placeholder="담당 부서 (예: Operations)"
             value={department} onChange={(e) => setDepartment(e.target.value)} />
 
-          <h3 style={{ marginTop: "16px" }}>② 지식소스 연결</h3>
-          {sourcesError && <p style={{ color: "#b91c1c" }}>{sourcesError}</p>}
+          <h3 style={{ marginTop: "var(--space-4)" }}>② 지식소스 연결</h3>
+          {sourcesError && <p className="error-text">{sourcesError}</p>}
           {!sourcesError && sources.length === 0 && (
             <p data-testid="no-sources">
               지식소스가 없습니다. 시드(<code>python -m app.seed_demo</code>)를 실행하거나 Knowledge에서 추가하세요.
@@ -129,17 +129,17 @@ export default function NewAgentPage() {
                     <input type="checkbox" disabled={disabled}
                       checked={selected.has(s.id)} onChange={() => toggleSource(s.id)} />
                     {s.name}
-                    <span className="badge">{disabled ? "색인 0" : `색인됨 ${count}`}</span>
+                    <span className={disabled ? "badge" : "badge success"}>{disabled ? "색인 0" : `색인됨 ${count}`}</span>
                   </label>
                 </li>
               );
             })}
           </ul>
 
-          <h3 style={{ marginTop: "16px" }}>③ 생성 설정</h3>
-          <label style={{ display: "block", fontSize: "14px" }}>
+          <h3 style={{ marginTop: "var(--space-4)" }}>③ 생성 설정</h3>
+          <label style={{ display: "block", fontSize: "var(--text-base)" }}>
             답변 성향: <strong data-testid="temperature-value">{temperature.toFixed(1)}</strong>{" "}
-            <span style={{ color: "#64748b" }}>(정확 ↔ 다양)</span>
+            <span style={{ color: "var(--text-muted)" }}>(정확 ↔ 다양)</span>
             <input
               type="range" data-testid="temperature" min={0} max={0.7} step={0.1}
               value={temperature}
@@ -148,22 +148,22 @@ export default function NewAgentPage() {
               style={{ display: "block", width: "100%", marginTop: "6px" }}
             />
           </label>
-          <p style={{ fontSize: "12px", color: "#64748b", margin: "4px 0 0" }}>
+          <p className="note" style={{ margin: "4px 0 0" }}>
             근거형 RAG 권장: 낮게(0.2). 상한 0.7로 제한됩니다(환각 통제).
           </p>
 
-          <h3 style={{ marginTop: "16px" }}>④ 게시</h3>
+          <h3 style={{ marginTop: "var(--space-4)" }}>④ 게시</h3>
           <button className="button" data-testid="publish" onClick={onPublish} disabled={!canPublish}>
             {publishing ? "게시 중…" : published ? "게시됨 ✓" : "게시하기"}
           </button>
-          {publishError && <p style={{ color: "#b91c1c" }}>{publishError}</p>}
-          {published && <p style={{ color: "#15803d" }}>✓ 게시됨 — 오른쪽에서 테스트하세요.</p>}
+          {publishError && <p className="error-text">{publishError}</p>}
+          {published && <p className="success-text">✓ 게시됨 — 오른쪽에서 테스트하세요.</p>}
         </div>
 
         <div className="panel" style={{ flex: "1 1 360px", opacity: published ? 1 : 0.5 }}>
           <h3>테스트</h3>
           {!published && <p data-testid="test-lock">🔒 게시하면 활성화됩니다.</p>}
-          <div style={{ display: "flex", gap: "12px", marginBottom: "10px" }}>
+          <div style={{ display: "flex", gap: "var(--space-3)", marginBottom: "var(--space-3)" }}>
             <select value={user} onChange={(e) => setUser(e.target.value as MockUserKey)} disabled={!published}>
               <option value="finance">Finance</option>
               <option value="hr">HR</option>
@@ -180,10 +180,10 @@ export default function NewAgentPage() {
             {asking ? "답변 생성 중… (첫 질문은 모델 로딩으로 느릴 수 있어요)" : "질문"}
           </button>
           {askError && (
-            <p data-testid="ask-error" style={{ color: "#b91c1c" }}>{askError}</p>
+            <p data-testid="ask-error" className="error-text">{askError}</p>
           )}
           {answer && (
-            <article className="card" style={{ marginTop: "12px" }}>
+            <article className="card" style={{ marginTop: "var(--space-3)" }}>
               <h4>답변</h4>
               <p data-testid="answer">{answer}</p>
               {citations.length > 0 && (

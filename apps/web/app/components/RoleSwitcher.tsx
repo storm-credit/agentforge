@@ -18,16 +18,13 @@ export function RoleSwitcher() {
   }
 
   return (
-    <div style={{ marginTop: "auto", paddingTop: "16px", fontSize: "12px" }}>
-      <label htmlFor="demo-role" style={{ display: "block", color: "#94a3b8", marginBottom: "4px" }}>
-        Demo role
-      </label>
+    <div>
+      <label htmlFor="demo-role">Demo role</label>
       <select
         id="demo-role"
         data-testid="demo-role-switcher"
         value={role}
         onChange={(e) => onChange(e.target.value as DemoRoleKey)}
-        style={{ width: "100%" }}
       >
         {(Object.keys(DEMO_ROLES) as DemoRoleKey[]).map((r) => (
           <option key={r} value={r}>

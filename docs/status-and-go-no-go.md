@@ -211,6 +211,12 @@ CLAUDE.md 2-c 정식 트리거를 위한 6차 확인 패널을 실행했으나 *
 **다음 작업(자원 리셋 후)**: 6차 확인 패널 재실행(6직무, Fable). 무-산출 시 CLAUDE.md 2-c에 따라 **"코드 완결"(남은 건 전부 비코드 의존) 정식 선언**. 비코드 불변: SSO IdP · qwen3-30b-a3b/cross-encoder 실측 · 실문서/파일럿 부서 · 폐쇄망 EP-07 · config-C 채택 결정.
 - **QA/PM 종합**: 백로그 매우 얇음. QA/PM 자체 스윕은 새 코드-now 못 냄(패널 시리즈 최초) — "코드 완결" 문턱 도달. 다만 5회 연속 매번 뭔가 나온 뒤 첫 클린 패스라, 한 번 더 확인 패스 후 정식 선언 권고. 비코드 불변 4건(SSO·사내모델·실문서·폐쇄망) + config-C 채택 결정만 남음.
 
+## 2026-07-16 — UI 디자인 시스템 슬라이스 (사용자 제기, 패널 외 코드-now)
+사용자가 "가독성/가시성/UI 이쁨"을 제기 → 이는 기능/보안 패널이 안 건드린 실재 코드-now 항목이라 **잠정 코드완결을 취소**하고 슬라이스로 진행. brainstorming→spec(`docs/superpowers/specs/2026-07-14-web-design-system-design.md`)→구현.
+- ✅ **경량 디자인 시스템** (PR #103) — globals.css 디자인 토큰(시맨틱 색·**라이트+다크** prefers-color-scheme+`[data-theme]`·간격/타이포/radius/shadow), 컴포넌트 클래스(button/badge/field/table/nav) 정제로 인라인 하드코딩 치환, 신규 `ThemeSwitcher`(light/dark/system, localStorage)+`NavLinks`, **Pretendard self-host**, 전 페이지 리스타일. 백엔드 무변경, Tailwind/JS컴포넌트lib 미도입.
+- **진행 특이사항**: Fable 프론트 서브에이전트가 세션 한도로 결과 null 반환했으나 **작업 트리에 전체 구현을 남김** → 오케스트레이터가 브랜치로 보존 후 **직접 검증·마무리**(서브에이전트 재디스패치가 한도로 막힘). 검증: tsc 클린·`npm run build` 클린(12페이지·Pretendard OK)·**기존 data-testid 51개 전부 보존(0 유실, +theme-switcher)** testid 셋 diff로 확인·route-mock chat 스펙 2/2·**실 CI 21개 e2e 그린(2m3s, 최종 게이트)**. 회귀 0 입증 후 머지.
+- **의미**: 이 사용자 제기 항목이 닫히면서 코드-now 백로그 재소진. 정식 "코드 완결"은 여전히 6차 확인 패널 클린 완주 대기(위 참조).
+
 ## Go/No-Go 권고
 - **기술 MVP: GO 가능** — 핵심 가치(권한 기반 인용 답변 + 누출 0)가 코드·eval로 성립.
 - **파일럿 진입: 조건부 HOLD** — 코드 문제 아님. 위 "결정 → 해제 표"의 4개 입력(파일럿 부서/실문서·SSO·사내모델·폐쇄망)이 채워져야 진입 가능.

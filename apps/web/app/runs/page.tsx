@@ -38,7 +38,7 @@ export default function RunsPage() {
         <p>실행 단계 트레이스, 검색 근거(본문·점수·권한), 거부/강등 사유를 확인합니다.</p>
       </div>
 
-      {error && <p style={{ color: "#b91c1c" }}>{error}</p>}
+      {error && <p className="error-text">{error}</p>}
       {!error && !loading && runs.length === 0 && (
         <p>아직 실행 내역이 없습니다. /chat이나 빌더 테스트에서 질문해 보세요.</p>
       )}
@@ -51,14 +51,10 @@ export default function RunsPage() {
               <li key={r.id} style={{ marginBottom: "6px" }}>
                 <button
                   onClick={() => setSelected(r)}
-                  style={{
-                    width: "100%", textAlign: "left", cursor: "pointer", padding: "8px",
-                    borderRadius: "6px", border: "1px solid var(--line,#cbd5e1)",
-                    background: selected?.id === r.id ? "#eff6ff" : "transparent",
-                  }}
+                  className={`listButton${selected?.id === r.id ? " selected" : ""}`}
                 >
-                  <div style={{ fontSize: "14px" }}>{r.input?.message ?? "(질문 없음)"}</div>
-                  <div style={{ fontSize: "12px", color: "#64748b" }}>
+                  <div style={{ fontSize: "var(--text-base)" }}>{r.input?.message ?? "(질문 없음)"}</div>
+                  <div className="meta">
                     <span className="badge">{r.status}</span> · {r.latency_ms}ms
                   </div>
                 </button>
@@ -78,26 +74,26 @@ export default function RunsPage() {
               {selected.citations?.length > 0 && (
                 <ul>
                   {selected.citations.map((c, i) => (
-                    <li key={i} style={{ fontSize: "14px" }}>{c.title} — {c.citation_locator}</li>
+                    <li key={i} style={{ fontSize: "var(--text-base)" }}>{c.title} — {c.citation_locator}</li>
                   ))}
                 </ul>
               )}
 
-              <h3 style={{ marginTop: "16px" }}>단계 타임라인</h3>
+              <h3 style={{ marginTop: "var(--space-4)" }}>단계 타임라인</h3>
               <ul style={{ listStyle: "none", padding: 0 }}>
                 {steps.map((s) => (
-                  <li key={s.step_order} style={{ marginBottom: "8px" }}>
-                    <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                  <li key={s.step_order} style={{ marginBottom: "var(--space-2)" }}>
+                    <div style={{ display: "flex", gap: "var(--space-2)", alignItems: "center" }}>
                       <strong>{s.step_order}. {s.step_type}</strong>
-                      <span className="badge" style={{ color: s.status === "succeeded" ? "#15803d" : "#b91c1c" }}>
+                      <span className={`badge ${s.status === "succeeded" ? "success" : "danger"}`}>
                         {s.status}
                       </span>
-                      <span style={{ fontSize: "12px", color: "#64748b" }}>{s.latency_ms}ms</span>
+                      <span className="meta">{s.latency_ms}ms</span>
                     </div>
-                    {s.error_message && <div style={{ color: "#b91c1c", fontSize: "13px" }}>{s.error_code}: {s.error_message}</div>}
+                    {s.error_message && <div className="error-text" style={{ fontSize: "var(--text-sm)" }}>{s.error_code}: {s.error_message}</div>}
                     <details>
-                      <summary style={{ fontSize: "12px", color: "#64748b", cursor: "pointer" }}>입출력</summary>
-                      <pre style={{ fontSize: "12px", whiteSpace: "pre-wrap", background: "#f8fafc", padding: "8px", borderRadius: "6px" }}>
+                      <summary>입출력</summary>
+                      <pre className="pre">
 {JSON.stringify({ input: s.input_summary, output: s.output_summary }, null, 2)}
                       </pre>
                     </details>
@@ -105,28 +101,28 @@ export default function RunsPage() {
                 ))}
               </ul>
 
-              <h3 style={{ marginTop: "16px" }}>검색 근거 (hits)</h3>
-              {hits.length === 0 && <p style={{ fontSize: "14px", color: "#64748b" }}>검색 결과 없음(또는 권한 거부).</p>}
+              <h3 style={{ marginTop: "var(--space-4)" }}>검색 근거 (hits)</h3>
+              {hits.length === 0 && <p style={{ fontSize: "var(--text-base)" }}>검색 결과 없음(또는 권한 거부).</p>}
               {hits.map((h, i) => (
-                <article key={i} className="card" style={{ marginBottom: "8px" }}>
-                  <div style={{ fontSize: "13px" }}>
+                <article key={i} className="card" style={{ marginBottom: "var(--space-2)" }}>
+                  <div style={{ fontSize: "var(--text-sm)" }}>
                     #{h.rank_original} · {h.title} · score {h.score_vector}
-                    {" "}{h.used_as_citation ? <span className="badge">인용됨</span> : <span className="badge">미인용</span>}
+                    {" "}{h.used_as_citation ? <span className="badge success">인용됨</span> : <span className="badge">미인용</span>}
                   </div>
-                  {h.citation_locator && <div style={{ fontSize: "12px", color: "#64748b" }}>{h.citation_locator}</div>}
+                  {h.citation_locator && <div className="meta">{h.citation_locator}</div>}
                   {h.content && (
                     <details>
-                      <summary style={{ fontSize: "12px", color: "#64748b", cursor: "pointer" }}>본문</summary>
-                      <p style={{ fontSize: "13px", whiteSpace: "pre-wrap" }}>{h.content}</p>
+                      <summary>본문</summary>
+                      <p style={{ fontSize: "var(--text-sm)", whiteSpace: "pre-wrap" }}>{h.content}</p>
                     </details>
                   )}
                 </article>
               ))}
 
               {hits[0]?.acl_filter_snapshot && (
-                <details style={{ marginTop: "8px" }}>
-                  <summary style={{ fontSize: "12px", color: "#64748b", cursor: "pointer" }}>ACL 필터 스냅샷</summary>
-                  <pre style={{ fontSize: "12px", whiteSpace: "pre-wrap", background: "#f8fafc", padding: "8px", borderRadius: "6px" }}>
+                <details style={{ marginTop: "var(--space-2)" }}>
+                  <summary>ACL 필터 스냅샷</summary>
+                  <pre className="pre">
 {JSON.stringify(hits[0].acl_filter_snapshot, null, 2)}
                   </pre>
                 </details>
@@ -141,11 +137,7 @@ export default function RunsPage() {
 
 function signalBadge(testId: string, label: string, ok: boolean) {
   return (
-    <span
-      data-testid={testId}
-      className={`badge ${ok ? "" : "warn"}`}
-      style={{ fontSize: "12px" }}
-    >
+    <span data-testid={testId} className={`badge ${ok ? "success" : "warn"}`}>
       {label}
     </span>
   );
@@ -170,7 +162,7 @@ function renderGuardrailSignals(run: RunSummary, steps: RunStep[]) {
   return (
     <div
       data-testid="guardrail-signals"
-      style={{ display: "flex", gap: "6px", flexWrap: "wrap", margin: "6px 0 12px" }}
+      style={{ display: "flex", gap: "6px", flexWrap: "wrap", margin: "6px 0 var(--space-3)" }}
     >
       {signalBadge("guardrail-pii", piiMasked ? "PII 마스킹 적용" : "PII 마스킹 미적용", !piiMasked)}
       {signalBadge("guardrail-citation", citationPass ? "인용 검증 통과" : "인용 검증 실패", citationPass)}

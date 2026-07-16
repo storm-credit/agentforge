@@ -233,7 +233,7 @@ export default function KnowledgePage() {
           <h3>문서 추가</h3>
 
           <p className="label">지식소스</p>
-          <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+          <div style={{ display: "flex", gap: "var(--space-2)", marginBottom: "var(--space-2)" }}>
             <select value={sourceMode} onChange={(e) => setSourceMode(e.target.value as "existing" | "new")}>
               <option value="existing">기존 선택</option>
               <option value="new">새로 만들기</option>
@@ -251,11 +251,11 @@ export default function KnowledgePage() {
 
           <input className="field" placeholder="문서 제목" value={title}
             onChange={(e) => setTitle(e.target.value)} />
-          <input type="file" accept=".txt,.md,.pdf,.docx" onChange={onFile} style={{ marginBottom: "8px" }} />
+          <input type="file" accept=".txt,.md,.pdf,.docx" onChange={onFile} style={{ marginBottom: "var(--space-2)" }} />
           <textarea className="field" rows={6} placeholder="본문 (.txt/.md 파일 선택 시 자동 채움, PDF/DOCX는 서버에서 추출)"
             value={content} onChange={(e) => setContent(e.target.value)} />
 
-          <div style={{ display: "flex", gap: "8px", marginBottom: "8px" }}>
+          <div style={{ display: "flex", gap: "var(--space-2)", marginBottom: "var(--space-2)" }}>
             <select data-testid="confidentiality-select" value={confidentiality} onChange={(e) => setConfidentiality(e.target.value)}>
               <option value="public">공개</option>
               <option value="internal">내부</option>
@@ -268,10 +268,10 @@ export default function KnowledgePage() {
           <button className="button" data-testid="ingest" onClick={onSubmit} disabled={!canSubmit}>
             {busy ? "색인 중…" : "추가 & 색인"}
           </button>
-          {error && <p style={{ color: "#b91c1c" }}>{error}</p>}
+          {error && <p className="error-text">{error}</p>}
           {result && (
             <div>
-              <p style={{ color: "#15803d" }}>✓ {result}</p>
+              <p className="success-text">✓ {result}</p>
               <button className="button" onClick={addAnother}>다른 문서 추가</button>
             </div>
           )}
@@ -280,7 +280,7 @@ export default function KnowledgePage() {
         <div className="panel" style={{ flex: "1 1 320px" }}>
           <h3>지식소스 / 문서</h3>
           {isPrivileged && (
-            <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", marginBottom: "8px" }}>
+            <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "var(--text-sm)", marginBottom: "var(--space-2)" }}>
               <input
                 type="checkbox"
                 data-testid="show-archived-toggle"
@@ -291,7 +291,7 @@ export default function KnowledgePage() {
             </label>
           )}
           {!isPrivileged && (
-            <p data-testid="role-restricted-note" style={{ fontSize: "12px", color: "#64748b" }}>
+            <p data-testid="role-restricted-note" className="role-restricted-note">
               데모 역할 &quot;{role}&quot; — 관리 작업(ACL 편집/보관)은 숨겨지며, 목록은 이
               역할의 열람 권한(clearance/ACL) 범위만 서버에서 필터되어 표시됩니다.
             </p>
@@ -305,7 +305,7 @@ export default function KnowledgePage() {
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
                       {d.title} <span className="badge">{d.status}</span>
                       <span className="badge warn" data-testid="doc-confidentiality">{d.confidentiality_level}</span>
-                      <span style={{ fontSize: "12px", color: "#64748b" }} data-testid="doc-groups">
+                      <span className="meta" data-testid="doc-groups">
                         {(d.access_groups ?? []).join(", ")}
                       </span>
                       {d.status === "archived" && (
@@ -313,23 +313,20 @@ export default function KnowledgePage() {
                       )}
                       {isPrivileged && d.status !== "archived" && (
                         <>
-                          <button className="button secondary" data-testid="acl-edit"
-                            style={{ padding: "2px 8px", fontSize: "12px" }}
+                          <button className="button secondary sm" data-testid="acl-edit"
                             onClick={() => startAclEdit(d)}>ACL 편집</button>
-                          <button className="button secondary" data-testid="archive-doc"
-                            style={{ padding: "2px 8px", fontSize: "12px" }}
+                          <button className="button secondary sm" data-testid="archive-doc"
                             onClick={() => startArchive(d)}>보관</button>
                         </>
                       )}
                       {isPrivileged && d.status === "archived" && (
-                        <button className="button secondary" data-testid="restore-doc"
-                          style={{ padding: "2px 8px", fontSize: "12px" }}
+                        <button className="button secondary sm" data-testid="restore-doc"
                           onClick={() => startRestore(d)}>복원</button>
                       )}
                     </div>
                     {restoreEdit?.docId === d.id && (
-                      <div className="card" data-testid="restore-form" style={{ marginTop: "6px", padding: "10px" }}>
-                        <p data-testid="restore-note" style={{ fontSize: "12px", color: "#b45309", margin: "0 0 6px" }}>
+                      <div className="card" data-testid="restore-form" style={{ marginTop: "6px", padding: "var(--space-3)" }}>
+                        <p data-testid="restore-note" className="note warn" style={{ margin: "0 0 6px" }}>
                           복원해도 벡터 색인은 되살아나지 않습니다 — 문서가 다시 검색되려면 복원 후 재색인이 필요합니다.
                         </p>
                         <input className="field" data-testid="restore-reason" placeholder="복원 사유 (감사 기록)"
@@ -345,7 +342,7 @@ export default function KnowledgePage() {
                       </div>
                     )}
                     {archiveEdit?.docId === d.id && (
-                      <div className="card" data-testid="archive-form" style={{ marginTop: "6px", padding: "10px" }}>
+                      <div className="card" data-testid="archive-form" style={{ marginTop: "6px", padding: "var(--space-3)" }}>
                         <input className="field" data-testid="archive-reason" placeholder="보관 사유 (감사 기록)"
                           value={archiveEdit.reason}
                           onChange={(e) => setArchiveEdit({ ...archiveEdit, reason: e.target.value })} />
@@ -359,7 +356,7 @@ export default function KnowledgePage() {
                       </div>
                     )}
                     {aclEdit?.docId === d.id && (
-                      <div className="card" data-testid="acl-form" style={{ marginTop: "6px", padding: "10px" }}>
+                      <div className="card" data-testid="acl-form" style={{ marginTop: "6px", padding: "var(--space-3)" }}>
                         <select value={aclEdit.level}
                           onChange={(e) => setAclEdit({ ...aclEdit, level: e.target.value })}>
                           <option value="public">공개</option>

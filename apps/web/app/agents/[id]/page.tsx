@@ -14,8 +14,8 @@ import { useDemoRole } from "../../lib/useDemoRole";
 
 const STATUS_BADGE: Record<string, string> = {
   draft: "badge warn",
-  validated: "badge warn",
-  published: "badge",
+  validated: "badge info",
+  published: "badge success",
   superseded: "badge",
 };
 
@@ -89,7 +89,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
     <section className="page">
       <div>
         <p className="eyebrow">Builder</p>
-        <Link href="/agents" style={{ fontSize: "13px" }}>← Agents</Link>
+        <Link href="/agents" style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>← Agents</Link>
         <h1>{agent ? agent.name : "에이전트"}</h1>
         {agent && (
           <p>
@@ -100,7 +100,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
         {agent && <p>{agent.purpose}</p>}
       </div>
 
-      {error && <p style={{ color: "#b91c1c" }}>{error}</p>}
+      {error && <p className="error-text">{error}</p>}
 
       <div className="panel">
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "10px", flexWrap: "wrap" }}>
@@ -116,7 +116,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
             </button>
           )}
         </div>
-        <p style={{ fontSize: "13px", color: "#64748b", margin: "8px 0 12px" }}>
+        <p className="note" style={{ margin: "var(--space-2) 0 var(--space-3)" }}>
           draft → validated → published. 게시하면 기존 게시 버전은 superseded 됩니다.
         </p>
         {versions.length === 0 && <p data-testid="no-versions">버전이 없습니다.</p>}
@@ -130,7 +130,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
               <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
                 <strong>v{v.version}</strong>
                 <span className={STATUS_BADGE[v.status] ?? "badge"} data-testid="version-status">{v.status}</span>
-                <span style={{ fontSize: "12px", color: "#64748b" }}>
+                <span className="meta">
                   by {v.created_by}{v.published_at ? ` · 게시 ${v.published_at.slice(0, 10)}` : ""}
                 </span>
               </div>
@@ -175,10 +175,10 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
                 </div>
               )}
               {showDiff && (
-                <details data-testid="version-diff" style={{ marginTop: "6px", fontSize: "12px" }}>
+                <details data-testid="version-diff" style={{ marginTop: "6px", fontSize: "var(--text-xs)" }}>
                   <summary>현재 게시본(v{published!.version})과 차이 {diff.length ? `(${diff.length})` : "(동일)"}</summary>
                   {diff.length === 0 ? (
-                    <p style={{ color: "#64748b", margin: "4px 0 0" }}>config 동일</p>
+                    <p style={{ color: "var(--text-muted)", margin: "4px 0 0" }}>config 동일</p>
                   ) : (
                     <ul style={{ margin: "4px 0 0" }}>
                       {diff.map((d, i) => (

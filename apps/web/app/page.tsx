@@ -1,16 +1,20 @@
 import Link from "next/link";
 
 const stats = [
-  { label: "Sprint 0 scope", value: "7", note: "foundation work items" },
-  { label: "Governance gates", value: "4", note: "draft, review, eval, release" },
-  { label: "Primary use case", value: "RAG", note: "secure internal assistant" },
+  { label: "Access control", value: "RBAC + ACL", note: "enforced in-query at retrieval" },
+  { label: "Answers", value: "Cited", note: "mandatory citations, eval-tracked" },
+  { label: "Deployment", value: "On-prem", note: "closed-network / self-hosted" },
 ];
 
+// Delivered, CI-verified capabilities (permission-scoped RAG Q&A end to end).
+// Pilot entry itself is a separate organizational decision (SSO, pilot documents),
+// not a per-workspace status — see docs/status-and-go-no-go.md.
 const workstreams = [
-  { name: "API foundation", status: "Started" },
-  { name: "Web workbench", status: "Started" },
-  { name: "Postgres migrations", status: "Started" },
-  { name: "Evaluation harness", status: "Planned" },
+  { name: "Knowledge & document ACL", status: "Live" },
+  { name: "Agent registry & versioning", status: "Live" },
+  { name: "Runs & retrieval tracing", status: "Live" },
+  { name: "Evaluation history", status: "Live" },
+  { name: "Audit log", status: "Live" },
 ];
 
 export default function Home() {
@@ -21,8 +25,8 @@ export default function Home() {
           <p className="eyebrow">Pilot readiness</p>
           <h1>Governed agent build workspace</h1>
           <p>
-            Sprint 0 now has the first executable shape: API service, metadata models,
-            web navigation, and local compose dependencies.
+            Permission-scoped RAG question answering with mandatory citations, document-level
+            ACL/RBAC, and a full audit trail — built and verified end to end.
           </p>
         </div>
         <div className="buttonRow">
@@ -46,7 +50,7 @@ export default function Home() {
       </div>
 
       <section className="panel">
-        <h2>Sprint 0 workstream state</h2>
+        <h2>Workspace capabilities</h2>
         <ul className="statusList">
           {workstreams.map((item) => (
             <li key={item.name}>
@@ -61,4 +65,3 @@ export default function Home() {
     </section>
   );
 }
-

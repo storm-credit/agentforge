@@ -58,8 +58,10 @@ export default function KnowledgePage() {
   const [restoreBusy, setRestoreBusy] = useState(false);
 
   function refresh() {
-    listSources().then(setSources).catch(() => {});
-    listDocuments(showArchived).then(setDocuments).catch(() => {});
+    // Surface initial-load failures like every other page (and this page's own
+    // mutations) instead of silently rendering an empty page when the backend is down.
+    listSources().then(setSources).catch((e) => setError(String(e)));
+    listDocuments(showArchived).then(setDocuments).catch((e) => setError(String(e)));
   }
   useEffect(refresh, [showArchived]);
 
@@ -234,12 +236,12 @@ export default function KnowledgePage() {
 
           <p className="label">지식소스</p>
           <div style={{ display: "flex", gap: "var(--space-2)", marginBottom: "var(--space-2)" }}>
-            <select value={sourceMode} onChange={(e) => setSourceMode(e.target.value as "existing" | "new")}>
+            <select aria-label="지식소스 입력 방식" value={sourceMode} onChange={(e) => setSourceMode(e.target.value as "existing" | "new")}>
               <option value="existing">기존 선택</option>
               <option value="new">새로 만들기</option>
             </select>
             {sourceMode === "existing" ? (
-              <select data-testid="source-select" value={selectedSourceId} onChange={(e) => setSelectedSourceId(e.target.value)}>
+              <select aria-label="지식소스 선택" data-testid="source-select" value={selectedSourceId} onChange={(e) => setSelectedSourceId(e.target.value)}>
                 <option value="">소스 선택…</option>
                 {sources.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
@@ -256,7 +258,7 @@ export default function KnowledgePage() {
             value={content} onChange={(e) => setContent(e.target.value)} />
 
           <div style={{ display: "flex", gap: "var(--space-2)", marginBottom: "var(--space-2)" }}>
-            <select data-testid="confidentiality-select" value={confidentiality} onChange={(e) => setConfidentiality(e.target.value)}>
+            <select aria-label="기밀 등급" data-testid="confidentiality-select" value={confidentiality} onChange={(e) => setConfidentiality(e.target.value)}>
               <option value="public">공개</option>
               <option value="internal">내부</option>
               <option value="restricted">제한</option>

@@ -217,6 +217,13 @@ CLAUDE.md 2-c 정식 트리거를 위한 6차 확인 패널을 실행했으나 *
 - **진행 특이사항**: Fable 프론트 서브에이전트가 세션 한도로 결과 null 반환했으나 **작업 트리에 전체 구현을 남김** → 오케스트레이터가 브랜치로 보존 후 **직접 검증·마무리**(서브에이전트 재디스패치가 한도로 막힘). 검증: tsc 클린·`npm run build` 클린(12페이지·Pretendard OK)·**기존 data-testid 51개 전부 보존(0 유실, +theme-switcher)** testid 셋 diff로 확인·route-mock chat 스펙 2/2·**실 CI 21개 e2e 그린(2m3s, 최종 게이트)**. 회귀 0 입증 후 머지.
 - **의미**: 이 사용자 제기 항목이 닫히면서 코드-now 백로그 재소진. 정식 "코드 완결"은 여전히 6차 확인 패널 클린 완주 대기(위 참조).
 
+## 2026-07-20 (6차) PM 확인 패널 — 재실행(자원 리셋 후 완주) + 발견 항목 처리
+
+6차 확인 패널이 이번엔 6직무 완주. **깨끗한 무-산출이 아니라 실제 코드-now를 냄** → 2-c 정식 선언 보류하고 전부 닫음:
+- ✅ **백엔드 3건** (PR #105, fable): ① `GET /runs`+`GET /agents/{id}/versions` 페이지네이션(PR #80이 빠뜨림, 둘 다 SQL-WHERE 스코프라 SQL LIMIT 안전 — 적대적 interleaved 테스트로 검증) ② `POST /retrieval/preview`가 FakeVectorStore 하드코딩 → `get_vector_store()`+fallback으로 교체(실 배포서 preview가 프로덕션 검색과 일치, 감사에 실 adapter 기록) ③ `RetrievalHit.used_as_citation` 정합성 — 게이트가 citations를 비운 refusal 런에서도 True로 남던 감사/eval 오염 수정(게이트 후 reconcile: 최종 citations 비면 False, used_in_context는 생성전 거부=False/grounding가드=True로 정직 기록). 테스트 +7, baseline 224→231.
+- ✅ **프론트 3건** (PR #106, fable-orchestrator 인라인 — 서브에이전트 한도 차단): ① `page.tsx` 랜딩이 Sprint-0 하드카피("Evaluation harness — Planned")로 제품 상태 거짓표시 → 실 워크스페이스 상태로 정직화(h1 유지=smoke.spec 통과) ② knowledge 초기 로드 에러 `.catch(()=>{})` 삼킴 → error 상태로 노출 ③ 폼 셀렉트 3개 aria-label(WCAG). testid/라벨 전부 보존, tsc·CI e2e 21 그린.
+- **판정**: 보안·RAG·프론트·DevOps 직무는 무-산출(각 도메인 코드-now 소진 재확인); 백엔드가 낸 3건과 QA/PM의 랜딩 1건 + 프론트 nit 2건이 이번 발견의 전부이며 **모두 닫힘**. 6차 패널의 산출 항목이 전부 처리됐고, 남은 건 전부 비코드(SSO·qwen3-30b-a3b/cross-encoder·실문서/파일럿·폐쇄망 EP-07·config-C 채택). **정식 "코드 완결"은 다음 확인 패널이 무-산출로 완주하면 선언**(무한 회귀 방지: 매 패널이 더 작은 nit만 내는 수렴 패턴).
+
 ## Go/No-Go 권고
 - **기술 MVP: GO 가능** — 핵심 가치(권한 기반 인용 답변 + 누출 0)가 코드·eval로 성립.
 - **파일럿 진입: 조건부 HOLD** — 코드 문제 아님. 위 "결정 → 해제 표"의 4개 입력(파일럿 부서/실문서·SSO·사내모델·폐쇄망)이 채워져야 진입 가능.

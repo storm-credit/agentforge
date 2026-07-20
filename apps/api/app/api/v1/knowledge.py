@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -6,6 +7,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Upload
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.principal import Principal, get_principal
 from app.domain.indexing import run_index_job
@@ -38,6 +40,8 @@ from app.domain.schemas import (
 from app.infra.audit import write_audit_event
 from app.infra.authz import PRIVILEGED_ROLES, enforce_roles
 from app.infra.object_store import document_object_key, get_object_store
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -668,15 +672,33 @@ def preview_retrieval(
         .order_by(Document.created_at.desc())
     )
     documents = list(db.scalars(statement))
-    vector_result = FakeVectorStore().search(
-        query=VectorQuery(
-            query_text=payload.query,
-            knowledge_source_ids=tuple(payload.knowledge_source_ids),
-            top_k=payload.top_k,
-        ),
-        documents=documents,
-        acl_filter=build_acl_filter(principal),
+    # Preview must exercise the SAME retrieval path as real runs (get_vector_store()
+    # + retrieval_min_score), or a Qdrant deployment previews different results than
+    # production answers. Mirrors runs.py's _search_authorized_context: configured
+    # store first, FakeVectorStore fallback on error so preview stays available
+    # (ACL-safe — the fake enforces the same ACL filter) in degraded mode. In
+    # hermetic tests/CI no backend is configured, so this still resolves to the fake.
+    # (The rerank hook is a run-pipeline stage, not part of the store; preview shows
+    # raw store retrieval, as before.)
+    query = VectorQuery(
+        query_text=payload.query,
+        knowledge_source_ids=tuple(payload.knowledge_source_ids),
+        top_k=payload.top_k,
+        min_score=get_settings().retrieval_min_score,
     )
+    acl_filter = build_acl_filter(principal)
+    store = get_vector_store()
+    vector_adapter = "fake" if isinstance(store, FakeVectorStore) else "qdrant"
+    try:
+        vector_result = store.search(query=query, documents=documents, acl_filter=acl_filter)
+    except Exception as exc:  # noqa: BLE001 - stay available, ACL-safe, but mark degraded
+        logger.warning(
+            "retrieval preview vector search failed (%s); falling back to FakeVectorStore", exc
+        )
+        vector_result = FakeVectorStore().search(
+            query=query, documents=documents, acl_filter=acl_filter
+        )
+        vector_adapter = "fake_fallback"
     hits = [
         RetrievalPreviewHit(
             document_id=hit.document_id,
@@ -703,7 +725,7 @@ def preview_retrieval(
             "knowledge_source_count": len(payload.knowledge_source_ids),
             "result_count": len(hits),
             "denied_count": vector_result.denied_count,
-            "vector_adapter": "fake",
+            "vector_adapter": vector_adapter,
         },
     )
     db.commit()

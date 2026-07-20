@@ -155,6 +155,8 @@ def create_agent_version(
 @router.get("/{agent_id}/versions", response_model=list[AgentVersionRead])
 def list_agent_versions(
     agent_id: str,
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> list[AgentVersion]:
@@ -172,7 +174,10 @@ def list_agent_versions(
     if not is_admin:
         # Even on a published agent, never expose draft/validated (untested) configs.
         query = query.where(AgentVersion.status.in_(("published", "superseded")))
-    return list(db.scalars(query))
+    # Status scoping above is a SQL WHERE (no Python post-filter), so LIMIT/OFFSET can
+    # safely live in SQL — the window is computed on the exact set the caller may see
+    # (same rationale as list_agents; contrast list_documents' Python-side slicing).
+    return list(db.scalars(query.limit(limit).offset(offset)))
 
 
 @router.post("/versions/{version_id}/validate", response_model=AgentVersionRead)

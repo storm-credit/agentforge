@@ -1096,3 +1096,180 @@ def test_retrieval_hits_include_chunk_content(client):
     assert hits, "expected at least one retrieval hit"
     assert "content" in hits[0]
     assert any(h.get("content") for h in hits)
+
+
+def test_list_runs_pagination(client):
+    ids = _seed_agent_with_indexed_doc(client)
+    alice = {
+        "X-Agent-Forge-User": "alice",
+        "X-Agent-Forge-Groups": "all-employees",
+        "X-Agent-Forge-Clearance": "internal",
+    }
+    bob = {
+        "X-Agent-Forge-User": "bob",
+        "X-Agent-Forge-Groups": "all-employees",
+        "X-Agent-Forge-Clearance": "internal",
+    }
+    admin = {"X-Agent-Forge-User": "ops", "X-Agent-Forge-Roles": "admin"}
+
+    def _run(headers):
+        resp = client.post(
+            "/api/v1/runs",
+            headers=headers,
+            json={
+                "agent_id": ids["agent_id"],
+                "input": {"message": "휴가 며칠?"},
+                "knowledge_source_ids": [ids["source_id"]],
+            },
+        )
+        assert resp.status_code == 201
+        return resp.json()["id"]
+
+    # Interleave owners so a window computed over the UNSCOPED superset would
+    # misalign the non-admin's pages (the PR #80 trap, SQL-WHERE variant).
+    alice_runs = [_run(alice)]
+    bob_runs = [_run(bob)]
+    alice_runs.append(_run(alice))
+    bob_runs.append(_run(bob))
+
+    # (a) default behavior unchanged: no params returns the full (role-scoped) list.
+    admin_default = [r["id"] for r in client.get("/api/v1/runs", headers=admin).json()]
+    assert set(admin_default) == set(alice_runs + bob_runs)
+    alice_default = [r["id"] for r in client.get("/api/v1/runs", headers=alice).json()]
+    assert set(alice_default) == set(alice_runs)
+
+    # (b) admin limit/offset windows slice the full admin list consistently.
+    def _admin_page(limit, offset):
+        return [
+            r["id"]
+            for r in client.get(
+                "/api/v1/runs", headers=admin, params={"limit": limit, "offset": offset}
+            ).json()
+        ]
+
+    assert _admin_page(2, 0) == admin_default[:2]
+    assert _admin_page(2, 2) == admin_default[2:]
+    assert _admin_page(2, 4) == []
+
+    # (c) non-admin windows are over the OWNER-scoped set: the SQL WHERE runs before
+    # LIMIT/OFFSET, so alice's limit=1 pages concatenate to exactly her runs — no
+    # gaps or bob-rows. If the window were over the unscoped superset, offset=1
+    # would land on bob's run and return [].
+    def _alice_page(limit, offset):
+        return [
+            r["id"]
+            for r in client.get(
+                "/api/v1/runs", headers=alice, params={"limit": limit, "offset": offset}
+            ).json()
+        ]
+
+    page0 = _alice_page(1, 0)
+    page1 = _alice_page(1, 1)
+    assert len(page0) == 1
+    assert len(page1) == 1
+    assert page0 + page1 == alice_default
+    assert _alice_page(1, 2) == []
+
+    # bounds validation matches the shared pagination pattern
+    assert client.get("/api/v1/runs", headers=admin, params={"limit": 0}).status_code == 422
+    assert client.get("/api/v1/runs", headers=admin, params={"limit": 501}).status_code == 422
+    assert client.get("/api/v1/runs", headers=admin, params={"offset": -1}).status_code == 422
+
+
+def test_confidence_gate_refusal_resets_used_as_citation(client, monkeypatch):
+    # Audit/eval integrity: RetrievalHit rows are created (optimistically marked
+    # used_as_citation=True) BEFORE the confidence gate can turn the run into a
+    # refusal. A refused run emits zero citations, so its persisted hits must not
+    # claim used_as_citation=True. Pre-generation refusal: context was never sent
+    # to the LLM, so used_in_context must be False too.
+    from app.core.config import get_settings
+    from app.services import llm_gateway
+
+    monkeypatch.setenv("AGENT_FORGE_ANSWER_MIN_SCORE", "1.01")
+    get_settings.cache_clear()
+
+    def boom_generate(self, *, question, context, language, temperature=0.2, top_p=None):
+        raise AssertionError("LLM must not be called when confidence gate trips")
+
+    monkeypatch.setattr(llm_gateway.LLMGateway, "generate", boom_generate)
+    try:
+        ids = _seed_agent_with_indexed_doc(client)
+        resp = client.post(
+            "/api/v1/runs",
+            json={
+                "agent_id": ids["agent_id"],
+                "input": {"message": "휴가 며칠?"},
+                "knowledge_source_ids": [ids["source_id"]],
+            },
+        )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["citations"] == []
+
+        hits = client.get(f"/api/v1/runs/{body['id']}/retrieval-hits").json()
+        assert hits, "expected retrieval hits to be recorded even on refusal"
+        assert all(h["used_as_citation"] is False for h in hits)
+        assert all(h["used_in_context"] is False for h in hits)
+    finally:
+        get_settings.cache_clear()
+
+
+def test_grounding_guard_trip_resets_used_as_citation(client, monkeypatch):
+    # Same invariant on the POST-generation path: the grounding guard replaces the
+    # answer and empties the citations, so used_as_citation must be reset — but the
+    # context WAS sent to generation before the trip, so used_in_context stays True.
+    from app.core.config import get_settings
+    from app.services import llm_gateway
+
+    monkeypatch.setenv("AGENT_FORGE_GROUNDING_MIN", "0.99")
+    get_settings.cache_clear()
+
+    def fake_generate(self, *, question, context, language, temperature=0.2, top_p=None):
+        return llm_gateway.GeneratedAnswer(text="PWNED", used_llm=True, fallback_used=False)
+
+    monkeypatch.setattr(llm_gateway.LLMGateway, "generate", fake_generate)
+    try:
+        ids = _seed_agent_with_indexed_doc(client)
+        resp = client.post(
+            "/api/v1/runs",
+            json={
+                "agent_id": ids["agent_id"],
+                "input": {"message": "휴가 며칠?"},
+                "knowledge_source_ids": [ids["source_id"]],
+            },
+        )
+        assert resp.status_code == 201
+        body = resp.json()
+        assert body["citations"] == []
+
+        hits = client.get(f"/api/v1/runs/{body['id']}/retrieval-hits").json()
+        assert hits, "expected retrieval hits to be recorded even on guard trip"
+        assert all(h["used_as_citation"] is False for h in hits)
+        assert all(h["used_in_context"] is True for h in hits)
+    finally:
+        get_settings.cache_clear()
+
+
+def test_successful_run_keeps_used_as_citation(client):
+    # No-regression check for the reconciliation pass: a normal answered run still
+    # persists used_as_citation=True on the hits that back its citations.
+    ids = _seed_agent_with_indexed_doc(client)
+    resp = client.post(
+        "/api/v1/runs",
+        json={
+            "agent_id": ids["agent_id"],
+            "input": {"message": "휴가 며칠?"},
+            "knowledge_source_ids": [ids["source_id"]],
+        },
+    )
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["citations"], "expected a cited answer"
+
+    hits = client.get(f"/api/v1/runs/{body['id']}/retrieval-hits").json()
+    cited_chunk_ids = {c["chunk_id"] for c in body["citations"]}
+    assert cited_chunk_ids
+    for hit in hits:
+        if hit["chunk_id"] in cited_chunk_ids:
+            assert hit["used_as_citation"] is True
+            assert hit["used_in_context"] is True

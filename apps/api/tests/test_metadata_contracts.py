@@ -502,6 +502,10 @@ def test_restore_does_not_resurrect_vectors(client, monkeypatch):
         f"/api/v1/knowledge/documents/{document['id']}/restore", headers=_ADMIN
     )
     assert resp.status_code == 200
+    # The fail-if-used guard is scoped to the restore call only: the retrieval
+    # preview below now legitimately resolves the configured store via
+    # get_vector_store() (same path as real runs), so the patch must be lifted first.
+    monkeypatch.undo()
 
     # No chunk/vector-backed retrieval after restore: chunks are "active" (not
     # "indexed"), so the fake store can only emit its chunk-less document fallback
@@ -520,7 +524,6 @@ def test_restore_does_not_resurrect_vectors(client, monkeypatch):
     # document previously held trusted content (has_been_indexed stays True across
     # archive+restore), re-indexing it is a PRIVILEGED_ROLES mutation now
     # (security/reindex-durable-flag), so an admin drives the re-index here.
-    monkeypatch.undo()
     job = client.post(
         f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
         headers=_ADMIN,
@@ -779,6 +782,161 @@ def test_list_sources_pagination_applies_after_clearance_filter(client):
     assert page0 + page1 == full
     assert len(set(page0 + page1)) == 2
     assert _low_page(1, 2) == []
+
+
+def test_list_agent_versions_pagination(client):
+    agent = client.post(
+        "/api/v1/agents",
+        json={"name": "Version Pg Agent", "purpose": "p", "owner_department": "Operations"},
+    ).json()
+
+    def _create_version():
+        return client.post(
+            "/api/v1/agents/versions",
+            headers=_ADMIN,
+            json={"agent_id": agent["id"], "config": {"citation_required": True}},
+        ).json()
+
+    def _publish(version_id):
+        client.post(
+            f"/api/v1/agents/versions/{version_id}/publish",
+            headers=_ADMIN,
+            json={"reason": "pagination fixture"},
+        )
+
+    # v1 published then superseded, v2 draft, v3 published, v4 draft — interleaved so
+    # a window over the unfiltered set would misalign the non-admin's pages.
+    v1 = _create_version()
+    _publish(v1["id"])
+    v2 = _create_version()  # noqa: F841 - draft, must stay hidden from non-admins
+    v3 = _create_version()
+    _publish(v3["id"])  # supersedes v1
+    v4 = _create_version()  # noqa: F841 - draft
+
+    url = f"/api/v1/agents/{agent['id']}/versions"
+
+    # (a) default behavior unchanged: admin sees all 4 (version desc), non-admin
+    # sees only published+superseded.
+    admin_default = [v["id"] for v in client.get(url, headers=_ADMIN).json()]
+    assert len(admin_default) == 4
+    dev_default = [v["id"] for v in client.get(url, headers=_DEVELOPER).json()]
+    assert dev_default == [v3["id"], v1["id"]]
+
+    # (b) admin windows slice the full admin list consistently.
+    def _admin_page(limit, offset):
+        return [
+            v["id"]
+            for v in client.get(
+                url, headers=_ADMIN, params={"limit": limit, "offset": offset}
+            ).json()
+        ]
+
+    assert _admin_page(2, 0) == admin_default[:2]
+    assert _admin_page(2, 2) == admin_default[2:]
+    assert _admin_page(2, 4) == []
+
+    # (c) non-admin windows are over the status-scoped set (SQL WHERE before
+    # LIMIT/OFFSET): offset=1 lands on superseded v1, not on hidden draft v2.
+    def _dev_page(limit, offset):
+        return [
+            v["id"]
+            for v in client.get(
+                url, headers=_DEVELOPER, params={"limit": limit, "offset": offset}
+            ).json()
+        ]
+
+    assert _dev_page(1, 0) == [v3["id"]]
+    assert _dev_page(1, 1) == [v1["id"]]
+    assert _dev_page(1, 2) == []
+
+    # bounds validation matches the shared pagination pattern
+    assert client.get(url, headers=_ADMIN, params={"limit": 0}).status_code == 422
+    assert client.get(url, headers=_ADMIN, params={"limit": 501}).status_code == 422
+    assert client.get(url, headers=_ADMIN, params={"offset": -1}).status_code == 422
+
+
+def _seed_preview_document(client, *, marker: str):
+    source = client.post(
+        "/api/v1/knowledge/sources",
+        json={"name": f"Preview Store Src {marker}", "description": "x", "owner_department": "Operations"},
+    ).json()
+    document = client.post(
+        "/api/v1/knowledge/documents",
+        json={
+            "knowledge_source_id": source["id"],
+            "title": f"Preview Store Doc {marker}",
+            "object_uri": f"object://synthetic/preview-store-{marker}.md",
+            "checksum": f"sha256-preview-store-{marker}",
+            "mime_type": "text/markdown",
+            "confidentiality_level": "internal",
+            "access_groups": ["all-employees"],
+        },
+    ).json()
+    job = client.post(
+        f"/api/v1/knowledge/documents/{document['id']}/index-jobs",
+        json={"source_text": "# Remote Work\n\nEmployees may request remote work after manager approval."},
+    ).json()
+    assert job["status"] == "succeeded"
+    return source
+
+
+def test_retrieval_preview_uses_configured_vector_store(client, monkeypatch):
+    # The preview must go through get_vector_store() — the SAME store-resolution path
+    # real runs use — not a hardcoded FakeVectorStore. In this hermetic environment
+    # the configured store still resolves to the fake, so results are unchanged; the
+    # spy asserts the resolution path itself.
+    import app.api.v1.knowledge as knowledge_module
+
+    calls = {"count": 0}
+    real_get_vector_store = knowledge_module.get_vector_store
+
+    def spy_get_vector_store():
+        calls["count"] += 1
+        return real_get_vector_store()
+
+    # Seed BEFORE patching: other knowledge routes (archive purge, ACL sync) also
+    # resolve the store, so the spy must only observe the preview call.
+    source = _seed_preview_document(client, marker="configured")
+    monkeypatch.setattr(knowledge_module, "get_vector_store", spy_get_vector_store)
+
+    response = client.post(
+        "/api/v1/knowledge/retrieval/preview",
+        json={"query": "manager approval", "knowledge_source_ids": [source["id"]], "top_k": 5},
+    )
+
+    assert response.status_code == 200
+    assert calls["count"] == 1
+    assert response.json()["hits"], "expected the configured (fake) store to return hits"
+
+
+def test_retrieval_preview_falls_back_to_fake_when_store_errors(client, monkeypatch):
+    # Mirrors runs.py's degraded-mode behavior: if the configured store errors, the
+    # preview stays available (ACL-safe) on the FakeVectorStore instead of 500ing.
+    import app.api.v1.knowledge as knowledge_module
+
+    class _Boom:
+        def search(self, **kwargs):
+            raise RuntimeError("qdrant down")
+
+    source = _seed_preview_document(client, marker="fallback")
+    monkeypatch.setattr(knowledge_module, "get_vector_store", lambda: _Boom())
+
+    response = client.post(
+        "/api/v1/knowledge/retrieval/preview",
+        json={"query": "manager approval", "knowledge_source_ids": [source["id"]], "top_k": 5},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["hits"], "expected fallback fake-store hits"
+
+    # The audit trail records the degraded adapter honestly.
+    events = client.get(
+        "/api/v1/audit/events",
+        params={"event_type": "retrieval.previewed"},
+        headers=_ADMIN,
+    ).json()
+    assert events, "expected a retrieval.previewed audit event"
+    assert events[0]["payload"]["vector_adapter"] == "fake_fallback"
 
 
 def test_privileged_mutations_require_admin_role(client):

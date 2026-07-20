@@ -4,7 +4,7 @@ import logging
 from datetime import UTC, datetime
 from time import perf_counter
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -55,13 +55,18 @@ def _can_read_run(principal: Principal, run: Run) -> bool:
 
 @router.get("", response_model=list[RunRead])
 def list_runs(
+    limit: int = Query(default=200, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> list[Run]:
     statement = select(Run).order_by(Run.created_at.desc())
     if "admin" not in principal.roles:
         statement = statement.where(Run.user_id == principal.user_id)
-    return list(db.scalars(statement))
+    # Owner/admin scoping above is a SQL WHERE (no Python post-filter), so LIMIT/OFFSET
+    # can safely live in SQL — the window is computed on the exact set the caller may
+    # see (same rationale as list_agents; contrast list_documents' Python-side slicing).
+    return list(db.scalars(statement.limit(limit).offset(offset)))
 
 
 @router.post("", response_model=RunRead, status_code=status.HTTP_201_CREATED)
@@ -184,31 +189,35 @@ def create_run(
     )
 
     citations = []
+    # Rows are created optimistically here (before the confidence gate / judge /
+    # grounding guard can turn the run into a refusal); references are kept so the
+    # reconciliation pass below can make used_as_citation reflect the FINAL outcome.
+    retrieval_hit_rows: list[RetrievalHit] = []
     for rank, hit in enumerate(ranked_hits, start=1):
         citation_locator = _hit_locator(hit)
         in_context = rerank_top_k is None or rank <= rerank_top_k
         usable_as_citation = in_context and bool(hit.chunk_id and citation_locator)
-        db.add(
-            RetrievalHit(
-                run_id=run.id,
-                chunk_id=hit.chunk_id,
-                document_id=hit.document_id,
-                title=hit.title,
-                citation_locator=citation_locator,
-                rank_original=rank_before_rerank.get(hit, rank),
-                rank_reranked=rank,
-                score_vector=hit.score,
-                score_rerank=None,
-                used_in_context=in_context,
-                used_as_citation=usable_as_citation,
-                acl_filter_snapshot={
-                    "subjects": list(acl_filter.subjects),
-                    "clearance_level": acl_filter.clearance_level,
-                    "knowledge_source_ids": knowledge_source_ids,
-                    "vector_adapter": vector_adapter,
-                },
-            )
+        hit_row = RetrievalHit(
+            run_id=run.id,
+            chunk_id=hit.chunk_id,
+            document_id=hit.document_id,
+            title=hit.title,
+            citation_locator=citation_locator,
+            rank_original=rank_before_rerank.get(hit, rank),
+            rank_reranked=rank,
+            score_vector=hit.score,
+            score_rerank=None,
+            used_in_context=in_context,
+            used_as_citation=usable_as_citation,
+            acl_filter_snapshot={
+                "subjects": list(acl_filter.subjects),
+                "clearance_level": acl_filter.clearance_level,
+                "knowledge_source_ids": knowledge_source_ids,
+                "vector_adapter": vector_adapter,
+            },
         )
+        db.add(hit_row)
+        retrieval_hit_rows.append(hit_row)
         if usable_as_citation:
             citations.append(
                 {
@@ -280,6 +289,25 @@ def create_run(
                 run.answer = _guard_refusal(answer_language)
                 citations = []
                 run.citations = citations
+
+    # Reconcile the persisted RetrievalHit rows with the FINAL citation outcome. The
+    # rows above were written with used_as_citation=True before any of the gates ran;
+    # if a gate then emptied the citations (refusal), leaving those rows as-is would
+    # persist hits claiming used_as_citation=True on a run that emitted ZERO citations
+    # — polluting the audit/eval trail. Invariant: used_as_citation=True never
+    # survives on a run whose final citations list is empty.
+    #
+    # used_in_context semantics (deliberate): on a PRE-generation refusal (confidence
+    # gate or judge) the context was never sent to the LLM, so used_in_context is
+    # reset to False — nothing was "used". On a POST-generation grounding-guard trip
+    # the context WAS sent to generation before the answer was replaced, so
+    # used_in_context stays True (it honestly records what the model saw).
+    if not citations:
+        refused_before_generation = confidence_gate_tripped or judge_refused
+        for hit_row in retrieval_hit_rows:
+            hit_row.used_as_citation = False
+            if refused_before_generation:
+                hit_row.used_in_context = False
 
     # PII masking (defense-in-depth, opt-in): redact known PII patterns from the
     # final answer before it is persisted/returned. Regex-based and conservative —

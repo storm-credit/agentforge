@@ -1,0 +1,143 @@
+schema_version: agentforge.development_mcp_registry/v1
+status: draft
+owner: delivery-harness
+
+principles:
+  product_runtime_inheritance: prohibited
+  credentials_shared_with_product_runtime: false
+  unregistered_server_use: prohibited
+  destructive_actions_default: blocked
+  direct_main_mutation_default: blocked
+  production_access_default: blocked
+  secret_output: prohibited
+
+servers:
+  - server_id: github-connected-app
+    display_name: GitHub connected application
+    status: active
+    owner: pm-orchestrator
+    purpose:
+      - inspect repository, issues, pull requests, and CI metadata
+      - create bounded issues, branches, documentation commits, and pull requests
+      - merge reviewed pull requests after required evidence
+    allowed_roles:
+      - pm-orchestrator
+      - product-architect
+      - security-trust-architect
+      - backend-specialist
+      - frontend-specialist
+      - platform-specialist
+      - qa-eval-specialist
+      - release-governor
+    capabilities:
+      read:
+        - repository_metadata
+        - files
+        - commits
+        - issues
+        - pull_requests
+        - workflow_status
+      write:
+        - create_issue
+        - update_issue
+        - create_branch
+        - create_or_update_file_on_feature_branch
+        - create_draft_pull_request
+        - update_pull_request
+        - mark_ready
+        - merge_after_gates
+      destructive:
+        - delete_file
+        - close_without_resolution
+        - force_update_ref
+    scope:
+      repositories:
+        - storm-credit/agentforge
+      protected_branches:
+        - main
+      direct_protected_branch_write: false
+      production_environment_access: false
+    approvals:
+      feature_branch_documentation_write: work_order
+      application_code_write: work_order_and_tests
+      protected_branch_write: prohibited
+      merge: required_ci_and_review_policy
+      destructive_action: explicit_human_authorization
+    credentials:
+      source: connected_application
+      least_privilege_required: true
+      may_be_written_to_output: false
+      may_be_written_to_repository: false
+    audit:
+      system: github_audit_and_repository_history
+      correlation_required: true
+    disable:
+      method: revoke_app_or_registry_status
+      incident_owner: repository-owner
+
+  - server_id: local-development-tools
+    display_name: Local development and verification tools
+    status: approved_not_runtime
+    owner: platform-specialist
+    purpose:
+      - inspect isolated checkout
+      - run formatting, lint, tests, schema validation, and build commands
+      - generate non-secret local evidence
+    allowed_roles:
+      - backend-specialist
+      - frontend-specialist
+      - platform-specialist
+      - qa-eval-specialist
+    capabilities:
+      read:
+        - isolated_checkout
+        - dependency_metadata
+        - test_outputs
+      write:
+        - feature_branch_worktree
+        - temporary_test_artifacts
+      destructive:
+        - isolated_temporary_files_only
+    scope:
+      isolated_worktree_required: true
+      shared_mutable_virtual_environment: prohibited
+      host_system_paths: prohibited
+      production_environment_access: false
+    approvals:
+      repository_scoped_command: work_order
+      dependency_install: lockfile_and_policy
+      destructive_action: explicit_human_authorization
+    credentials:
+      source: environment_specific
+      least_privilege_required: true
+      may_be_written_to_output: false
+      may_be_written_to_repository: false
+    audit:
+      system: work_order_evidence_package
+      correlation_required: true
+    disable:
+      method: remove_client_configuration_or_registry_status
+      incident_owner: platform-specialist
+
+registration_rules:
+  required_fields:
+    - server_id
+    - owner
+    - purpose
+    - allowed_roles
+    - capabilities
+    - scope
+    - approvals
+    - credentials
+    - audit
+    - disable
+  review_required:
+    - pm-orchestrator
+    - security-trust-architect
+    - affected_domain_owner
+  evidence_required:
+    - permission_scope_review
+    - protected_target_test
+    - secret_redaction_test
+    - destructive_action_block_test
+    - disable_procedure_test

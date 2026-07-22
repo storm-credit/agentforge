@@ -1,0 +1,147 @@
+schema_version: agentforge.evidence_package/v1
+package_id: EP-EXAMPLE-DOC-SLICE-001
+package_type: work_slice
+status: evidence_ready
+candidate:
+  repository: storm-credit/agentforge
+  commit_sha: abcdef1
+  pull_request: 123
+  environment: github-ci
+scope:
+  problem: >-
+    A bounded documentation or harness policy slice needs candidate-specific
+    evidence before it can be merged.
+  intended_outcome: >-
+    Demonstrate the minimum structure for scope, verification, risk, review,
+    limitations, and a pending merge decision.
+  work_order_ref: harness/examples/work-order.yaml
+  issue_refs:
+    - "#EXAMPLE"
+  requirement_ids:
+    - DEL-001
+    - DEL-003
+    - DEL-005
+  adr_refs: []
+  included:
+    - add one approved documentation artifact
+    - update document authority
+    - run required CI
+  excluded:
+    - application runtime behavior changes
+    - migration or deployment implementation
+  acceptance_criteria:
+    - only approved documentation and harness paths changed
+    - required repository CI succeeded
+    - readiness claims remained bounded to repository evidence
+  prohibited_actions:
+    - direct main write
+    - merge before required checks
+    - invent pilot or production evidence
+  affected_trust_boundaries: []
+  affected_data_classifications:
+    - internal
+changes:
+  summary: Added one bounded documentation artifact and updated the documentation index.
+  files:
+    - docs/10-architecture/example.md
+    - docs/index.md
+  components:
+    - documentation
+    - delivery-harness
+  runtime_behavior_changed: false
+  migration_refs: []
+  configuration_changes: []
+verification:
+  - check_id: DIFF-SCOPE
+    type: manual_review
+    status: passed
+    candidate_ref: abcdef1
+    summary: Compare shows only approved documentation and harness paths.
+    reference: pull-request-file-list
+    executed_by: product-architect
+    executed_at: "2026-07-22T00:00:00Z"
+    limitations: []
+    redaction_reviewed: true
+  - check_id: CI-BACKEND
+    type: integration
+    status: passed
+    candidate_ref: abcdef1
+    command_or_workflow: GitHub Actions Backend job
+    summary: Ruff, migration round trip, and full pytest succeeded.
+    reference: workflow-run-example
+    executed_by: github-actions
+    executed_at: "2026-07-22T00:00:00Z"
+    limitations: []
+    redaction_reviewed: true
+  - check_id: CI-FRONTEND
+    type: integration
+    status: passed
+    candidate_ref: abcdef1
+    command_or_workflow: GitHub Actions Frontend job
+    summary: TypeScript check succeeded.
+    reference: workflow-run-example
+    executed_by: github-actions
+    executed_at: "2026-07-22T00:00:00Z"
+    limitations: []
+    redaction_reviewed: true
+  - check_id: CI-E2E
+    type: e2e
+    status: passed
+    candidate_ref: abcdef1
+    command_or_workflow: GitHub Actions Playwright E2E job
+    summary: Live-backend and PostgreSQL E2E suite succeeded.
+    reference: workflow-run-example
+    executed_by: github-actions
+    executed_at: "2026-07-22T00:00:00Z"
+    limitations: []
+    redaction_reviewed: true
+risks:
+  findings: []
+  residual_risks:
+    - risk_id: RISK-EXAMPLE-01
+      description: Provider-specific hook enforcement is not part of this illustrative package.
+      severity: low
+      owner: delivery-harness
+      accepted: false
+      review_condition: Review in the hook-adapter Work Order.
+  secret_redaction_review: No secrets or classified runtime data are included.
+  rollback_or_disable_plan: Revert the documentation commit if the baseline is rejected.
+limitations:
+  - limitation_id: LIMIT-EXAMPLE-01
+    classification: implementation
+    description: This example does not prove provider-specific hook enforcement.
+    impact: Repository policy exists but adapter enforcement remains separate work.
+    owner: delivery-harness
+    blocker: false
+    resolution_trigger: A provider-adapter Work Order is activated.
+    issue_or_adr_ref: ADR-205
+reviews:
+  - role: product-architect
+    reviewer: example-reviewer
+    outcome: accepted
+    reviewed_at: "2026-07-22T00:00:00Z"
+    independent: false
+    findings: []
+    reference: review-example
+    conflict_of_interest: Author self-review; independent release review still required.
+  - role: independent-release-governor
+    reviewer: pending
+    outcome: advisory
+    reviewed_at: "2026-07-22T00:00:00Z"
+    independent: true
+    findings:
+      - Candidate references are illustrative and must be replaced with exact values.
+    reference: pending-review
+    conflict_of_interest: none
+final_decision:
+  stage: merge
+  outcome: PENDING
+  decided_by:
+    - independent-release-governor
+  decided_at: "2026-07-22T00:00:00Z"
+  reason: Exact candidate and workflow references must replace illustrative values before GO.
+  conditions:
+    - replace example commit, PR, workflow, and reviewer references
+created_at: "2026-07-22T00:00:00Z"
+updated_at: "2026-07-22T00:00:00Z"
+created_by: qa-eval-specialist

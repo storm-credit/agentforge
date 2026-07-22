@@ -10,10 +10,14 @@
 2. [Capability Map](00-product/capability-map.md) — 능력을 현재 입증·현재 제한·파일럿 필수·후속 후보·비범위로 분류
 3. [Scope and Non-Goals](00-product/scope-and-non-goals.md) — 활성 범위, 조건부 범위, 명시적 제외, 백로그 진입 규칙
 4. [Product Glossary](00-product/glossary.md) — 제품·보안·런타임·평가·하니스 용어의 공식 의미
-5. [Current State](40-delivery/current-state.md) — 현재 실제 상태와 허용 작업의 SSOT 후보
-6. [Architecture Recovery Plan](40-delivery/architecture-recovery-plan.md) — 설계 복구와 하니스 제품화 실행 순서
-7. [Delivery Harness](../harness/README.md) — 전문 에이전트, Skills, Hooks, MCP, 검증 루프 운영 원칙
-8. [Harness Manifest](../harness/manifest.yaml) — 하니스의 초기 기계 판독 기준선
+5. [C4 Architecture Baseline](10-architecture/c4-model.md) — Context, Container, Component, Deployment와 소유권
+6. [Domain Model](10-architecture/domain-model.md) — 핵심 엔터티, aggregate, 권위 저장소와 관계
+7. [Core State Machines](10-architecture/state-machines.md) — Agent Version, Document, Index Job, Run, Approval, Eval/Release 상태 전이
+8. [ADR Register](30-decisions/adr-register.md) — 채택·제안·미결정·연기된 아키텍처 결정
+9. [Current State](40-delivery/current-state.md) — 현재 실제 상태와 허용 작업의 SSOT 후보
+10. [Architecture Recovery Plan](40-delivery/architecture-recovery-plan.md) — 설계 복구와 하니스 제품화 실행 순서
+11. [Delivery Harness](../harness/README.md) — 전문 에이전트, Skills, Hooks, MCP, 검증 루프 운영 원칙
+12. [Harness Manifest](../harness/manifest.yaml) — 하니스의 초기 기계 판독 기준선
 
 위 기준선은 기존 코드와 문서를 폐기하지 않는다. 기존 `docs/status-and-go-no-go.md`는 상세 이력과 증거 로그로 유지하고, `notes/01_PM/WBS.md`는 최초 계획 기준선으로 유지한다.
 
@@ -47,6 +51,8 @@
 | 1차 MVP | 사내 문서 기반 RAG 에이전트 빌더 |
 | 핵심 검증 | 권한 기반 검색, 근거 답변, 실행/감사 로그 |
 | 능력 분류 | CURRENT-PROVEN / CURRENT-LIMITED / PILOT-REQUIRED / LATER-CANDIDATE / NON-GOAL |
+| 논리 아키텍처 | Control / Runtime / Data / Model / Delivery Plane |
+| 배포 해석 | 논리 컴포넌트와 현재 물리 프로세스를 구분. MVP에서 co-location 허용 |
 | 기술 MVP | GO 가능 |
 | 파일럿 | 조직·SSO·실문서·사내모델·폐쇄망 결정 전 HOLD |
 | 후속 확장 | 승인된 Tool Pack/MCP 계약을 전제로 DB, ERP, 그룹웨어, 파일서버, Git |
@@ -59,6 +65,10 @@
 | `docs/00-product/capability-map.md` | 능력별 현재 증거 수준과 파일럿·후속 분류 |
 | `docs/00-product/scope-and-non-goals.md` | 구현 허용 범위, 명시적 제외, 범위 변경 절차 |
 | `docs/00-product/glossary.md` | 공식 용어와 readiness 의미 |
+| `docs/10-architecture/c4-model.md` | 시스템·컨테이너·컴포넌트·배포 책임과 경계 |
+| `docs/10-architecture/domain-model.md` | 핵심 도메인 엔터티, aggregate, 관계와 권위 |
+| `docs/10-architecture/state-machines.md` | 상태 전이, guard, invalid transition, audit 요구 |
+| `docs/30-decisions/adr-register.md` | 아키텍처 결정 상태와 상세 ADR 생성 트리거 |
 | `docs/40-delivery/current-state.md` | 현재 상태와 다음 허용 작업 |
 | `docs/status-and-go-no-go.md` | 상세 구현·패널·검증 이력 |
 | `notes/01_PM/WBS.md` | 최초 계획 기준선 |
@@ -69,12 +79,12 @@
 
 | 전문가 | 공식 문서 |
 |---|---|
-| PM 오케스트레이터 / Product Architect | [Product Charter](00-product/product-charter.md), [Capability Map](00-product/capability-map.md), [Scope and Non-Goals](00-product/scope-and-non-goals.md), [Product Glossary](00-product/glossary.md), [Current State](40-delivery/current-state.md), [Architecture Recovery Plan](40-delivery/architecture-recovery-plan.md) |
+| PM 오케스트레이터 / Product Architect | [Product Charter](00-product/product-charter.md), [Capability Map](00-product/capability-map.md), [Scope and Non-Goals](00-product/scope-and-non-goals.md), [Product Glossary](00-product/glossary.md), [C4 Architecture Baseline](10-architecture/c4-model.md), [Domain Model](10-architecture/domain-model.md), [Core State Machines](10-architecture/state-machines.md), [ADR Register](30-decisions/adr-register.md), [Current State](40-delivery/current-state.md), [Architecture Recovery Plan](40-delivery/architecture-recovery-plan.md) |
 | 오케스트라 총괄 | [Orchestration Plan](orchestration-plan.md), [Agent Operating Model](agent-operating-model.md), [Deep Specialist Audit](deep-specialist-audit.md) |
 | PM Agent | [Project Proposal](project-proposal.md), [Use Case Definition](use-case-definition.md) |
 | PM Agent / 오케스트라 | [Pilot Readiness](pilot-readiness.md) |
-| 수석 아키텍트 | [Architecture](architecture.md) |
-| 보안 아키텍트 | [Security Model](security-model.md) |
+| 수석 아키텍트 | [Architecture](architecture.md), [C4 Architecture Baseline](10-architecture/c4-model.md), [Domain Model](10-architecture/domain-model.md), [Core State Machines](10-architecture/state-machines.md) |
+| 보안 아키텍트 | [Security Model](security-model.md), [ADR Register](30-decisions/adr-register.md) |
 | AI 아키텍트 | [Agent Build Spec](agent-build-spec.md) |
 | RAG 전문가 | [RAG Design](rag-design.md) |
 | 프론트엔드 전문가 / 오케스트라 | [Open Design Adoption Review](open-design-adoption.md) |

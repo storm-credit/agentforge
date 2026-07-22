@@ -1,0 +1,215 @@
+schema_version: agentforge.harness/v0.1
+status: foundation
+owner: pm-orchestrator
+related_epic: 108
+
+purpose: >-
+  Version-managed, vendor-neutral contracts for planning, designing,
+  implementing, reviewing, evaluating, and releasing Agent Forge.
+
+boundaries:
+  governs:
+    - project-delivery-orchestration
+    - specialist-work-orders
+    - development-tool-policy
+    - design-build-eval-operations-loops
+    - completion-and-evidence-gates
+  does_not_govern:
+    - end-user-agent-runtime-directly
+    - production-tool-registration-directly
+    - organizational-approval-substitution
+
+sources_of_truth:
+  product_charter: docs/00-product/product-charter.md
+  current_state: docs/40-delivery/current-state.md
+  detailed_history: docs/status-and-go-no-go.md
+  original_plan: notes/01_PM/WBS.md
+  repository_execution_rules: CLAUDE.md
+
+product_boundary:
+  current:
+    - governed-document-rag
+    - agent-version-lifecycle
+    - acl-aware-retrieval
+    - citation-and-refusal
+    - run-trace-and-audit
+    - ci-and-evaluation-evidence
+  pilot_requires:
+    - named-pilot-owner
+    - approved-real-documents
+    - sso-idp-integration
+    - approved-internal-models
+    - closed-network-staging
+    - accepted-retrieval-eval-baseline
+  deferred:
+    - autonomous-multi-agent-runtime
+    - arbitrary-mcp-discovery
+    - enterprise-write-actions
+    - external-saas-models-and-tools
+    - self-modifying-security-policy
+
+agents:
+  planned:
+    - id: pm-orchestrator
+      authority: scope-sequencing-gates-integration
+    - id: product-architect
+      authority: product-and-system-boundaries
+    - id: security-trust-architect
+      authority: trust-authorization-data-exposure-gates
+    - id: rag-data-specialist
+      authority: ingestion-retrieval-citation-evaluation-data
+    - id: runtime-mcp-specialist
+      authority: runtime-state-tool-contracts-mcp-boundaries
+    - id: backend-specialist
+      authority: api-domain-persistence-jobs
+    - id: frontend-specialist
+      authority: operator-workflows-accessible-ui
+    - id: platform-specialist
+      authority: deployment-observability-offline-release
+    - id: qa-eval-specialist
+      authority: tests-golden-sets-regression-evidence
+    - id: independent-release-governor
+      authority: evidence-based-go-hold-no-go
+
+skills:
+  planned:
+    - product-baseline-review
+    - architecture-decision-review
+    - threat-model-review
+    - rag-evaluation-design
+    - api-contract-review
+    - migration-verification
+    - release-governance
+
+hooks:
+  policy_only_in_v0_1:
+    - session_start
+    - pre_tool_use
+    - post_tool_use
+    - subagent_stop
+    - stop
+  invariants:
+    - no-direct-main-mutation
+    - no-unregistered-destructive-tool
+    - no-secret-in-evidence
+    - no-completion-without-evidence
+    - no-scope-expansion-by-specialist
+
+mcp:
+  classes:
+    development:
+      purpose: tools-used-to-build-agent-forge
+      promotion_to_product_runtime: forbidden-without-separate-registration
+    product_runtime:
+      purpose: tools-used-by-published-agent-forge-agents
+      registration_required: true
+  required_contract_fields:
+    - tool_id
+    - server_id
+    - version
+    - owner
+    - purpose
+    - input_classification
+    - output_classification
+    - side_effect
+    - risk_level
+    - allowed_roles
+    - allowed_agents
+    - approval_policy
+    - schema_hash
+    - timeout_policy
+    - retry_policy
+    - audit_policy
+    - redaction_policy
+    - failure_policy
+    - rollback_or_compensation
+
+loops:
+  design:
+    sequence:
+      - problem
+      - constraints-and-evidence
+      - alternatives
+      - tradeoff-and-risk-review
+      - decision-record
+      - contracts-and-acceptance-criteria
+      - approval
+    implementation_allowed_before_approval: false
+  build:
+    sequence:
+      - approved-work-order
+      - failing-test-or-explicit-check
+      - minimal-change
+      - targeted-tests
+      - regression-tests
+      - specialist-review
+      - evidence-package
+      - orchestrator-decision
+  eval:
+    sequence:
+      - baseline
+      - controlled-change
+      - deterministic-eval
+      - model-eval-when-appropriate
+      - regression-comparison
+      - adopt-revise-or-revert
+    deterministic_release_gates:
+      - authorization
+      - leakage
+      - required-citation-presence
+      - trace-completeness
+  operations:
+    sequence:
+      - deploy
+      - observe
+      - classify
+      - assign-owner
+      - recover-or-rollback
+      - update-evidence-and-decisions
+
+loop_budgets:
+  specialist_self_review_max: 2
+  implementation_rework_after_formal_review_max: 1
+  same_failure_before_human_escalation: 2
+  expert_panel_mode: impact-based
+  expert_panel_required_for:
+    - cross-domain-architecture-change
+    - trust-boundary-change
+    - release-convergence-review
+  low_impact_finding_policy: backlog
+  auto_generate_work_to_avoid_stopping: false
+
+allowed_work_during_pilot_hold:
+  - security-vulnerability
+  - unauthorized-data-exposure
+  - data-integrity-failure
+  - deployment-or-migration-blocker
+  - evaluation-or-trace-correctness-defect
+  - approved-mvp-regression
+  - architecture-recovery
+  - harness-productization
+
+evidence:
+  schemas_planned:
+    - agent-contract
+    - work-order
+    - review-result
+    - evidence-package
+    - tool-contract
+    - decision-record
+  completion_requires_one_or_more:
+    - automated-test
+    - deterministic-evaluation
+    - reviewed-design-artifact
+    - deployment-smoke
+    - security-review
+    - documented-human-decision
+
+next_slices:
+  - capability-map-and-glossary
+  - c4-and-domain-model
+  - trust-boundary-and-mcp-contract
+  - traceability-matrix
+  - agent-contract-and-work-order-schemas
+  - hook-policy-and-provider-adapters
+  - pilot-decision-pack

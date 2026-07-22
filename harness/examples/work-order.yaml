@@ -1,0 +1,142 @@
+schema_version: agentforge.work_order/v1
+work_order_id: WO-EXAMPLE-DOC-SLICE-001
+title: Add one bounded architecture documentation slice
+status: draft
+problem: >-
+  A defined architecture topic is not yet represented by a current repository
+  baseline, which creates ambiguity for later implementation and review.
+intended_outcome: >-
+  Add one reviewed, versioned architecture artifact and update document authority
+  without changing application runtime behavior.
+parent_issue_refs:
+  - "#EXAMPLE"
+scope:
+  included:
+    - create one architecture document
+    - update docs/index.md
+    - open a draft pull request and run required CI
+  excluded:
+    - application code changes
+    - runtime configuration changes
+    - migration or deployment implementation
+  affected_components:
+    - documentation
+    - delivery-harness
+  affected_trust_boundaries: []
+  affected_data_classifications:
+    - internal
+  runtime_behavior_change: false
+requirements:
+  - requirement_id: DEL-001
+    description: Work shall be bounded by an accepted Work Order.
+    authority_ref: docs/40-delivery/traceability-matrix.md
+    adr_refs: []
+  - requirement_id: DEL-003
+    description: Completion shall be supported by an Evidence Package.
+    authority_ref: docs/40-delivery/evidence-package-guide.md
+    adr_refs: []
+assigned_roles:
+  - agent_role_id: pm-orchestrator
+    responsibility: Accept scope, sequence, and required reviews.
+    accountable: true
+  - agent_role_id: product-architect
+    responsibility: Author and self-review the architecture artifact.
+    accountable: false
+  - agent_role_id: independent-release-governor
+    responsibility: Verify evidence and recommend merge GO/HOLD/NO-GO.
+    accountable: false
+inputs:
+  - name: product_baseline
+    reference: docs/00-product/product-charter.md
+    required: true
+  - name: current_state
+    reference: docs/40-delivery/current-state.md
+    required: true
+  - name: architecture_sources
+    reference: docs/architecture.md
+    required: true
+deliverables:
+  - name: architecture_artifact
+    path_or_reference: docs/10-architecture/example.md
+    owner_role: product-architect
+  - name: documentation_index
+    path_or_reference: docs/index.md
+    owner_role: product-architect
+acceptance_criteria:
+  - criterion_id: AC-01
+    description: The artifact separates current evidence from proposed target behavior.
+    verification: Manual Product Architect review.
+    blocker: true
+  - criterion_id: AC-02
+    description: Only approved documentation/harness paths change.
+    verification: Compare feature branch with main.
+    blocker: true
+  - criterion_id: AC-03
+    description: Required repository CI succeeds on the exact candidate commit.
+    verification: GitHub Actions run linked in the Evidence Package.
+    blocker: true
+verification_plan:
+  - check_id: DIFF-SCOPE
+    type: manual_review
+    expected_result: No application, migration, deployment, or runtime configuration files changed.
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-BACKEND
+    type: integration
+    command_or_workflow: GitHub Actions Backend job
+    expected_result: success
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-FRONTEND
+    type: integration
+    command_or_workflow: GitHub Actions Frontend job
+    expected_result: success
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-E2E
+    type: e2e
+    command_or_workflow: GitHub Actions E2E job
+    expected_result: success
+    evidence_destination: Evidence Package verification section.
+required_reviews:
+  - reviewer_role: product-architect
+    focus:
+      - architecture correctness
+      - current versus target claims
+    blocking: true
+  - reviewer_role: independent-release-governor
+    focus:
+      - candidate identity
+      - scope
+      - CI and evidence freshness
+    blocking: true
+prohibited_actions:
+  - edit main directly
+  - change application behavior
+  - invent pilot or production evidence
+  - continue into another slice before merge
+  - merge before required CI and review
+
+dependencies:
+  - description: Existing product and architecture baselines
+    type: decision
+    status: available
+    owner: pm-orchestrator
+    reference: docs/index.md
+loop_budget:
+  self_review_passes: 2
+  formal_rework_passes: 1
+  same_failure_before_escalation: 2
+escalation:
+  - trigger: Architecture source conflicts with product scope.
+    target_role: pm-orchestrator
+    action: Stop and request an explicit product/ADR decision.
+  - trigger: Same CI failure occurs twice without a clear bounded fix.
+    target_role: platform-specialist
+    action: Stop rework and provide failure attribution and logs.
+stop_conditions:
+  - all acceptance criteria pass and required reviews accept
+  - product or architecture authority is missing
+  - work exceeds the approved scope
+  - loop budget is exhausted
+  - a blocker finding remains open
+evidence_package_ref: harness/examples/evidence-package.yaml
+created_by: pm-orchestrator
+created_at: "2026-07-22T00:00:00Z"

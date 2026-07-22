@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentforge.local/schemas/work-order.schema.json",
+  "title": "Agent Forge Work Order",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "work_order_id",
+    "title",
+    "status",
+    "problem",
+    "intended_outcome",
+    "scope",
+    "requirements",
+    "assigned_roles",
+    "inputs",
+    "deliverables",
+    "acceptance_criteria",
+    "verification_plan",
+    "required_reviews",
+    "prohibited_actions",
+    "loop_budget",
+    "escalation",
+    "stop_conditions"
+  ],
+  "properties": {
+    "schema_version": {"const": "agentforge.work_order/v1"},
+    "work_order_id": {"type": "string", "pattern": "^[A-Z0-9][A-Z0-9_.-]{2,127}$"},
+    "title": {"type": "string", "minLength": 5},
+    "status": {"enum": ["draft", "accepted", "in_progress", "reviewing", "blocked", "completed", "cancelled", "superseded"]},
+    "problem": {"type": "string", "minLength": 20},
+    "intended_outcome": {"type": "string", "minLength": 20},
+    "parent_issue_refs": {"type": "array", "items": {"type": "string"}},
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["included", "excluded", "affected_components", "runtime_behavior_change"],
+      "properties": {
+        "included": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "excluded": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "affected_components": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "affected_trust_boundaries": {"type": "array", "items": {"type": "string"}},
+        "affected_data_classifications": {"type": "array", "items": {"type": "string"}},
+        "runtime_behavior_change": {"type": "boolean"}
+      }
+    },
+    "requirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["requirement_id", "description", "authority_ref"],
+        "properties": {
+          "requirement_id": {"type": "string"},
+          "description": {"type": "string"},
+          "authority_ref": {"type": "string"},
+          "adr_refs": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    },
+    "assigned_roles": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["agent_role_id", "responsibility"],
+        "properties": {
+          "agent_role_id": {"type": "string"},
+          "responsibility": {"type": "string"},
+          "accountable": {"type": "boolean"}
+        }
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "reference", "required"],
+        "properties": {
+          "name": {"type": "string"},
+          "reference": {"type": "string"},
+          "required": {"type": "boolean"},
+          "integrity_ref": {"type": "string"}
+        }
+      }
+    },
+    "deliverables": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "path_or_reference", "owner_role"],
+        "properties": {
+          "name": {"type": "string"},
+          "path_or_reference": {"type": "string"},
+          "owner_role": {"type": "string"}
+        }
+      }
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["criterion_id", "description", "verification"],
+        "properties": {
+          "criterion_id": {"type": "string"},
+          "description": {"type": "string"},
+          "verification": {"type": "string"},
+          "blocker": {"type": "boolean"}
+        }
+      }
+    },
+    "verification_plan": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["check_id", "type", "expected_result"],
+        "properties": {
+          "check_id": {"type": "string"},
+          "type": {"enum": ["lint", "unit", "integration", "migration", "e2e", "schema", "security", "eval", "performance", "manual_review", "other"]},
+          "command_or_workflow": {"type": "string"},
+          "expected_result": {"type": "string"},
+          "evidence_destination": {"type": "string"}
+        }
+      }
+    },
+    "required_reviews": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["reviewer_role", "focus", "blocking"],
+        "properties": {
+          "reviewer_role": {"type": "string"},
+          "focus": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "blocking": {"type": "boolean"}
+        }
+      }
+    },
+    "prohibited_actions": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "dependencies": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["description", "type", "status", "owner"],
+        "properties": {
+          "description": {"type": "string"},
+          "type": {"enum": ["code", "decision", "organization", "data", "model", "infrastructure", "security", "operations"]},
+          "status": {"enum": ["available", "missing", "blocked", "not_applicable"]},
+          "owner": {"type": "string"},
+          "reference": {"type": "string"}
+        }
+      }
+    },
+    "loop_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["self_review_passes", "formal_rework_passes", "same_failure_before_escalation"],
+      "properties": {
+        "self_review_passes": {"type": "integer", "minimum": 0, "maximum": 3},
+        "formal_rework_passes": {"type": "integer", "minimum": 0, "maximum": 2},
+        "same_failure_before_escalation": {"type": "integer", "minimum": 1, "maximum": 3}
+      }
+    },
+    "escalation": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["trigger", "target_role", "action"],
+        "properties": {
+          "trigger": {"type": "string"},
+          "target_role": {"type": "string"},
+          "action": {"type": "string"}
+        }
+      }
+    },
+    "stop_conditions": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+    "evidence_package_ref": {"type": "string"},
+    "created_by": {"type": "string"},
+    "accepted_by": {"type": "string"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "accepted_at": {"type": "string", "format": "date-time"}
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"enum": ["accepted", "in_progress", "reviewing", "completed"]}}},
+      "then": {"required": ["accepted_by", "accepted_at"]}
+    }
+  ]
+}

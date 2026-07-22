@@ -1,0 +1,56 @@
+schema_version: agentforge.product_tool_registry/v1
+status: draft
+owner: runtime-mcp-specialist
+security_owner: security-trust-architect
+
+pilot_policy:
+  consequential_write_tools_allowed: false
+  arbitrary_user_added_mcp_servers: false
+  development_mcp_inheritance: prohibited
+  unregistered_tool_execution: prohibited
+  external_saas_tools: prohibited
+  authorization_default: deny
+  required_contract_schema: harness/schemas/tool-contract.schema.json
+
+servers: []
+tools: []
+
+admission_gates:
+  - named_business_use_case
+  - accountable_domain_owner
+  - immutable_tool_contract_and_schema_hashes
+  - data_classification_and_destination_review
+  - principal_agent_build_and_target_authorization
+  - side_effect_and_risk_classification
+  - timeout_retry_rate_and_concurrency_policy
+  - preview_approval_and_action_hash_when_required
+  - idempotency_and_unknown_outcome_policy
+  - audit_redaction_and_retention_policy
+  - rollback_or_compensation_and_incident_owner
+  - contract_permission_failure_replay_and_load_tests
+  - security_review
+  - release_governor_decision
+
+activation_rules:
+  active_version_immutable: true
+  emergency_disable_supported: true
+  dynamic_discovery_grants_execution: false
+  schema_change_creates_new_version: true
+  implementation_behavior_change_creates_new_version: true
+  required_audit_failure_behavior: fail_closed
+
+future_read_only_example:
+  status: illustrative_only
+  executable: false
+  note: >-
+    A future read-only enterprise tool must still be registered and authorized.
+    This placeholder is not a Tool Contract and grants no runtime capability.
+
+future_write_example:
+  status: prohibited_in_first_pilot
+  executable: false
+  note: >-
+    ERP, database, email, calendar, groupware, file, source-control, financial,
+    access-control, and production-operation effects require a separately approved
+    product scope change, full Tool Contract, human approval policy, idempotency,
+    effect verification, and rollback or compensation design.

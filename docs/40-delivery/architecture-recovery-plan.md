@@ -239,7 +239,7 @@ Each slice must be a separate reviewed PR unless combining them materially impro
 - [x] Harness README added.
 - [x] Harness manifest added.
 - [x] Recovery plan added.
-- [ ] Docs index updated.
-- [ ] Draft PR opened.
-- [ ] No application code changed.
-- [ ] Review confirms no false production-readiness claim.
+- [x] Docs index updated.
+- [x] Draft PR #109 opened.
+- [x] No application code changed; branch comparison contains only `docs/` and `harness/` paths.
+- [x] Self-review confirms the documents state technical MVP GO-capable while retaining pilot HOLD and do not claim production readiness.

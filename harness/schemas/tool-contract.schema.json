@@ -1,0 +1,355 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentforge.local/schemas/tool-contract.schema.json",
+  "title": "Agent Forge Tool Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "tool_id",
+    "version",
+    "owner",
+    "purpose",
+    "runtime_boundary",
+    "implementation",
+    "schemas",
+    "data_policy",
+    "side_effects",
+    "risk",
+    "authorization",
+    "execution",
+    "approval",
+    "idempotency",
+    "audit",
+    "failure_handling",
+    "operations",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "agentforge.tool_contract/v1"
+    },
+    "tool_id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_.-]{2,127}$"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$"
+    },
+    "display_name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160
+    },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["domain", "service_owner", "security_owner"],
+      "properties": {
+        "domain": {"type": "string", "minLength": 1},
+        "service_owner": {"type": "string", "minLength": 1},
+        "security_owner": {"type": "string", "minLength": 1},
+        "support_reference": {"type": "string"}
+      }
+    },
+    "purpose": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "approved_use_cases", "prohibited_uses"],
+      "properties": {
+        "summary": {"type": "string", "minLength": 10},
+        "approved_use_cases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 3}
+        },
+        "prohibited_uses": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string", "minLength": 3}
+        }
+      }
+    },
+    "runtime_boundary": {
+      "enum": ["development", "product"]
+    },
+    "implementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["protocol", "reference", "provenance", "network_destination"],
+      "properties": {
+        "protocol": {
+          "enum": ["mcp", "https", "internal_api", "command", "library"]
+        },
+        "reference": {"type": "string", "minLength": 1},
+        "server_id": {"type": "string"},
+        "provenance": {"type": "string", "minLength": 1},
+        "network_destination": {"type": "string", "minLength": 1},
+        "authentication_method": {"type": "string"},
+        "secret_reference": {"type": "string"}
+      }
+    },
+    "schemas": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_schema_ref", "input_schema_sha256", "output_schema_ref", "output_schema_sha256"],
+      "properties": {
+        "input_schema_ref": {"type": "string", "minLength": 1},
+        "input_schema_sha256": {"$ref": "#/$defs/sha256"},
+        "output_schema_ref": {"type": "string", "minLength": 1},
+        "output_schema_sha256": {"$ref": "#/$defs/sha256"},
+        "compatibility": {
+          "enum": ["strict", "backward_compatible", "explicit_adapter"]
+        }
+      }
+    },
+    "data_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["input_classifications", "output_classifications", "external_transfer", "retention", "redaction"],
+      "properties": {
+        "input_classifications": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/classification"}
+        },
+        "output_classifications": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {"$ref": "#/$defs/classification"}
+        },
+        "external_transfer": {"type": "boolean"},
+        "approved_destinations": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "retention": {"type": "string", "minLength": 1},
+        "redaction": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "side_effects": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "consequential", "description"],
+      "properties": {
+        "mode": {
+          "enum": ["none", "read", "write", "delete", "external_transfer", "mixed"]
+        },
+        "consequential": {"type": "boolean"},
+        "description": {"type": "string", "minLength": 1},
+        "effect_verification": {"type": "string"},
+        "reversible": {"type": "boolean"}
+      }
+    },
+    "risk": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["class", "failure_impact", "abuse_cases"],
+      "properties": {
+        "class": {"enum": ["R0", "R1", "R2", "R3", "R4"]},
+        "failure_impact": {"type": "string", "minLength": 1},
+        "abuse_cases": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "authorization": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["principal_mode", "allowed_roles", "allowed_agents", "target_allowlist", "deny_by_default"],
+      "properties": {
+        "principal_mode": {
+          "enum": ["service", "delegated_user", "service_and_user"]
+        },
+        "allowed_roles": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "allowed_groups": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "allowed_agents": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "allowed_builds": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "target_allowlist": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "denied_targets": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "deny_by_default": {"const": true}
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["timeout_ms", "max_retries", "retry_conditions", "rate_limit", "max_concurrency"],
+      "properties": {
+        "timeout_ms": {"type": "integer", "minimum": 1, "maximum": 300000},
+        "max_retries": {"type": "integer", "minimum": 0, "maximum": 3},
+        "retry_conditions": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "rate_limit": {"type": "string", "minLength": 1},
+        "max_concurrency": {"type": "integer", "minimum": 1},
+        "circuit_breaker": {"type": "string"},
+        "output_size_limit_bytes": {"type": "integer", "minimum": 1}
+      }
+    },
+    "approval": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "preview_required", "bind_to_action_hash", "expires_in_seconds", "single_use"],
+      "properties": {
+        "required": {"type": "boolean"},
+        "preview_required": {"type": "boolean"},
+        "bind_to_action_hash": {"type": "boolean"},
+        "expires_in_seconds": {"type": "integer", "minimum": 0},
+        "single_use": {"type": "boolean"},
+        "approver_roles": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "separation_of_duties": {"type": "boolean"}
+      }
+    },
+    "idempotency": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["supported", "key_source", "duplicate_behavior", "unknown_outcome_behavior"],
+      "properties": {
+        "supported": {"type": "boolean"},
+        "key_source": {"type": "string"},
+        "duplicate_behavior": {"type": "string", "minLength": 1},
+        "unknown_outcome_behavior": {"type": "string", "minLength": 1}
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required", "event_types", "fields", "redacted_fields", "failure_policy"],
+      "properties": {
+        "required": {"const": true},
+        "event_types": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"}
+        },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"}
+        },
+        "redacted_fields": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "failure_policy": {"enum": ["fail_closed", "record_degraded_and_block_effect", "not_applicable"]}
+      }
+    },
+    "failure_handling": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["safe_error_contract", "partial_effect", "unknown_effect", "rollback", "compensation"],
+      "properties": {
+        "safe_error_contract": {"type": "string", "minLength": 1},
+        "partial_effect": {"type": "string", "minLength": 1},
+        "unknown_effect": {"type": "string", "minLength": 1},
+        "rollback": {"type": "string", "minLength": 1},
+        "compensation": {"type": "string", "minLength": 1},
+        "manual_escalation": {"type": "string"}
+      }
+    },
+    "operations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["health_check", "disable_procedure", "incident_owner", "required_tests"],
+      "properties": {
+        "health_check": {"type": "string", "minLength": 1},
+        "disable_procedure": {"type": "string", "minLength": 1},
+        "incident_owner": {"type": "string", "minLength": 1},
+        "runbook_ref": {"type": "string"},
+        "required_tests": {
+          "type": "array",
+          "minItems": 1,
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "status": {
+      "enum": ["draft", "reviewing", "approved", "active", "deprecated", "disabled", "retired"]
+    },
+    "evidence_refs": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "side_effects": {
+            "properties": {
+              "consequential": {"const": true}
+            },
+            "required": ["consequential"]
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "approval": {
+            "properties": {
+              "required": {"const": true},
+              "preview_required": {"const": true},
+              "bind_to_action_hash": {"const": true},
+              "single_use": {"const": true}
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "runtime_boundary": {"const": "product"}
+        }
+      },
+      "then": {
+        "properties": {
+          "audit": {
+            "properties": {
+              "failure_policy": {"enum": ["fail_closed", "record_degraded_and_block_effect"]}
+            }
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "classification": {
+      "enum": ["public", "internal", "confidential", "restricted", "identity_security", "secret"]
+    }
+  }
+}

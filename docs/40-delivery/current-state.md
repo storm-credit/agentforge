@@ -1,209 +1,243 @@
 # Agent Forge Current State
 
-Status: Architecture Recovery SSOT candidate  
+Status: Authoritative Current-State SSOT  
 As of: 2026-07-22  
 Owner: PM Orchestrator  
-Related Epic: #108
+Related: #108, #122
 
-## 1. Purpose
+## 1. Purpose and Authority
 
-This document is the concise source of truth for the current delivery state.
+This document is the concise source of truth for what Agent Forge currently supports, what remains blocked, and what work is allowed next.
 
-- `notes/01_PM/WBS.md` remains the original planning baseline.
-- `docs/status-and-go-no-go.md` remains the detailed historical delivery and panel log.
-- This file answers what is working now, what is blocked, and what work is allowed next.
+- `docs/00-product/*` owns product purpose, capability classification, scope, non-goals, and terminology.
+- `docs/10-architecture/*`, `docs/20-security/*`, and `docs/30-decisions/*` own architecture, security, lifecycle, Tool/MCP, and decision baselines.
+- `docs/40-delivery/*` owns traceability, gates, evidence, pilot decisions, and current execution policy.
+- `docs/status-and-go-no-go.md` remains detailed historical implementation and panel evidence.
+- `notes/01_PM/WBS.md` remains the original planning baseline, not current completion authority.
+- `CLAUDE.md` remains a provider-specific repository execution rule set subordinate to the versioned product/harness baseline.
 
-When the documents conflict about current status, this file takes precedence after review and merge.
+When historical plans or status logs conflict with current delivery status, this document takes precedence.
 
 ## 2. Executive Status
 
 | Area | Status | Meaning |
 |---|---|---|
-| Technical MVP | GO-capable | Core governed RAG flow is implemented and backed by tests/evaluation evidence |
-| Pilot entry | HOLD | Organizational, identity, model, document, and staging inputs are not complete |
-| New product features | FROZEN | Not allowed unless they remove a pilot blocker or critical risk |
-| Architecture Recovery | ACTIVE | Product baseline, traceability, harness, and decision control are being formalized |
-| Application rewrite | NOT PLANNED | Existing implementation is preserved; recovery is documentation and governance first |
+| Product boundary | ACCEPTED | Closed-network Governed Internal Document RAG Agent Builder |
+| Technical MVP | GO-capable | Core controlled RAG loop is implemented and backed by repository tests/evaluation evidence |
+| Architecture Recovery | COMPLETE | Product, C4/domain/state, trust/MCP, ADR, traceability, gate, and convergence assets are versioned |
+| Harness Productization | COMPLETE — repository foundation | Contracts, roles, Skills, Hooks policy, loops, registries, routing, and evidence assets exist; provider adapters/CI validators remain implementation work |
+| First real pilot | HOLD | Accountable business, document, identity, model, environment, operations, and release inputs remain open |
+| Production readiness | NOT ASSESSED | Target-environment and organizational evidence does not exist and must not be inferred |
+| Speculative features | FROZEN | Only direct pilot blockers or critical security/integrity/deployment/evaluation defects may enter accepted Work Orders |
+| Application rewrite | NOT PLANNED | Existing implementation is preserved |
 
-## 3. Working Product Loop
+## 3. Working Technical MVP Boundary
 
-The repository currently supports the following intended MVP path:
+The repository supports the intended controlled loop:
 
 ```text
-Document registration/upload
-→ parsing/chunking/indexing
-→ ACL-aware retrieval
-→ agent creation/version validation/publication
-→ question execution
-→ cited answer or controlled refusal
-→ run/retrieval/audit inspection
+register/upload an approved document
+→ parse, chunk, embed, and index
+→ apply ACL-aware retrieval before relevance
+→ create, validate, and publish an Agent Version
+→ execute a question for a Principal
+→ produce a cited answer or safe refusal
+→ inspect Run, retrieval, route, citation, policy, and audit evidence
 ```
 
-Existing implementation areas include:
+Current implementation/evidence areas include:
 
-- FastAPI backend and Next.js Agent Studio.
-- PostgreSQL metadata, lifecycle, run, and audit persistence.
-- Qdrant-compatible vector retrieval with authorization filters.
-- Local/internal model gateway configuration.
-- Agent version lifecycle.
-- Document ACL lifecycle and retrieval enforcement.
-- Runtime steps, retrieval hits, citations, and audit evidence.
-- CI, backend tests, migration validation, and Playwright E2E.
-- Synthetic and live evaluation harnesses.
+- FastAPI backend and Next.js Agent Studio;
+- PostgreSQL domain, lifecycle, Run, audit, and evaluation persistence;
+- Qdrant-compatible vector retrieval with authorization filters;
+- configurable model gateway/routing abstractions;
+- Agent and Agent Version lifecycle;
+- document ingestion, indexing, ACL, revoke/delete, and retrieval paths;
+- Run Steps, Retrieval Hits, citations, route traces, and Audit Events;
+- backend tests, migration round-trip validation, frontend type checking, and Playwright E2E in CI;
+- deterministic and API-backed evaluation harnesses.
 
-This list describes current capability, not a promise that production identity, staging deployment, or real pilot content is complete.
+This describes repository technical capability. It does not prove real SSO, real documents, approved internal models, target staging, operations, pilot acceptance, or production readiness.
 
-## 4. Current Product Boundary
+## 4. Accepted Product and Architecture Decisions
 
-### Allowed in the first pilot
+- Product position: governed internal document RAG Agent Builder.
+- Technical MVP, Pilot, and Production Ready are distinct states.
+- Authorization is applied before relevance, reranking, and model context.
+- Missing identity, authorization, required evidence, or required audit follows deny/fail-closed/safe-refusal behavior.
+- Published Agent Versions and Builds are immutable.
+- PostgreSQL metadata/policy is authoritative; vector storage is a derived search index.
+- Model access uses approved, classification-aware, traceable routes with no silent external fallback.
+- Development orchestration and Product Runtime are separate trust and product boundaries.
+- Development MCP does not automatically become Product MCP.
+- Product Tools require versioned contracts, registry approval, authorization, risk, side-effect, approval, audit, idempotency, and failure/compensation rules.
+- Consequential write Tools are excluded from the first pilot.
+- Automated tests/evaluation provide evidence; accountable humans record GO/HOLD/NO-GO.
+- Review/retry/reflection loops are bounded and stop after their approved budget.
 
-- Internal document RAG.
-- Permission-aware retrieval.
-- Citation-required answers.
-- Controlled refusal.
-- Operator-managed agents and knowledge sources.
-- Read-oriented, registered capabilities only.
-- Trace, audit, evaluation, and release evidence.
+## 5. Architecture Recovery and Harness Assets
 
-### Deferred
+### Product
 
-- Autonomous multi-agent product runtime.
-- ERP/groupware/email/calendar write actions.
-- Direct production database mutation.
-- Arbitrary MCP server discovery and execution.
-- External SaaS model/tool dependencies.
-- Self-changing security or agent policy.
+- Product Charter;
+- Capability Map;
+- Scope and Non-Goals;
+- Product Glossary.
 
-## 5. Verified Delivery Strengths
+### Architecture and security
 
-### Governance and architecture
+- C4 Context/Container/Component/Deployment baseline;
+- Domain Model and aggregate ownership;
+- Agent/Build/Document/Index/Run/Tool/Approval/Eval/Release state machines;
+- Model Routing Policy;
+- Agentic Algorithm Pattern adoption boundaries;
+- Trust Boundaries and Data Flows;
+- Tool and MCP Governance;
+- ADR Register.
 
-- Control Plane, Runtime Plane, and Data Plane boundaries are documented.
-- Specialist roles and D2/D3 depth concepts are documented.
-- Sequential slice delivery, PR review, and completion-evidence rules are established.
+### Delivery and evidence
 
-### Security and data
+- Requirement Traceability Matrix;
+- Release Gates;
+- Evidence Package Guide and schema;
+- Pilot Decision Pack;
+- Recovery Completion Report.
 
-- ACL-aware retrieval is treated as a pre-retrieval requirement.
-- Document permission changes and lifecycle operations are auditable.
-- Runtime and administrative authorization gaps have been iteratively hardened.
-- Synthetic evaluation includes leakage and refusal cases.
+### Harness
 
-### Quality and operations
+- Harness Manifest and README;
+- Agent Contract, Work Order, Review Result, Tool Contract, Evidence Package, and Model Routing schemas;
+- ten Specialist Agent contracts;
+- Development MCP and Product Tool registries;
+- provider-neutral Hook policy and machine-readable rule manifest;
+- bounded Design, Build, Eval, Operations, and Review loops;
+- seven reusable Skills;
+- Work Order and Evidence Package examples.
 
-- Backend contract and security tests exist.
-- Alembic migration checks run against PostgreSQL in CI.
-- Frontend E2E runs in CI with deterministic dependencies.
-- Evaluation metrics include citation, useful answer, refusal, trace, and latency evidence.
+## 6. First-Pilot Blockers
 
-## 6. Known Pilot Blockers
+| ADR | Required decision/input | Accountable owner | Status | Unlocks |
+|---|---|---|---|---|
+| ADR-101 | Pilot department, business owner, users, measurable outcome | Sponsor / Product Owner | OPEN | Defined pilot candidate and authority |
+| ADR-102 | Approved documents, owners, classification, ACL, retention/deletion | Business / Knowledge Owners / Security | OPEN | Real corpus ingestion and security/quality evaluation |
+| ADR-103 | Enterprise SSO/IdP and trusted group/role claims | Security / Platform | OPEN | Real Principal and authorization evidence |
+| ADR-104 | Approved internal chat LLM | AI Platform | OPEN | Representative generation quality, latency, failure evidence |
+| ADR-105 | Approved internal embedding model | AI Platform / RAG | OPEN | Target indexing/retrieval baseline |
+| ADR-106 | Reranker or approved no-reranker decision | RAG/Data / QA-Eval | OPEN | Stable authorized reranking baseline |
+| ADR-107 | Vector backend | Platform / RAG/Data | OPEN | Target ACL query, operations, backup, capacity evidence |
+| ADR-108 | Object storage | Platform | OPEN | Approved document storage and recovery |
+| ADR-109 | Closed-network staging topology | Platform / Security | OPEN | Installation, network, secret, capacity, deployment evidence |
+| ADR-110 | Audit retention/access/redaction/sink | Security / Compliance / Platform | OPEN | Pilot audit and compliance evidence |
+| ADR-111 | Backup/restore, RTO/RPO | Platform / Business Owner | OPEN | Recovery gate |
+| ADR-112 | Monitoring, alerts, incidents, on-call, SLOs | Platform / Service Owner | OPEN | Operability and support gate |
+| ADR-113 | Release approvers and separation of duties | Sponsor / Security / Release Governor | OPEN | Accountable Pilot GO/HOLD/NO-GO |
+| ADR-114 | Config-C retrieval/rerank/evaluation baseline | Product / RAG / QA-Eval | OPEN | Fixed real-corpus candidate and thresholds |
 
-| Blocker | Needed from | Unlocks |
-|---|---|---|
-| Pilot department and accountable owner | Business/PM | Real pilot plan and acceptance decision |
-| Approved real document set and owners | Business/document owners | Real retrieval, permission, and quality evaluation |
-| SSO/IdP decision and integration inputs | Security/infrastructure | Trusted principal context and production authorization |
-| Approved internal LLM/embedding/reranker | AI infrastructure | Representative quality, latency, refusal, and reranking validation |
-| Closed-network staging environment | Platform/infrastructure | Installation, operations, backup, monitoring, and release evidence |
-| Retrieval/rerank baseline configuration decision | Product/RAG/QA | Stable pilot configuration and repeatable evaluation baseline |
+Current Pilot Entry outcome: **HOLD**.
 
-## 7. Allowed Work Policy
+## 7. Work Allowed Next
 
-Until pilot inputs are supplied, implementation work is limited to:
+No application slice is automatically activated by completing Architecture Recovery.
 
-- a reproducible security vulnerability;
-- unauthorized data exposure;
-- data corruption or lifecycle integrity failure;
-- a deployment or migration blocker;
-- an evaluation or trace correctness defect;
-- a regression in an already approved MVP flow;
-- architecture recovery and harness productization artifacts.
+A new accepted Work Order may be created only for:
 
-The following are not automatically code-now work:
+1. a directly approved pilot blocker supported by the applicable ADR decision;
+2. real SSO/IdP integration;
+3. approved real-document and ACL onboarding;
+4. approved internal model/vector/object/staging integration;
+5. audit, retention, backup, monitoring, controlled-import, or operational controls required for Pilot Entry;
+6. real-corpus security, quality, performance, or capacity remediation;
+7. a reproducible security vulnerability or unauthorized data exposure;
+8. data corruption or lifecycle-integrity failure;
+9. a deployment/migration blocker;
+10. an evaluation, trace, audit, citation, refusal, or approved-MVP regression defect;
+11. bounded harness enforcement such as schema validation or provider-specific deterministic Hook adapters, when separately accepted and not used to disguise product feature work.
 
-- speculative platform breadth;
-- additional integrations without a pilot owner;
-- aesthetic or low-impact refinements after the operator flow is usable;
-- repeated expert-panel nit discovery with no pilot, security, integrity, or evidence impact.
+Every implementation Work Order requires:
 
-## 8. Architecture Recovery Work
+- requirement IDs and applicable ADRs;
+- explicit included/excluded scope;
+- assigned specialist roles;
+- measurable acceptance criteria;
+- security/data/architecture impact;
+- verification and affected Eval Cases;
+- required Review Results;
+- Evidence Package;
+- loop budget, stop, rollback/disable, and human escalation.
 
-The recovery does not restart development. It adds missing control around the implementation.
+## 8. Work Not Allowed Without Scope Change
 
-### AR-01 Product baseline
+- autonomous multi-agent Product Runtime;
+- ERP, database, email, calendar, groupware, file-server, source-control, finance, access-control, or production write actions;
+- arbitrary or user-added MCP servers;
+- Development MCP/credentials exposed to Product Runtime;
+- external SaaS model/Tool fallback;
+- company-wide automatic document discovery;
+- self-changing prompts, policies, contracts, permissions, or security rules;
+- general platform breadth without a named owner and pilot outcome;
+- broad rewrite or service decomposition without evidence;
+- repeated expert-panel/nit work without security, integrity, pilot, evidence, operations, or user-correctness impact.
 
-- Product Charter.
-- Scope and non-goals.
-- Capability Map.
-- Shared glossary.
+## 9. Gate Rules
 
-### AR-02 Architecture baseline
+### Technical MVP
 
-- C4 views.
-- Domain model.
-- State machines.
-- Trust boundaries.
-- ADR register.
+GO-capable means repository evidence supports preparation for a pilot. It does not mean target-environment or business acceptance.
 
-### AR-03 Delivery baseline
+### Pilot Entry
 
-- Traceability matrix.
-- Pilot decision pack.
-- Release gates.
-- Evidence package rules.
+Pilot GO requires all applicable Pilot Entry gates, including:
 
-### HP-01 Harness foundation
-
-- Versioned agent contracts.
-- Skills and work-order schemas.
-- Hook policy.
-- Development MCP and product MCP separation.
-- Loop budgets and escalation rules.
-
-## 9. Go / Hold Rules
-
-### Technical MVP GO
-
-A technical GO means the controlled synthetic/demo path is sufficiently implemented to prepare a pilot. It does not mean production deployment or business acceptance is complete.
-
-### Pilot GO
-
-Pilot GO requires all of the following:
-
-- named pilot owner and users;
-- approved document inventory and ACL mapping;
-- SSO principal mapping;
-- staging deployment evidence;
-- approved model endpoints;
-- pilot evaluation baseline and blocker thresholds;
-- support and rollback ownership.
+- named accountable owners and users;
+- approved document inventory and ACL;
+- real SSO/IdP;
+- approved internal models and Config-C baseline;
+- closed-network staging;
+- zero mandatory ACL leakage;
+- accepted citation/refusal/quality and performance evidence;
+- audit/retention/access controls;
+- backup/restore and RTO/RPO;
+- monitoring, alerts, incidents, on-call, runbooks;
+- controlled artifact import;
+- named release approvers and an exact Pilot Entry Evidence Package.
 
 ### Release blockers
 
-- any unauthorized content exposure;
-- missing or misleading audit evidence for a consequential action;
-- a required migration or deployment failure;
-- a citation-required answer presented without valid support;
-- an unregistered tool or MCP execution path;
-- a write action without required approval and audit controls.
+- unauthorized data exposure;
+- untrusted identity accepted as authorized;
+- ACL filter absent/bypassed;
+- forbidden content reaching reranker/model/response/trace/log;
+- missing required citation/support or refusal behavior;
+- unregistered Product Tool/MCP execution;
+- consequential action without exact approval, idempotency, audit, and effect verification;
+- silent external model/Tool route;
+- required audit failure reported as success;
+- mutable published Build;
+- missing/falsified blocker evidence;
+- required CI/migration/E2E failure;
+- real pilot activation with any mandatory owner/data/identity/model/environment/release input missing.
 
-## 10. Document Authority
+## 10. Known Recovery Limitations
 
-| Document | Authority |
-|---|---|
-| `docs/40-delivery/current-state.md` | Concise current delivery status |
-| `docs/00-product/product-charter.md` | Product purpose, boundary, and principles |
-| `docs/status-and-go-no-go.md` | Detailed historical evidence and panel chronology |
-| `notes/01_PM/WBS.md` | Original planning baseline, not current completion status |
-| `CLAUDE.md` | Repository execution rules for supported agent-assisted development |
-| `harness/manifest.yaml` | Vendor-neutral harness inventory and loop policy baseline |
+The repository baseline is complete, but the following enforcement remains future bounded implementation:
 
-## 11. Next Approved Slice
+- automated CI validation for all harness JSON/YAML schemas and examples;
+- provider-specific deterministic Hook adapters;
+- generated Work Order/Review/Evidence tooling;
+- automated traceability consistency checks;
+- registry and model-routing conformance validators.
 
-Complete the remaining Architecture Recovery foundation without application changes:
+These limitations do not change Pilot HOLD and do not authorize speculative product features.
 
-1. add the recovery execution plan;
-2. add the repository harness README and manifest;
-3. register this new documentation in the docs index;
-4. open a Draft PR linked to Epic #108;
-5. review before declaring this baseline authoritative.
+## 11. Next Decision
+
+The next valid project action is not “continue coding.” It is:
+
+1. name the accountable pilot owners;
+2. complete the Pilot Decision Pack and applicable ADR-101 through ADR-114 decisions;
+3. create one accepted Work Order per direct blocker;
+4. implement and evaluate in closed-network staging;
+5. assemble a candidate-specific Pilot Entry Evidence Package;
+6. obtain independent review and accountable GO/HOLD/NO-GO.
+
+Until step 1 begins, the safe state is: **technical MVP preserved, feature freeze active, pilot HOLD**.

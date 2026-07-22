@@ -1,0 +1,131 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentforge.local/schemas/model-routing-policy.schema.json",
+  "title": "Agent Forge Model Routing Policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "policy_id", "version", "status", "principles", "models", "routes", "fallback_policy", "trace_policy"],
+  "properties": {
+    "schema_version": {"const": "agentforge.model_routing_policy/v1"},
+    "policy_id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{2,127}$"},
+    "version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+    "status": {"enum": ["draft", "approved", "active", "deprecated", "disabled"]},
+    "owner": {"type": "string"},
+    "principles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["approved_models_only", "no_silent_external_fallback", "classification_aware", "fail_closed", "route_trace_required"],
+      "properties": {
+        "approved_models_only": {"const": true},
+        "no_silent_external_fallback": {"const": true},
+        "classification_aware": {"const": true},
+        "fail_closed": {"const": true},
+        "route_trace_required": {"const": true}
+      }
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["model_ref", "provider", "model_id", "tasks", "allowed_classifications", "status", "limits"],
+        "properties": {
+          "model_ref": {"type": "string"},
+          "provider": {"type": "string"},
+          "model_id": {"type": "string"},
+          "model_version": {"type": "string"},
+          "tasks": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/task"}},
+          "allowed_classifications": {"type": "array", "minItems": 1, "items": {"$ref": "#/$defs/classification"}},
+          "locality": {"enum": ["closed_network", "internal_network", "external_prohibited"]},
+          "status": {"enum": ["candidate", "approved", "active", "deprecated", "disabled"]},
+          "limits": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["max_input_tokens", "max_output_tokens", "timeout_ms"],
+            "properties": {
+              "max_input_tokens": {"type": "integer", "minimum": 1},
+              "max_output_tokens": {"type": "integer", "minimum": 1},
+              "timeout_ms": {"type": "integer", "minimum": 1, "maximum": 300000},
+              "max_concurrency": {"type": "integer", "minimum": 1}
+            }
+          },
+          "data_policy_ref": {"type": "string"},
+          "support_owner": {"type": "string"}
+        }
+      }
+    },
+    "routes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["route_id", "task", "eligible_model_refs", "selection", "generation", "failure"],
+        "properties": {
+          "route_id": {"type": "string"},
+          "task": {"$ref": "#/$defs/task"},
+          "allowed_classifications": {"type": "array", "items": {"$ref": "#/$defs/classification"}},
+          "eligible_model_refs": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "selection": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["strategy", "ordered_model_refs"],
+            "properties": {
+              "strategy": {"enum": ["fixed", "ordered_failover", "capability_and_capacity"]},
+              "ordered_model_refs": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+              "capacity_signal_ref": {"type": "string"}
+            }
+          },
+          "generation": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["temperature", "max_output_tokens"],
+            "properties": {
+              "temperature": {"type": "number", "minimum": 0, "maximum": 2},
+              "max_output_tokens": {"type": "integer", "minimum": 1},
+              "seed": {"type": "integer"},
+              "response_schema_ref": {"type": "string"}
+            }
+          },
+          "failure": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["max_attempts", "retryable_categories", "on_exhausted", "external_fallback_allowed"],
+            "properties": {
+              "max_attempts": {"type": "integer", "minimum": 1, "maximum": 3},
+              "retryable_categories": {"type": "array", "items": {"type": "string"}},
+              "on_exhausted": {"enum": ["fail", "safe_refusal", "human_escalation"]},
+              "external_fallback_allowed": {"const": false}
+            }
+          }
+        }
+      }
+    },
+    "fallback_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["cross_provider_requires_approval", "classification_must_remain_allowed", "route_change_is_traced", "unlisted_model_behavior"],
+      "properties": {
+        "cross_provider_requires_approval": {"type": "boolean"},
+        "classification_must_remain_allowed": {"const": true},
+        "route_change_is_traced": {"const": true},
+        "unlisted_model_behavior": {"const": "deny"}
+      }
+    },
+    "trace_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["required_fields", "prohibited_fields", "audit_on_policy_change"],
+      "properties": {
+        "required_fields": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "prohibited_fields": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+        "audit_on_policy_change": {"const": true}
+      }
+    },
+    "approval_refs": {"type": "array", "items": {"type": "string"}}
+  },
+  "$defs": {
+    "task": {"enum": ["planning", "generation", "critique", "embedding", "reranking", "classification", "extraction", "evaluation"]},
+    "classification": {"enum": ["public", "internal", "confidential", "restricted", "identity_security"]}
+  }
+}

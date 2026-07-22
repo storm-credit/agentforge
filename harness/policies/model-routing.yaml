@@ -1,0 +1,212 @@
+schema_version: agentforge.model_routing_policy/v1
+policy_id: agentforge-delivery-and-product-routing
+version: 1.0.0
+status: draft
+owner: ai-architect
+schema_ref: harness/schemas/model-routing-policy.schema.json
+
+principles:
+  approved_models_only: true
+  no_silent_external_fallback: true
+  classification_aware: true
+  fail_closed: true
+  route_trace_required: true
+
+# Logical references only. Environment-specific endpoints, credentials, capacity,
+# and final approved internal model IDs remain pilot decisions.
+models:
+  - model_ref: delivery.reasoning.primary
+    provider: approved_delivery_provider
+    model_id: environment_selected_reasoning_model
+    tasks: [planning, critique, evaluation]
+    allowed_classifications: [public, internal]
+    locality: internal_network
+    status: candidate
+    limits:
+      max_input_tokens: 64000
+      max_output_tokens: 16000
+      timeout_ms: 180000
+      max_concurrency: 2
+    data_policy_ref: delivery-data-policy
+    support_owner: delivery-harness
+
+  - model_ref: delivery.implementation.primary
+    provider: approved_delivery_provider
+    model_id: environment_selected_implementation_model
+    tasks: [planning, generation, critique, extraction]
+    allowed_classifications: [public, internal]
+    locality: internal_network
+    status: candidate
+    limits:
+      max_input_tokens: 64000
+      max_output_tokens: 16000
+      timeout_ms: 180000
+      max_concurrency: 2
+    data_policy_ref: delivery-data-policy
+    support_owner: delivery-harness
+
+  - model_ref: product.chat.internal
+    provider: internal_model_gateway
+    model_id: PILOT_DECISION_REQUIRED
+    tasks: [generation, classification, extraction]
+    allowed_classifications: [public, internal, confidential, restricted]
+    locality: closed_network
+    status: candidate
+    limits:
+      max_input_tokens: 32768
+      max_output_tokens: 4096
+      timeout_ms: 120000
+      max_concurrency: 1
+    data_policy_ref: product-model-data-policy
+    support_owner: PILOT_DECISION_REQUIRED
+
+  - model_ref: product.embedding.internal
+    provider: internal_model_gateway
+    model_id: PILOT_DECISION_REQUIRED
+    tasks: [embedding]
+    allowed_classifications: [public, internal, confidential, restricted]
+    locality: closed_network
+    status: candidate
+    limits:
+      max_input_tokens: 8192
+      max_output_tokens: 1
+      timeout_ms: 30000
+      max_concurrency: 1
+    data_policy_ref: product-model-data-policy
+    support_owner: PILOT_DECISION_REQUIRED
+
+  - model_ref: product.reranker.internal
+    provider: internal_model_gateway
+    model_id: PILOT_DECISION_REQUIRED
+    tasks: [reranking]
+    allowed_classifications: [public, internal, confidential, restricted]
+    locality: closed_network
+    status: candidate
+    limits:
+      max_input_tokens: 8192
+      max_output_tokens: 1
+      timeout_ms: 30000
+      max_concurrency: 1
+    data_policy_ref: product-model-data-policy
+    support_owner: PILOT_DECISION_REQUIRED
+
+routes:
+  - route_id: delivery.product_and_architecture_reasoning
+    task: planning
+    allowed_classifications: [public, internal]
+    eligible_model_refs: [delivery.reasoning.primary]
+    selection:
+      strategy: fixed
+      ordered_model_refs: [delivery.reasoning.primary]
+    generation:
+      temperature: 0.2
+      max_output_tokens: 12000
+    failure:
+      max_attempts: 1
+      retryable_categories: []
+      on_exhausted: human_escalation
+      external_fallback_allowed: false
+
+  - route_id: delivery.implementation
+    task: generation
+    allowed_classifications: [public, internal]
+    eligible_model_refs: [delivery.implementation.primary]
+    selection:
+      strategy: fixed
+      ordered_model_refs: [delivery.implementation.primary]
+    generation:
+      temperature: 0.1
+      max_output_tokens: 12000
+    failure:
+      max_attempts: 1
+      retryable_categories: []
+      on_exhausted: human_escalation
+      external_fallback_allowed: false
+
+  - route_id: product.answer_generation
+    task: generation
+    allowed_classifications: [public, internal, confidential, restricted]
+    eligible_model_refs: [product.chat.internal]
+    selection:
+      strategy: fixed
+      ordered_model_refs: [product.chat.internal]
+    generation:
+      temperature: 0.1
+      max_output_tokens: 4096
+      response_schema_ref: product-grounded-answer-contract
+    failure:
+      max_attempts: 1
+      retryable_categories: []
+      on_exhausted: safe_refusal
+      external_fallback_allowed: false
+
+  - route_id: product.embedding
+    task: embedding
+    allowed_classifications: [public, internal, confidential, restricted]
+    eligible_model_refs: [product.embedding.internal]
+    selection:
+      strategy: fixed
+      ordered_model_refs: [product.embedding.internal]
+    generation:
+      temperature: 0
+      max_output_tokens: 1
+    failure:
+      max_attempts: 2
+      retryable_categories: [transient_unavailable, rate_limited]
+      on_exhausted: fail
+      external_fallback_allowed: false
+
+  - route_id: product.reranking
+    task: reranking
+    allowed_classifications: [public, internal, confidential, restricted]
+    eligible_model_refs: [product.reranker.internal]
+    selection:
+      strategy: fixed
+      ordered_model_refs: [product.reranker.internal]
+    generation:
+      temperature: 0
+      max_output_tokens: 1
+    failure:
+      max_attempts: 1
+      retryable_categories: []
+      on_exhausted: fail
+      external_fallback_allowed: false
+
+fallback_policy:
+  cross_provider_requires_approval: true
+  classification_must_remain_allowed: true
+  route_change_is_traced: true
+  unlisted_model_behavior: deny
+
+trace_policy:
+  required_fields:
+    - policy_id
+    - policy_version
+    - route_id
+    - task
+    - selected_model_ref
+    - provider
+    - model_id
+    - model_version
+    - attempt
+    - fallback_from
+    - input_classification
+    - started_at
+    - completed_at
+    - latency_ms
+    - outcome
+    - error_category
+  prohibited_fields:
+    - credentials
+    - raw_tokens
+    - secret_headers
+    - unrestricted_classified_payload
+  audit_on_policy_change: true
+
+approval_refs: []
+
+activation_blockers:
+  - product internal model IDs and support owners are unresolved
+  - product capacity, latency, and data-policy evidence is unavailable
+  - Config-C retrieval/rerank baseline remains an open decision
+  - no environment-specific provider credentials or endpoints belong in this file

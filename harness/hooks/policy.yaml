@@ -1,0 +1,210 @@
+schema_version: agentforge.hook_policy/v1
+policy_id: agentforge-delivery-hooks
+version: 1.0.0
+status: draft
+owner: delivery-harness
+normative_guide: harness/policies/hooks.md
+
+principles:
+  repository_policy_is_authoritative: true
+  provider_adapter_is_subordinate: true
+  deterministic_blocks_preferred: true
+  development_hooks_are_not_product_authorization: true
+  fail_closed_for_protected_actions: true
+  secret_minimization: true
+
+protected_resources:
+  branches: [main]
+  paths:
+    - .github/workflows
+    - deploy
+    - apps/api/migrations
+    - security_and_secret_configuration
+  environments:
+    - production
+    - pilot_staging_when_not_explicitly_authorized
+  actions:
+    - force_update_ref
+    - destructive_delete
+    - permission_change
+    - credential_change
+    - consequential_external_effect
+
+rules:
+  - rule_id: SESSION-001
+    event: SessionStart
+    enforcement: block
+    condition: implementation_requested_without_accepted_work_order
+    reason: Accepted Work Order is required before implementation.
+  - rule_id: SESSION-002
+    event: SessionStart
+    enforcement: block
+    condition: repository_or_branch_ambiguous
+    reason: Exact repository, branch, and candidate must be known.
+  - rule_id: SESSION-003
+    event: SessionStart
+    enforcement: block
+    condition: requested_work_contradicts_non_goal
+    reason: Scope change and ADR approval are required.
+  - rule_id: PRE-001
+    event: PreToolUse
+    enforcement: block
+    condition: direct_write_to_protected_branch
+    reason: Use an isolated feature branch and reviewed PR.
+  - rule_id: PRE-002
+    event: PreToolUse
+    enforcement: block
+    condition: target_outside_work_order_scope
+    reason: PM Orchestrator must revise or replace the Work Order.
+  - rule_id: PRE-003
+    event: PreToolUse
+    enforcement: block
+    condition: unregistered_mcp_or_product_tool
+    reason: Registry and contract approval are required.
+  - rule_id: PRE-004
+    event: PreToolUse
+    enforcement: block
+    condition: development_credential_or_tool_targets_product_runtime
+    reason: Delivery and Product trust boundaries are separate.
+  - rule_id: PRE-005
+    event: PreToolUse
+    enforcement: block
+    condition: secret_or_credential_may_be_written_or_exposed
+    reason: Quarantine, redact, and escalate.
+  - rule_id: PRE-006
+    event: PreToolUse
+    enforcement: approval_required
+    condition: destructive_or_irreversible_action
+    reason: Exact target and action require accountable human approval.
+  - rule_id: PRE-007
+    event: PreToolUse
+    enforcement: approval_required
+    condition: production_or_account_mutation
+    reason: Exact Work Order and human authority are required.
+  - rule_id: PRE-008
+    event: PreToolUse
+    enforcement: block
+    condition: consequential_product_tool_in_first_pilot
+    reason: Consequential write Tools are outside first-pilot scope.
+  - rule_id: PRE-009
+    event: PreToolUse
+    enforcement: block
+    condition: unbounded_command_target_or_model_generated_raw_target
+    reason: Target must be normalized and allowlisted.
+  - rule_id: PRE-010
+    event: PreToolUse
+    enforcement: escalate
+    condition: loop_budget_exhausted
+    reason: Human review is required before another attempt.
+  - rule_id: POST-001
+    event: PostToolUse
+    enforcement: block
+    condition: changed_file_outside_scope
+    reason: Stop and obtain scope decision.
+  - rule_id: POST-002
+    event: PostToolUse
+    enforcement: escalate
+    condition: suspected_secret_in_result
+    reason: Quarantine/redact result and notify Security.
+  - rule_id: POST-003
+    event: PostToolUse
+    enforcement: escalate
+    condition: partial_or_unknown_external_effect
+    reason: Do not retry blindly; verify, compensate, or escalate.
+  - rule_id: POST-004
+    event: PostToolUse
+    enforcement: block
+    condition: required_check_failed
+    reason: Record finding and complete bounded remediation or HOLD.
+  - rule_id: SUBSTOP-001
+    event: SubagentStop
+    enforcement: block
+    condition: acceptance_criterion_without_evidence
+    reason: Completion claim is incomplete.
+  - rule_id: SUBSTOP-002
+    event: SubagentStop
+    enforcement: block
+    condition: open_blocker_or_critical_finding
+    reason: Return changes required, HOLD, or rejection.
+  - rule_id: SUBSTOP-003
+    event: SubagentStop
+    enforcement: escalate
+    condition: specialist_authority_exceeded
+    reason: PM Orchestrator and affected owner must decide.
+  - rule_id: STOP-001
+    event: Stop
+    enforcement: block
+    condition: required_review_or_evidence_package_missing
+    reason: Slice cannot complete without review and candidate-specific evidence.
+  - rule_id: STOP-002
+    event: Stop
+    enforcement: escalate
+    condition: same_failure_occurred_twice
+    reason: Stop retry loop and provide failure attribution.
+  - rule_id: STOP-003
+    event: Stop
+    enforcement: stop
+    condition: all_acceptance_and_gate_conditions_met
+    reason: Close the bounded slice; do not generate extra low-impact work.
+  - rule_id: STOP-004
+    event: Stop
+    enforcement: stop
+    condition: approved_queue_exhausted
+    reason: No automatic next task without explicit activation.
+
+impact_checks:
+  markdown:
+    - link_and_authority_review
+    - readiness_claim_review
+    - changed_path_scope
+  json_yaml_schema:
+    - parse
+    - schema_validate
+    - example_validate
+    - compatibility_review
+  backend:
+    - format_and_lint
+    - unit_and_integration
+    - migration_round_trip_when_affected
+    - authorization_and_audit_impact
+  frontend:
+    - typecheck
+    - permission_and_error_states
+    - e2e_when_affected
+  security_acl:
+    - negative_authorization
+    - acl_leakage
+    - redaction
+    - fail_closed
+  rag_eval:
+    - affected_corpus
+    - citation_and_refusal
+    - missing_cases
+    - regression_comparison
+  platform:
+    - artifact_digest
+    - secret_scan
+    - egress_and_deployment
+    - restore_or_rollback
+  tool_mcp:
+    - contract_and_schema
+    - authorization
+    - approval_replay
+    - idempotency
+    - timeout_unknown_effect
+    - audit_and_compensation
+
+fixtures:
+  - allowed_feature_branch_documentation_write
+  - blocked_direct_main_write
+  - blocked_out_of_scope_path
+  - blocked_unregistered_mcp
+  - blocked_development_tool_to_product_target
+  - blocked_secret_output
+  - destructive_action_requires_approval
+  - schema_change_triggers_validation
+  - acl_change_triggers_leakage_tests
+  - partial_effect_stops_retry
+  - missing_work_order_blocks_session
+  - repeated_failure_escalates
+  - completed_evidence_allows_stop

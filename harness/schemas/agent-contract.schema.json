@@ -1,0 +1,142 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentforge.local/schemas/agent-contract.schema.json",
+  "title": "Agent Forge Specialist Agent Contract",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "agent_role_id",
+    "display_name",
+    "mission",
+    "authority",
+    "inputs",
+    "outputs",
+    "prohibited_actions",
+    "required_reviews",
+    "evidence_duties",
+    "escalation",
+    "stop_conditions",
+    "status"
+  ],
+  "properties": {
+    "schema_version": {"const": "agentforge.agent_contract/v1"},
+    "agent_role_id": {"type": "string", "pattern": "^[a-z][a-z0-9_.-]{2,127}$"},
+    "display_name": {"type": "string", "minLength": 1},
+    "mission": {"type": "string", "minLength": 20},
+    "accountable_human_role": {"type": "string"},
+    "authority": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["may_decide", "may_recommend", "may_modify", "resource_boundaries"],
+      "properties": {
+        "may_decide": {"type": "array", "items": {"type": "string"}},
+        "may_recommend": {"type": "array", "items": {"type": "string"}},
+        "may_modify": {"type": "array", "items": {"type": "string"}},
+        "resource_boundaries": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+      }
+    },
+    "inputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "required", "description"],
+        "properties": {
+          "name": {"type": "string"},
+          "required": {"type": "boolean"},
+          "description": {"type": "string"},
+          "schema_or_document_ref": {"type": "string"}
+        }
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "description", "acceptance"],
+        "properties": {
+          "name": {"type": "string"},
+          "description": {"type": "string"},
+          "acceptance": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "schema_or_document_ref": {"type": "string"}
+        }
+      }
+    },
+    "prohibited_actions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string"}
+    },
+    "required_reviews": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["condition", "reviewer_roles"],
+        "properties": {
+          "condition": {"type": "string"},
+          "reviewer_roles": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+        }
+      }
+    },
+    "evidence_duties": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string"}
+    },
+    "model_preferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "task_classes": {"type": "array", "items": {"type": "string"}},
+        "minimum_capabilities": {"type": "array", "items": {"type": "string"}},
+        "route_policy_ref": {"type": "string"},
+        "provider_locked": {"const": false}
+      }
+    },
+    "tool_permissions": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "development_registry_ref": {"type": "string"},
+        "allowed_capabilities": {"type": "array", "items": {"type": "string"}},
+        "destructive_actions": {"enum": ["prohibited", "human_approval", "work_order_and_human_approval"]},
+        "product_runtime_access": {"const": false}
+      }
+    },
+    "loop_budget": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "self_review_passes": {"type": "integer", "minimum": 0, "maximum": 3},
+        "formal_rework_passes": {"type": "integer", "minimum": 0, "maximum": 2},
+        "same_failure_before_escalation": {"type": "integer", "minimum": 1, "maximum": 3}
+      }
+    },
+    "escalation": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["trigger", "target_role", "required_context"],
+        "properties": {
+          "trigger": {"type": "string"},
+          "target_role": {"type": "string"},
+          "required_context": {"type": "array", "minItems": 1, "items": {"type": "string"}}
+        }
+      }
+    },
+    "stop_conditions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {"type": "string"}
+    },
+    "status": {"enum": ["draft", "active", "deprecated", "disabled"]}
+  }
+}

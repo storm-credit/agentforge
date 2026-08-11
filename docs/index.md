@@ -50,6 +50,10 @@
 
 위 기준선은 기존 코드와 문서를 폐기하지 않는다. `docs/status-and-go-no-go.md`는 상세 구현·패널·검증 이력, `notes/01_PM/WBS.md`는 최초 계획 기준선으로 유지한다.
 
+## 지금 상태를 빠르게 확인하려면
+
+문서·대화를 다시 재구성하지 말고 `apps/api/.venv/Scripts/python.exe harness/tools/project_status.py`를 실행하라. git/CI 사실, `current-state.md`에서 파싱한 거버넌스 상태·OPEN 파일럿 결정·다음 행동, 배선/드리프트 점검(에이전트 정의·훅·harness 예제·TODO)을 몇 초 안에 출력한다. 판단할 수 없는 값은 추측 없이 `UNKNOWN`으로 표시한다.
+
 ## 현재 결론
 
 | 항목 | 결정 |

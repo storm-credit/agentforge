@@ -43,6 +43,14 @@ jobs:
       - name: Ruff lint
         run: python -m ruff check app tests
 
+      # Bounded harness-enforcement check: every harness/examples/*.yaml
+      # instance must validate against its harness/schemas/*.schema.json
+      # (explicit pairs, not filename-guessed). Runs from the repo root
+      # since apps/api's venv already has jsonschema (dev extra) + PyYAML.
+      - name: Harness examples validate against their schemas
+        working-directory: ${{ github.workspace }}
+        run: python harness/tools/validate_examples.py
+
       # Migrations are exercised against a real Postgres service container
       # (matching deploy/compose/docker-compose.dev.yaml's credentials) since
       # the pytest suite below is hermetic/SQLite and never runs Alembic

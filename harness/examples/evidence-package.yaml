@@ -108,7 +108,7 @@ risks:
   rollback_or_disable_plan: Revert the documentation commit if the baseline is rejected.
 limitations:
   - limitation_id: LIMIT-EXAMPLE-01
-    classification: implementation
+    classification: code
     description: This example does not prove provider-specific hook enforcement.
     impact: Repository policy exists but adapter enforcement remains separate work.
     owner: delivery-harness

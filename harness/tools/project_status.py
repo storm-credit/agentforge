@@ -1,0 +1,564 @@
+"""Print a compact, factual "where are we / what can I do next" report.
+
+Bounded harness-enforcement tooling (read-only inspection), not product
+feature code — see current-state.md section 7 item 11.
+
+This command exists so a human does not have to reconstruct project state
+from a conversation, six documents, and PR history. It gathers FACTS by
+shelling out to git/gh and parsing docs/40-delivery/current-state.md as
+data (never hardcoding its table contents), and prints UNKNOWN rather than
+guessing whenever a fact cannot be determined.
+
+Usage:
+    python harness/tools/project_status.py [--strict]
+
+Exit code is always 0, UNLESS --strict is passed AND at least one
+wiring/drift check fails, in which case it exits 1. --strict is not wired
+into CI by this change.
+
+Read-only: this script must never mutate git state, move files, run tests,
+or perform network writes. Reading CI status via `gh` is a network read
+and is fine.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CURRENT_STATE_PATH = REPO_ROOT / "docs" / "40-delivery" / "current-state.md"
+
+UNKNOWN = "UNKNOWN"
+
+
+# ---------------------------------------------------------------------------
+# small helpers
+# ---------------------------------------------------------------------------
+
+
+def _run(cmd: list[str], cwd: Path = REPO_ROOT, timeout: int = 15) -> tuple[int, str, str]:
+    """Run a command, never raising. Returns (returncode, stdout, stderr)."""
+    try:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
+    except FileNotFoundError as exc:
+        return 127, "", f"command not found: {exc}"
+    except subprocess.TimeoutExpired:
+        return 124, "", "command timed out"
+    except OSError as exc:
+        return 1, "", str(exc)
+
+
+def _hr(title: str) -> str:
+    return f"\n== {title} ==" if title else ""
+
+
+# ---------------------------------------------------------------------------
+# 1. GIT
+# ---------------------------------------------------------------------------
+
+
+def collect_git_facts() -> dict:
+    facts: dict = {}
+
+    rc, out, err = _run(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+    facts["branch"] = out if rc == 0 and out else UNKNOWN
+    if rc != 0:
+        facts["branch_reason"] = err or "git rev-parse failed"
+
+    rc, out, err = _run(["git", "status", "--porcelain"])
+    if rc == 0:
+        facts["working_tree_clean"] = out == ""
+        facts["dirty_entries"] = out.splitlines() if out else []
+    else:
+        facts["working_tree_clean"] = UNKNOWN
+        facts["dirty_entries"] = []
+        facts["working_tree_reason"] = err or "git status failed"
+
+    rc, head_sha, err = _run(["git", "rev-parse", "HEAD"])
+    facts["head_sha"] = head_sha if rc == 0 and head_sha else UNKNOWN
+
+    # Compare against the locally-known origin/main ref. Deliberately does
+    # NOT `git fetch` first (that would be a network write to local refs) --
+    # this reflects the last time origin/main was fetched, and says so.
+    rc, origin_sha, err = _run(["git", "rev-parse", "origin/main"])
+    if rc != 0 or not origin_sha:
+        facts["origin_main_sha"] = UNKNOWN
+        facts["origin_main_reason"] = err or "no local origin/main ref (never fetched?)"
+        facts["local_matches_origin_main"] = UNKNOWN
+    else:
+        facts["origin_main_sha"] = origin_sha
+        rc, current_main_sha, _ = _run(["git", "rev-parse", "main"])
+        if rc == 0 and current_main_sha:
+            facts["local_matches_origin_main"] = current_main_sha == origin_sha
+            facts["local_main_sha"] = current_main_sha
+        else:
+            facts["local_matches_origin_main"] = UNKNOWN
+            facts["local_main_reason"] = "no local main branch found"
+
+    return facts
+
+
+def render_git(facts: dict) -> list[str]:
+    lines = [_hr("1. GIT")]
+    lines.append(f"branch: {facts['branch']}")
+    if facts.get("branch_reason"):
+        lines.append(f"  (reason: {facts['branch_reason']})")
+
+    clean = facts["working_tree_clean"]
+    if clean is UNKNOWN:
+        lines.append(f"working tree clean: {UNKNOWN} ({facts.get('working_tree_reason')})")
+    elif clean:
+        lines.append("working tree clean: yes")
+    else:
+        lines.append(f"working tree clean: NO ({len(facts['dirty_entries'])} changed path(s))")
+        for entry in facts["dirty_entries"][:10]:
+            lines.append(f"    {entry}")
+
+    lines.append(f"HEAD: {facts['head_sha']}")
+
+    match = facts.get("local_matches_origin_main")
+    if match is UNKNOWN:
+        lines.append(
+            f"local main vs origin/main: {UNKNOWN} "
+            f"({facts.get('origin_main_reason') or facts.get('local_main_reason')})"
+        )
+    elif match:
+        lines.append(f"local main matches known origin/main: yes ({facts['origin_main_sha'][:12]})")
+    else:
+        lines.append(
+            "local main matches known origin/main: NO "
+            f"(local {facts.get('local_main_sha', UNKNOWN)[:12]} vs "
+            f"origin {facts['origin_main_sha'][:12]})"
+        )
+    lines.append(
+        "  (note: compares against the last-fetched origin/main ref; this command "
+        "never runs `git fetch`, so this can be stale.)"
+    )
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# 2. CI
+# ---------------------------------------------------------------------------
+
+
+def collect_ci_facts() -> dict:
+    rc, out, err = _run(
+        [
+            "gh",
+            "run",
+            "list",
+            "--branch",
+            "main",
+            "--limit",
+            "1",
+            "--json",
+            "conclusion,status,headSha,createdAt,name,url",
+        ]
+    )
+    if rc == 127:
+        return {"available": False, "reason": "gh CLI not found on PATH"}
+    if rc != 0:
+        reason = err or out or f"gh exited {rc}"
+        if "auth" in reason.lower() or "credential" in reason.lower():
+            reason = f"gh appears unauthenticated: {reason}"
+        return {"available": False, "reason": reason}
+
+    try:
+        runs = json.loads(out) if out else []
+    except json.JSONDecodeError as exc:
+        return {"available": False, "reason": f"could not parse gh output: {exc}"}
+
+    if not runs:
+        return {"available": False, "reason": "no workflow runs found on main"}
+
+    run = runs[0]
+    return {
+        "available": True,
+        "name": run.get("name", UNKNOWN),
+        "conclusion": run.get("conclusion") or "(in progress)",
+        "status": run.get("status", UNKNOWN),
+        "head_sha": run.get("headSha", UNKNOWN),
+        "created_at": run.get("createdAt", UNKNOWN),
+        "url": run.get("url", UNKNOWN),
+    }
+
+
+def render_ci(facts: dict) -> list[str]:
+    lines = [_hr("2. CI (most recent run on main)")]
+    if not facts.get("available"):
+        lines.append(f"status: {UNKNOWN} ({facts.get('reason')})")
+        lines.append("  (never assume green when this is UNKNOWN.)")
+        return lines
+    lines.append(f"workflow: {facts['name']}")
+    lines.append(f"status: {facts['status']}  conclusion: {facts['conclusion']}")
+    lines.append(f"commit: {facts['head_sha'][:12] if facts['head_sha'] != UNKNOWN else UNKNOWN}")
+    lines.append(f"created: {facts['created_at']}")
+    lines.append(f"url: {facts['url']}")
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# markdown parsing helpers shared by sections 3/4/6
+# ---------------------------------------------------------------------------
+
+
+def _read_current_state() -> str | None:
+    if not CURRENT_STATE_PATH.exists():
+        return None
+    try:
+        return CURRENT_STATE_PATH.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+
+def _extract_section(text: str, heading_number: str) -> str | None:
+    """Return the body text of a top-level `## <heading_number>. ...` section."""
+    pattern = re.compile(
+        rf"^##\s+{re.escape(heading_number)}\.\s.*$",
+        re.MULTILINE,
+    )
+    match = pattern.search(text)
+    if not match:
+        return None
+    start = match.end()
+    next_heading = re.search(r"^##\s+\d+\.\s", text[start:], re.MULTILINE)
+    end = start + next_heading.start() if next_heading else len(text)
+    return text[start:end]
+
+
+def _parse_markdown_table(section_text: str) -> list[dict[str, str]]:
+    """Parse the first markdown table found in section_text into row dicts."""
+    lines = [ln for ln in section_text.splitlines() if ln.strip().startswith("|")]
+    if len(lines) < 2:
+        return []
+
+    def split_row(line: str) -> list[str]:
+        cells = line.strip().strip("|").split("|")
+        return [c.strip() for c in cells]
+
+    header = split_row(lines[0])
+    # lines[1] is expected to be the --- separator row; skip it.
+    rows = []
+    for line in lines[2:]:
+        cells = split_row(line)
+        if len(cells) != len(header):
+            continue
+        rows.append(dict(zip(header, cells)))
+    return rows
+
+
+def _parse_numbered_list(section_text: str) -> list[str]:
+    items = []
+    for line in section_text.splitlines():
+        m = re.match(r"^\s*(\d+)\.\s+(.*\S)\s*$", line)
+        if m:
+            items.append(m.group(2))
+    return items
+
+
+# ---------------------------------------------------------------------------
+# 3. GOVERNANCE STATE (current-state.md section 2)
+# ---------------------------------------------------------------------------
+
+
+def collect_governance_facts() -> dict:
+    text = _read_current_state()
+    if text is None:
+        return {"available": False, "reason": f"{CURRENT_STATE_PATH} not found or unreadable"}
+
+    section = _extract_section(text, "2")
+    if section is None:
+        return {"available": False, "reason": "could not find '## 2.' section heading"}
+
+    rows = _parse_markdown_table(section)
+    if not rows:
+        return {"available": False, "reason": "found section 2 but no markdown table inside it"}
+
+    return {"available": True, "rows": rows}
+
+
+def render_governance(facts: dict) -> list[str]:
+    lines = [_hr("3. GOVERNANCE STATE (parsed from current-state.md section 2)")]
+    if not facts.get("available"):
+        lines.append(f"{UNKNOWN} ({facts.get('reason')})")
+        return lines
+    for row in facts["rows"]:
+        values = list(row.values())
+        if len(values) < 2:
+            continue
+        area, status = values[0], values[1]
+        lines.append(f"- {area}: {status}")
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# 4. OPEN PILOT DECISIONS (current-state.md section 6)
+# ---------------------------------------------------------------------------
+
+
+def collect_pilot_decision_facts() -> dict:
+    text = _read_current_state()
+    if text is None:
+        return {"available": False, "reason": f"{CURRENT_STATE_PATH} not found or unreadable"}
+
+    section = _extract_section(text, "6")
+    if section is None:
+        return {"available": False, "reason": "could not find '## 6.' section heading"}
+
+    rows = _parse_markdown_table(section)
+    if not rows:
+        return {"available": False, "reason": "found section 6 but no markdown table inside it"}
+
+    status_key = next((k for k in rows[0] if k.strip().lower() == "status"), None)
+    adr_key = next((k for k in rows[0] if k.strip().lower() == "adr"), None)
+    owner_key = next(
+        (k for k in rows[0] if "owner" in k.strip().lower()), None
+    )
+    if status_key is None or adr_key is None:
+        return {
+            "available": False,
+            "reason": f"table found but missing expected columns (got: {list(rows[0])})",
+        }
+
+    open_rows = [r for r in rows if r.get(status_key, "").strip().upper() == "OPEN"]
+    return {
+        "available": True,
+        "total": len(rows),
+        "open": [
+            {"adr": r.get(adr_key, UNKNOWN), "owner": r.get(owner_key, UNKNOWN) if owner_key else UNKNOWN}
+            for r in open_rows
+        ],
+    }
+
+
+def render_pilot_decisions(facts: dict) -> list[str]:
+    lines = [_hr("4. OPEN PILOT DECISIONS (parsed from current-state.md section 6)")]
+    if not facts.get("available"):
+        lines.append(f"{UNKNOWN} ({facts.get('reason')})")
+        return lines
+    lines.append(f"{len(facts['open'])} of {facts['total']} decision row(s) are OPEN:")
+    for item in facts["open"]:
+        lines.append(f"  - {item['adr']}: owner = {item['owner']}")
+    if not facts["open"]:
+        lines.append("  (none open)")
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# 5. WIRING/DRIFT CHECKS
+# ---------------------------------------------------------------------------
+
+SCAN_ROOTS = ["apps/api/app", "apps/web/app", "eval/harness"]
+SCAN_EXTENSIONS = {
+    ".py", ".ts", ".tsx", ".js", ".jsx", ".md", ".yaml", ".yml", ".json",
+}
+SCAN_EXCLUDE_DIRS = {
+    ".venv", "node_modules", "__pycache__", ".next", "dist", "build", ".git",
+}
+TODO_MARKER_RE = re.compile(r"\b(TODO|FIXME)\b")
+
+
+def _scan_todo_fixme() -> list[str]:
+    hits: list[str] = []
+    for root_rel in SCAN_ROOTS:
+        root = REPO_ROOT / root_rel
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file():
+                continue
+            if any(part in SCAN_EXCLUDE_DIRS for part in path.parts):
+                continue
+            if path.suffix not in SCAN_EXTENSIONS:
+                continue
+            try:
+                text = path.read_text(encoding="utf-8", errors="ignore")
+            except OSError:
+                continue
+            for lineno, line in enumerate(text.splitlines(), start=1):
+                if TODO_MARKER_RE.search(line):
+                    rel = path.relative_to(REPO_ROOT)
+                    hits.append(f"{rel}:{lineno}: {line.strip()[:100]}")
+    return hits
+
+
+def _check_agents_dir() -> tuple[bool, str]:
+    agents_dir = REPO_ROOT / ".claude" / "agents"
+    if not agents_dir.is_dir():
+        return False, "no .claude/agents/ directory: agent definitions are ad-hoc, not version-controlled"
+    entries = [p for p in agents_dir.iterdir() if p.is_file()]
+    if not entries:
+        return False, ".claude/agents/ exists but is empty: agent definitions are ad-hoc, not version-controlled"
+    return True, f"{len(entries)} agent definition file(s) version-controlled under .claude/agents/"
+
+
+def _check_hooks_configured() -> tuple[bool, str]:
+    found: list[str] = []
+    for name in ("settings.json", "settings.local.json"):
+        path = REPO_ROOT / ".claude" / name
+        if not path.exists():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        hooks = data.get("hooks")
+        if hooks:
+            found.append(name)
+    if found:
+        return True, f"hooks configured in: {', '.join(found)}"
+    return False, "no non-empty 'hooks' key in .claude/settings.json or settings.local.json: no automated gating"
+
+
+def _check_harness_examples() -> tuple[bool, str]:
+    validator = REPO_ROOT / "harness" / "tools" / "validate_examples.py"
+    if not validator.exists():
+        return False, f"{validator} not found"
+
+    venv_python = REPO_ROOT / "apps" / "api" / ".venv" / "Scripts" / "python.exe"
+    if not venv_python.exists():
+        venv_python = REPO_ROOT / "apps" / "api" / ".venv" / "bin" / "python"
+    python_exe = str(venv_python) if venv_python.exists() else sys.executable
+
+    rc, out, err = _run([python_exe, str(validator)], cwd=REPO_ROOT, timeout=60)
+    summary = (out or err or "").strip().splitlines()
+    last_line = summary[-1] if summary else f"exit {rc}"
+    return rc == 0, last_line
+
+
+def collect_drift_facts() -> dict:
+    agents_ok, agents_msg = _check_agents_dir()
+    hooks_ok, hooks_msg = _check_hooks_configured()
+    harness_ok, harness_msg = _check_harness_examples()
+    todo_hits = _scan_todo_fixme()
+
+    return {
+        "agents_dir": {"ok": agents_ok, "message": agents_msg},
+        "hooks": {"ok": hooks_ok, "message": hooks_msg},
+        "harness_examples": {"ok": harness_ok, "message": harness_msg},
+        "todo_fixme": {
+            "ok": len(todo_hits) == 0,
+            "message": f"{len(todo_hits)} TODO/FIXME marker(s) found" if todo_hits else "no TODO/FIXME markers found",
+            "hits": todo_hits,
+        },
+    }
+
+
+def render_drift(facts: dict) -> list[str]:
+    lines = [_hr("5. WIRING/DRIFT CHECKS")]
+
+    a = facts["agents_dir"]
+    lines.append(f"[{'PASS' if a['ok'] else 'FAIL'}] .claude/agents/ version-controlled: {a['message']}")
+
+    h = facts["hooks"]
+    lines.append(f"[{'PASS' if h['ok'] else 'FAIL'}] hooks configured: {h['message']}")
+
+    he = facts["harness_examples"]
+    lines.append(f"[{'PASS' if he['ok'] else 'FAIL'}] harness examples validate: {he['message']}")
+
+    t = facts["todo_fixme"]
+    lines.append(f"[{'PASS' if t['ok'] else 'FAIL'}] TODO/FIXME sweep: {t['message']}")
+    for hit in t["hits"][:20]:
+        lines.append(f"    {hit}")
+    if len(t["hits"]) > 20:
+        lines.append(f"    ... and {len(t['hits']) - 20} more")
+
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# 6. NEXT VALID ACTION (current-state.md section 11)
+# ---------------------------------------------------------------------------
+
+
+def collect_next_action_facts() -> dict:
+    text = _read_current_state()
+    if text is None:
+        return {"available": False, "reason": f"{CURRENT_STATE_PATH} not found or unreadable"}
+
+    section = _extract_section(text, "11")
+    if section is None:
+        return {"available": False, "reason": "could not find '## 11.' section heading"}
+
+    items = _parse_numbered_list(section)
+    if not items:
+        return {"available": False, "reason": "found section 11 but no numbered list inside it"}
+
+    # Capture any trailing bolded "safe state" sentence as a bonus fact, best
+    # effort only -- absence of it is not an error.
+    safe_state_match = re.search(r"safe state is:\s*(.+?)\.?\s*$", section, re.MULTILINE)
+    safe_state = safe_state_match.group(1).strip().strip("*") if safe_state_match else None
+
+    return {"available": True, "items": items, "safe_state": safe_state}
+
+
+def render_next_action(facts: dict) -> list[str]:
+    lines = [_hr("6. NEXT VALID ACTION (parsed from current-state.md section 11)")]
+    if not facts.get("available"):
+        lines.append(f"{UNKNOWN} ({facts.get('reason')})")
+        return lines
+    for i, item in enumerate(facts["items"], start=1):
+        lines.append(f"  {i}. {item}")
+    if facts.get("safe_state"):
+        lines.append(f"until step 1 begins, safe state: {facts['safe_state']}")
+    return lines
+
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+
+
+def _make_stdout_utf8_safe() -> None:
+    """Best-effort: avoid UnicodeEncodeError on legacy code-page consoles
+    (e.g. Windows cp949/cp1252) when current-state.md content contains
+    characters like em dashes. Never raises."""
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except (AttributeError, ValueError, OSError):
+        pass
+
+
+def main(argv: list[str]) -> int:
+    _make_stdout_utf8_safe()
+    strict = "--strict" in argv
+
+    git_facts = collect_git_facts()
+    ci_facts = collect_ci_facts()
+    gov_facts = collect_governance_facts()
+    pilot_facts = collect_pilot_decision_facts()
+    drift_facts = collect_drift_facts()
+    next_facts = collect_next_action_facts()
+
+    output: list[str] = ["AGENTFORGE PROJECT STATUS", "=" * 26]
+    output += render_git(git_facts)
+    output += render_ci(ci_facts)
+    output += render_governance(gov_facts)
+    output += render_pilot_decisions(pilot_facts)
+    output += render_drift(drift_facts)
+    output += render_next_action(next_facts)
+    output.append("")
+
+    print("\n".join(output))
+
+    if strict:
+        drift_failed = any(not check["ok"] for check in drift_facts.values())
+        if drift_failed:
+            return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

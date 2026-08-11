@@ -162,8 +162,17 @@ venv.bak/
 data/
 # understand-anything knowledge graph cache (regenerate via /understand)
 .understand-anything/
-# Claude Code local config (launch.json etc.) and superpowers brainstorm sessions
-.claude/
+# Claude Code local config (launch.json etc.) and superpowers brainstorm sessions.
+# Agent/skill/hook definitions ARE project source (versioned harness config) and
+# must stay tracked even though the rest of .claude/ is personal/local runtime state.
+.claude/*
+!.claude/agents
+!.claude/agents/**
+!.claude/skills
+!.claude/skills/**
+!.claude/hooks
+!.claude/hooks/**
+!.claude/settings.json
 .superpowers/
 # Next.js incremental typecheck cache
 apps/web/tsconfig.tsbuildinfo

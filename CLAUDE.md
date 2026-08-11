@@ -54,6 +54,11 @@
 - **프론트 npx/.bin 셰임 깨짐** → node 직접: dev `node node_modules/next/dist/bin/next dev <apps/web 절대경로> -p 3300`, tsc `node node_modules/typescript/bin/tsc --noEmit`, e2e `node node_modules/@playwright/test/cli.js test`(`PLAYWRIGHT_BASE_URL=http://127.0.0.1:3300`). 화면 캡처는 `.claude/launch.json`(node 직접 설정)으로 `preview_start` → 3300 점유 먼저 비울 것.
 - **이관(무코드)**: 임베딩/LLM `base_url·model`을 사내 vLLM/`qwen3-30b-a3b`(MoE 30B/~3B활성, 회사 표준)로, `AGENT_FORGE_QDRANT_URL`만 교체.
 
+## .claude 하네스 배선 (agents/skills/hooks)
+
+- `.claude/agents/`(security-reviewer·backend-specialist·frontend-specialist·infra-ci-specialist)와 `.claude/skills/threat-modeling/`이 실존한다 — 둘 다 `harness/agents/specialists.yaml`·`harness/skills/threat-modeling/SKILL.md`를 **참조**만 하고 프로즈를 복제하지 않는다(드리프트 방지). 열 개 전 역할이 아니라 실제로 디스패치되는 4개만 파일화했다.
+- `.claude/settings.json`(버전관리 대상, 나머지 `.claude/`는 여전히 gitignore)에 훅 2개 활성: **PreToolUse** `block-main-push.mjs`(`git push`가 `main`/`master`로 직행하면 차단, fail-open) · **PostToolUse** `secret-scan-warn.mjs`(명령/출력에 자격증명 패턴 감지 시 경고만, 차단 없음). 둘 다 자체 오류 시 무조건 통과(fail-open).
+
 ## 알려진 한계 (배포 전)
 SSO 미연동(헤더 스텁) · 프롬프트 인젝션은 약한 모델서 비결정적 우회(하드닝=베이스라인) · 업로드 TXT/MD/PDF/DOCX 지원(XLSX·원본파일 보관 미지원) · 객체저장소(MinIO)는 배선됨(AF-009, PR #30) — opt-in `AGENT_FORGE_OBJECT_STORE_BACKEND`(기본 none), 켜면 업로드 원본 보관 + 큐 잡이 스토어에서 fetch(풀 async 큐 분리는 보류) · run 조회 GET은 owner/admin 스코프(PR #29)지만 문서목록 GET 메타는 아직 무스코프(원문 없음).
 

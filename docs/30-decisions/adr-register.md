@@ -66,6 +66,24 @@ It is not a substitute for full ADR documents. It provides one index with status
 | ADR-113 | Pilot release approvers and separation of duties | `OPEN` | Sponsor / Security / Release Governor | Named accountable roles | RACI, approval authority, emergency disable and rollback | Pilot GO/HOLD/NO-GO |
 | ADR-114 | Config-C retrieval/rerank/evaluation baseline | `OPEN` | Product / RAG / QA-Eval | Existing candidate configurations | fixed corpus, metrics, latency, regression report, decision rationale | Final pilot baseline |
 
+### 4.1 In-repo prior art to read before drafting these ADRs
+
+Per CLAUDE.md rule 5-e (study prior implementations before adopting a pattern), the following already exist
+in this repository and must be read before ADR-104/105/106/114 or any per-agent model-selection Work Order.
+They are **inputs, not decisions** — none of them is approved, and this register still governs.
+
+| Source | Where | Read it for | Caution |
+|---|---|---|---|
+| Closed PR **#1** (`codex/orchestrated-ingestion`, 2026-05-14) | branch retained; not merged | An earlier full implementation of model routing: `apps/api/app/domain/model_routing.py`, `apps/api/app/infra/model_gateway.py`, `packages/shared-contracts/model-routing-policy.v0.1.json`, `docs/agent-model-routing-policy.md` | **Do not merge or cherry-pick wholesale.** Its Alembic revisions `0004_sprint1_eval_runs` / `0005_eval_model_routing` collide with current `0004_eval_runs` / `0005_document_has_been_indexed`, and `apps/web` has since been rewritten (design system, role switcher, the `data-testid` set the 21 e2e specs assert). Extract patterns only. |
+| Model Routing Policy (current, provider-neutral) | `harness/policies/model-routing.yaml` + `harness/schemas/model-routing-policy.schema.json` | The vocabulary the decision should land in: `model_ref`, `model_id`, `allowed_classifications`, limits, `unlisted_model_behavior: deny`, `external_fallback_allowed: false` | `status: draft`; its `product.*` model_ids are literally `PILOT_DECISION_REQUIRED` — i.e. ADR-104/105/106 fill them, not the reverse. |
+| Config-C live experiment | `docs/eval-results-live-v0.5.md` | Measured before/after for `retrieval_min_score` 0.35 + `hybrid_lexical` + `rerank_top_k=2` + `answer_min_score=0.53` (useful_answer 83.3→91.7, refusal held at 88.9, 2 runs) | Measured on a local **qwen3:1.7b**, not the internal model — the numbers do **not** transfer and must be re-measured for ADR-114. |
+
+Known design constraints already established for per-agent model selection (from the 2026-08-11 design
+review): per-agent **embedding** choice is impossible without breaking the shared `chunks_active` collection
+(`embedding_dim`), so scope any such feature to generation only; `Run`/`RunStep` currently record
+temperature/top_p but **no model id**, so audit cannot answer "which model produced this answer" until that
+is added; and per-agent models make eval scores incommensurable unless the model ref is recorded per run.
+
 ## 5. Open Architecture-Recovery Decisions
 
 | ID | Decision required | Status | Owner | Recommendation | Acceptance evidence |

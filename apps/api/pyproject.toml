@@ -29,7 +29,7 @@ dependencies = [
 dev = [
     "httpx>=0.27,<1.0",
     "pytest>=8.3,<9.0",
-    "ruff>=0.7,<1.0",
+    "ruff==0.15.20",
     "jsonschema>=4.23,<5.0",
 ]
 
@@ -40,6 +40,22 @@ pythonpath = ["."]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# Explicit selection so CI can't silently inherit a new ruff release's
+# expanded defaults (root cause of the 2026-07-25 CI break: ruff 0.16.0
+# widened its default rule set from E4/E7/E9/F to also include B/I/UP/
+# BLE/ISC, and the loose ruff>=0.7,<1.0 pin let CI pick up 0.16.x while
+# local dev stayed on 0.15.x). This select list codifies the rule set the
+# codebase already passed under the pre-0.16 defaults, plus bugbear (B)
+# minus B008.
+select = ["E4", "E7", "E9", "F", "B"]
+ignore = [
+    # FastAPI's dependency-injection idiom intentionally calls Depends()/
+    # Query() in argument defaults (`db: Session = Depends(get_db)`); this
+    # is the documented, pervasive pattern throughout the API, not a bug.
+    "B008",
+]
 
 [tool.setuptools.packages.find]
 include = ["app*"]

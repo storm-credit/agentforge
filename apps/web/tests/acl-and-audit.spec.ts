@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 // Requires the API + seeded documents/audit events running behind the dev server.
 test("knowledge page exposes ACL edit form for a document", async ({ page }) => {
   await page.goto("/knowledge");
-  await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "지식 문서", level: 1 })).toBeVisible();
 
   const firstDoc = page.getByTestId("doc-row").first();
   await expect(firstDoc).toBeVisible();

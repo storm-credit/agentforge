@@ -27,7 +27,7 @@ test.describe("Agent Studio shell", () => {
     await expect(page.getByRole("heading", { name: "에이전트", exact: true })).toBeVisible();
 
     await primaryNav.getByRole("link", { name: "지식", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "지식", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "지식 문서", level: 1 })).toBeVisible();
 
     await primaryNav.getByRole("link", { name: "감사", exact: true }).click();
     await expect(page.getByRole("heading", { name: "감사", exact: true })).toBeVisible();

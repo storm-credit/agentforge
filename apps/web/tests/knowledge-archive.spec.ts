@@ -5,7 +5,7 @@ import { test, expect } from "@playwright/test";
 // does not disturb other specs running in parallel against the same backend.
 test("archiving a document via the knowledge page removes it from the list", async ({ page }) => {
   await page.goto("/knowledge");
-  await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "지식 문서", level: 1 })).toBeVisible();
 
   const uniqueTitle = `Archive Test Doc ${Date.now()}`;
 
@@ -34,7 +34,7 @@ test("archiving a document via the knowledge page removes it from the list", asy
 test("archived view toggle surfaces archived docs (admin only) and restore returns them", async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto("/knowledge");
-  await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "지식 문서", level: 1 })).toBeVisible();
 
   const uniqueTitle = `Restore Test Doc ${Date.now()}`;
   const row = () => page.getByTestId("doc-row").filter({ hasText: uniqueTitle });
@@ -73,7 +73,7 @@ test("archived view toggle surfaces archived docs (admin only) and restore retur
   await page.evaluate(() => { (window as { __afPreReload?: boolean }).__afPreReload = true; });
   await page.getByTestId("demo-role-switcher").selectOption("developer");
   await page.waitForFunction(() => !(window as { __afPreReload?: boolean }).__afPreReload);
-  await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "지식 문서", level: 1 })).toBeVisible();
   await expect(page.getByTestId("role-restricted-note")).toBeVisible();
   await expect(page.getByTestId("show-archived-toggle")).toHaveCount(0);
   await expect(row()).toHaveCount(0);
@@ -82,7 +82,7 @@ test("archived view toggle surfaces archived docs (admin only) and restore retur
   await page.evaluate(() => { (window as { __afPreReload?: boolean }).__afPreReload = true; });
   await page.getByTestId("demo-role-switcher").selectOption("admin");
   await page.waitForFunction(() => !(window as { __afPreReload?: boolean }).__afPreReload);
-  await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "지식 문서", level: 1 })).toBeVisible();
   // Retry the toggle click: a click that lands before React hydration is wiped
   // when the controlled checkbox re-renders, so re-check until the row shows up.
   await expect(async () => {

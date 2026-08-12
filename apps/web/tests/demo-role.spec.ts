@@ -14,7 +14,7 @@ import { test, expect } from "@playwright/test";
 test("demo role switcher changes privileged controls and server-scoped lists", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("/knowledge");
-  await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "지식 문서", level: 1 })).toBeVisible();
 
   const stamp = Date.now();
   const publicTitle = `Demo Role Public Doc ${stamp}`;
@@ -52,7 +52,7 @@ test("demo role switcher changes privileged controls and server-scoped lists", a
   // --- Switch to developer (reloads the page with the developer header bundle).
   await page.getByTestId("demo-role-switcher").selectOption("developer");
   await page.waitForLoadState("load");
-  await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "지식 문서", level: 1 })).toBeVisible();
   await expect(page.getByTestId("demo-role-switcher")).toHaveValue("developer");
 
   // Server-side ACL scoping: the restricted doc is gone, the public doc remains.
@@ -68,7 +68,7 @@ test("demo role switcher changes privileged controls and server-scoped lists", a
   // --- Switch back to admin: full view restored.
   await page.getByTestId("demo-role-switcher").selectOption("admin");
   await page.waitForLoadState("load");
-  await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "지식 문서", level: 1 })).toBeVisible();
   await expect(page.getByTestId("demo-role-switcher")).toHaveValue("admin");
 
   const restoredRestrictedRow = page.getByTestId("doc-row").filter({ hasText: restrictedTitle });
@@ -101,7 +101,7 @@ test("demo role switcher changes privileged controls and server-scoped lists", a
 test("hr persona sees a group-restricted document that developer does not (group ACL)", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("/knowledge");
-  await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "지식 문서", level: 1 })).toBeVisible();
 
   const hrOnlyTitle = `Group ACL HR Doc ${Date.now()}`;
   const row = () => page.getByTestId("doc-row").filter({ hasText: hrOnlyTitle });
@@ -131,7 +131,7 @@ test("hr persona sees a group-restricted document that developer does not (group
     await page.evaluate(() => { (window as { __afPreReload?: boolean }).__afPreReload = true; });
     await page.getByTestId("demo-role-switcher").selectOption(next);
     await page.waitForFunction(() => !(window as { __afPreReload?: boolean }).__afPreReload);
-    await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "지식 문서", level: 1 })).toBeVisible();
     await expect(page.getByTestId("demo-role-switcher")).toHaveValue(next);
   }
 

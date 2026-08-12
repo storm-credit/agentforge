@@ -1,0 +1,609 @@
+<title>AgentForge 첫 화면 — 4개 시안 비교</title>
+<style>
+  /* ---- tokens: light is the bare :root, redefined for both dark states ---- */
+  :root {
+    --ink:        #0E1626;
+    --ink-2:      #3B4863;
+    --ink-3:      #6B7893;
+    --ground:     #F4F6FA;
+    --surface:    #FFFFFF;
+    --surface-2:  #EDF1F7;
+    --line:       #D3DAE6;
+    --line-soft:  #E4E9F1;
+    --accent:     #1D4ED8;
+    --accent-dim: #DDE5FA;
+    --ok:         #147F52;
+    --warn:       #A45B00;
+    --stop:       #B4232B;
+    --wf-ink:     #0E1626;
+    --wf-side:    #16203A;
+    --wf-fill:    #E9EDF4;
+
+    --sans: "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+            "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", "D2Coding", Consolas, "Courier New", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ink:        #E7ECF5;
+      --ink-2:      #AEBAD1;
+      --ink-3:      #7A8AA6;
+      --ground:     #0B1220;
+      --surface:    #131C2E;
+      --surface-2:  #1B2740;
+      --line:       #2A3752;
+      --line-soft:  #202C45;
+      --accent:     #86A5FF;
+      --accent-dim: #1E2C4E;
+      --ok:         #4BC98C;
+      --warn:       #E0A45C;
+      --stop:       #FF8A8A;
+      --wf-ink:     #C7D2E6;
+      --wf-side:    #091324;
+      --wf-fill:    #1C2740;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ink:        #E7ECF5;
+    --ink-2:      #AEBAD1;
+    --ink-3:      #7A8AA6;
+    --ground:     #0B1220;
+    --surface:    #131C2E;
+    --surface-2:  #1B2740;
+    --line:       #2A3752;
+    --line-soft:  #202C45;
+    --accent:     #86A5FF;
+    --accent-dim: #1E2C4E;
+    --ok:         #4BC98C;
+    --warn:       #E0A45C;
+    --stop:       #FF8A8A;
+    --wf-ink:     #C7D2E6;
+    --wf-side:    #091324;
+    --wf-fill:    #1C2740;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1400px; margin: 0 auto; padding: 56px 28px 96px; }
+
+  /* ---- masthead ---- */
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 14px;
+  }
+  h1 {
+    font-size: clamp(28px, 4vw, 46px);
+    font-weight: 800;
+    letter-spacing: -.03em;
+    line-height: 1.15;
+    text-wrap: balance;
+    margin: 0 0 18px;
+  }
+  .lede { max-width: 62ch; color: var(--ink-2); margin: 0 0 8px; }
+  .masthead { border-bottom: 2px solid var(--ink); padding-bottom: 34px; margin-bottom: 14px; }
+
+  .baseline {
+    display: flex; gap: 14px; align-items: flex-start;
+    background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--warn);
+    padding: 16px 18px; margin: 30px 0 44px;
+  }
+  .baseline .tag {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--warn); white-space: nowrap; padding-top: 4px;
+  }
+  .baseline p { margin: 0; font-size: 14.5px; color: var(--ink-2); }
+
+  h2 {
+    font-size: 13px; font-family: var(--mono); font-weight: 700;
+    letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-3); margin: 0 0 20px;
+    padding-bottom: 10px; border-bottom: 1px solid var(--line);
+  }
+
+  /* ---- option grid ---- */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 20px;
+    margin-bottom: 64px;
+  }
+  @media (max-width: 1100px) { .grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+  @media (max-width: 620px)  { .grid { grid-template-columns: 1fr; } }
+
+  .opt {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    display: flex; flex-direction: column;
+  }
+  .opt-head { padding: 18px 18px 14px; border-bottom: 1px solid var(--line-soft); }
+  .opt-id {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+    color: var(--accent); margin: 0 0 6px;
+  }
+  .opt-name {
+    font-size: 19px; font-weight: 800; letter-spacing: -.02em;
+    margin: 0 0 8px; text-wrap: balance;
+  }
+  .opt-for { font-size: 12.5px; color: var(--ink-3); margin: 0; font-family: var(--mono); }
+
+  /* ---- wireframe: monochrome hairlines, accent ONLY on what differs ---- */
+  .wf {
+    margin: 0; padding: 14px;
+    background: var(--surface-2);
+    border-bottom: 1px solid var(--line-soft);
+    display: flex; gap: 6px; height: 214px;
+  }
+  .wf-side {
+    width: 26%; background: var(--wf-side);
+    padding: 7px 6px; display: flex; flex-direction: column; gap: 5px; flex-shrink: 0;
+  }
+  .wf-logo { height: 9px; width: 62%; background: var(--accent); opacity: .9; }
+  .wf-nav  { height: 6px; background: var(--wf-ink); opacity: .34; }
+  .wf-nav.on { opacity: .82; }
+  .wf-nav.gone { opacity: .09; }
+  .wf-main { flex: 1; display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+
+  .wf-bar   { height: 8px; background: var(--wf-ink); opacity: .5; }
+  .wf-bar.s { width: 44%; }
+  .wf-bar.m { width: 66%; }
+  .wf-box   { border: 1px solid var(--wf-ink); background: var(--wf-fill); }
+  .wf-box.o { opacity: .55; }
+  .wf-row   { display: flex; gap: 5px; }
+  .wf-col   { display: flex; flex-direction: column; gap: 5px; }
+  .wf-grow  { flex: 1; }
+
+  /* the differentiator — one tinted region per option */
+  .diff {
+    border-color: var(--accent);
+    background: var(--accent-dim);
+  }
+  .wf-line { height: 4px; background: var(--wf-ink); opacity: .28; }
+  .wf-line.a { background: var(--accent); opacity: .75; }
+  .wf-chip {
+    height: 7px; width: 22px; background: var(--wf-ink); opacity: .3; flex-shrink: 0;
+  }
+  .wf-chip.ok { background: var(--ok); opacity: .85; }
+  .wf-chip.stop { background: var(--stop); opacity: .85; }
+  .wf-pad { padding: 6px; display: flex; flex-direction: column; gap: 5px; }
+
+  .wf-caption {
+    font-family: var(--mono); font-size: 11px; line-height: 1.55;
+    color: var(--ink-3); margin: 0; padding: 11px 18px 0;
+  }
+
+  /* ---- per-option spec ---- */
+  dl.spec { margin: 0; padding: 14px 18px 20px; font-size: 13.5px; }
+  dl.spec dt {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: .1em;
+    text-transform: uppercase; color: var(--ink-3); margin-top: 13px;
+  }
+  dl.spec dt:first-child { margin-top: 0; }
+  dl.spec dd { margin: 3px 0 0; color: var(--ink-2); line-height: 1.6; }
+
+  .cost { display: inline-flex; align-items: baseline; gap: 7px; }
+  .cost b { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--ink); }
+  .pill {
+    display: inline-block; font-family: var(--mono); font-size: 10px;
+    letter-spacing: .08em; text-transform: uppercase;
+    padding: 2px 7px; border: 1px solid currentColor;
+  }
+  .pill.low  { color: var(--ok); }
+  .pill.mid  { color: var(--warn); }
+  .pill.high { color: var(--stop); }
+
+  /* ---- matrix ---- */
+  .scroll { overflow-x: auto; margin-bottom: 64px; }
+  table { border-collapse: collapse; width: 100%; min-width: 900px; font-size: 13.5px; }
+  caption { text-align: left; color: var(--ink-3); font-size: 13px; margin-bottom: 12px; }
+  th, td { text-align: left; vertical-align: top; padding: 13px 14px; border-bottom: 1px solid var(--line-soft); }
+  thead th {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-3); border-bottom: 2px solid var(--ink); background: var(--surface);
+    position: sticky; top: 0;
+  }
+  tbody th {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .06em; text-transform: uppercase;
+    color: var(--ink-3); width: 130px; white-space: nowrap;
+  }
+  tbody tr:nth-child(odd) td, tbody tr:nth-child(odd) th { background: var(--surface); }
+  tbody tr:nth-child(even) td, tbody tr:nth-child(even) th { background: var(--surface-2); }
+  td.pick { box-shadow: inset 3px 0 0 var(--accent); }
+
+  /* ---- recommendation ---- */
+  .rec {
+    background: var(--surface); border: 1px solid var(--line);
+    border-top: 3px solid var(--accent); padding: 28px 30px;
+  }
+  .rec h3 { font-size: 21px; font-weight: 800; letter-spacing: -.02em; margin: 0 0 14px; }
+  .rec p { max-width: 68ch; color: var(--ink-2); margin: 0 0 14px; }
+  .rec ul { max-width: 68ch; color: var(--ink-2); padding-left: 20px; margin: 0 0 14px; }
+  .rec li { margin-bottom: 7px; }
+  .rec strong { color: var(--ink); }
+  .rejected { border-top: 1px solid var(--line-soft); margin-top: 22px; padding-top: 20px; }
+
+  footer {
+    margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11.5px; color: var(--ink-3); line-height: 1.8;
+  }
+  a { color: var(--accent); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, th:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">AgentForge · 첫 화면 설계 결정 · 2026-08-13</p>
+    <h1>첫 화면은 누구의 화면인가</h1>
+    <p class="lede">
+      네 개의 안은 색이 아니라 <strong>누구를 우선하는지</strong>가 다릅니다. 그래서 정보구조·탐색·밀도·
+      동선·빈 상태·구현비용이 모두 갈립니다. 와이어프레임은 전부 단색이고, <strong>각 안이 달라지는
+      영역만 파랗게</strong> 칠했습니다 — 네 개를 훑으면 차이점에 눈이 먼저 갑니다.
+    </p>
+  </header>
+
+  <div class="baseline">
+    <span class="tag">현재 기준선</span>
+    <p>
+      지금 <code>/</code> 화면은 정적입니다. 영어 마케팅 문구 한 줄, 고정 카드 3개(RBAC+ACL / Cited /
+      On-prem), 그리고 하드코딩된 “Live” 배지 5개. 실제 데이터가 하나도 없어서 <strong>매일 쓰는
+      지식관리자에게 줄 것이 없고</strong>, 처음 온 사람에게도 무엇을 클릭해야 하는지 안 알려줍니다.
+    </p>
+  </div>
+
+  <h2>네 개 시안</h2>
+  <div class="grid">
+
+    <!-- ============ A ============ -->
+    <article class="opt">
+      <div class="opt-head">
+        <p class="opt-id">시안 A</p>
+        <p class="opt-name">작업 대기열</p>
+        <p class="opt-for">우선 사용자 → 지식관리자(매일)</p>
+      </div>
+      <div class="wf" aria-hidden="true">
+        <div class="wf-side">
+          <span class="wf-logo"></span>
+          <span class="wf-nav on"></span><span class="wf-nav"></span><span class="wf-nav"></span>
+          <span class="wf-nav"></span><span class="wf-nav"></span><span class="wf-nav"></span>
+        </div>
+        <div class="wf-main">
+          <span class="wf-bar s"></span>
+          <div class="wf-box diff wf-pad wf-grow">
+            <div class="wf-row"><span class="wf-chip stop"></span><span class="wf-line" style="flex:1"></span></div>
+            <div class="wf-row"><span class="wf-chip stop"></span><span class="wf-line" style="flex:1"></span></div>
+            <div class="wf-row"><span class="wf-chip"></span><span class="wf-line" style="flex:1"></span></div>
+            <div class="wf-row"><span class="wf-chip"></span><span class="wf-line" style="flex:1"></span></div>
+            <div class="wf-row"><span class="wf-chip"></span><span class="wf-line" style="flex:1"></span></div>
+            <div class="wf-row"><span class="wf-chip"></span><span class="wf-line" style="flex:1"></span></div>
+          </div>
+          <div class="wf-row">
+            <div class="wf-box o wf-grow" style="height:26px"></div>
+            <div class="wf-box o wf-grow" style="height:26px"></div>
+          </div>
+        </div>
+      </div>
+      <p class="wf-caption">// 파란 영역 = 처리해야 할 일 목록</p>
+      <dl class="spec">
+        <dt>정보구조</dt>
+        <dd>마케팅 문구 없음. 첫 화면이 곧 할 일 목록 — 색인 실패, 오늘 거부된 질의, 최근 ACL 변경.</dd>
+        <dt>핵심 동선</dt>
+        <dd>문제를 본다 → 클릭 → 그 문서/실행 화면에서 고친다. 클릭 1회.</dd>
+        <dt>밀도</dt>
+        <dd>높음. 한 화면에 항목 6~10개.</dd>
+        <dt>빈 상태</dt>
+        <dd>“지금 처리할 일이 없습니다” + 지난 7일 요약. 빈 화면이 곧 좋은 소식.</dd>
+        <dt>접근성</dt>
+        <dd>단일 목록이라 키보드·스크린리더에 가장 단순. 건수는 live region으로 알림.</dd>
+        <dt>구현 비용</dt>
+        <dd class="cost"><span class="pill mid">중</span> <b>집계 API 신규</b></dd>
+        <dt>위험</dt>
+        <dd>실패 건수를 세는 엔드포인트가 없습니다 — 프리즈 하에서 Work Order 필요.</dd>
+      </dl>
+    </article>
+
+    <!-- ============ B ============ -->
+    <article class="opt">
+      <div class="opt-head">
+        <p class="opt-id">시안 B</p>
+        <p class="opt-name">역할별 입구</p>
+        <p class="opt-for">우선 사용자 → 처음 온 사람 전원</p>
+      </div>
+      <div class="wf" aria-hidden="true">
+        <div class="wf-side">
+          <span class="wf-logo"></span>
+          <span class="wf-nav on"></span><span class="wf-nav"></span><span class="wf-nav"></span>
+          <span class="wf-nav gone"></span><span class="wf-nav gone"></span><span class="wf-nav gone"></span>
+        </div>
+        <div class="wf-main">
+          <span class="wf-bar m"></span>
+          <div class="wf-col wf-grow" style="gap:7px">
+            <div class="wf-box diff wf-pad wf-grow">
+              <span class="wf-line a" style="width:52%"></span><span class="wf-line" style="width:80%"></span>
+            </div>
+            <div class="wf-box diff wf-pad wf-grow">
+              <span class="wf-line a" style="width:44%"></span><span class="wf-line" style="width:72%"></span>
+            </div>
+            <div class="wf-box o wf-pad wf-grow">
+              <span class="wf-line" style="width:48%"></span><span class="wf-line" style="width:66%"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="wf-caption">// 파란 카드 = 내 권한으로 되는 것<br>// 흐린 카드 = 왜 안 되는지 설명</p>
+      <dl class="spec">
+        <dt>정보구조</dt>
+        <dd>의도별 큰 카드 3개 — 질문하기 / 문서 관리 / 감사·평가. 사이드바도 역할에 맞게 줄어듭니다.</dd>
+        <dt>핵심 동선</dt>
+        <dd>“나는 무엇을 하려는가”를 고른다 → 그 화면으로. 클릭 1회.</dd>
+        <dt>밀도</dt>
+        <dd>낮음. 큰 타깃 3개.</dd>
+        <dt>빈 상태</dt>
+        <dd>빈 상태가 없습니다. 대신 <strong>권한 없는 카드를 그 자리에서 설명</strong> — 나중에 403을 맞지 않습니다.</dd>
+        <dt>접근성</dt>
+        <dd>타깃이 크고 적어 모바일·처음 사용자에 가장 유리. 비활성 카드도 읽어줍니다.</dd>
+        <dt>구현 비용</dt>
+        <dd class="cost"><span class="pill low">낮음</span> <b>기존 isPrivileged 재사용</b></dd>
+        <dt>위험</dt>
+        <dd>매일 쓰는 사람에게는 클릭이 한 번 늘어납니다. SSO 전에는 역할이 데모 선택입니다.</dd>
+      </dl>
+    </article>
+
+    <!-- ============ C ============ -->
+    <article class="opt">
+      <div class="opt-head">
+        <p class="opt-id">시안 C</p>
+        <p class="opt-name">증거 대시보드</p>
+        <p class="opt-for">우선 사용자 → 파일럿 결정자·방문자</p>
+      </div>
+      <div class="wf" aria-hidden="true">
+        <div class="wf-side">
+          <span class="wf-logo"></span>
+          <span class="wf-nav on"></span><span class="wf-nav"></span><span class="wf-nav"></span>
+          <span class="wf-nav"></span><span class="wf-nav"></span><span class="wf-nav"></span>
+        </div>
+        <div class="wf-main">
+          <span class="wf-bar s"></span>
+          <div class="wf-row">
+            <div class="wf-box diff wf-grow" style="height:38px"></div>
+            <div class="wf-box diff wf-grow" style="height:38px"></div>
+            <div class="wf-box diff wf-grow" style="height:38px"></div>
+          </div>
+          <div class="wf-box diff wf-pad wf-grow">
+            <span class="wf-line a" style="width:34%"></span>
+            <div class="wf-row" style="align-items:flex-end;gap:3px;flex:1">
+              <span style="flex:1;background:var(--accent);opacity:.5;height:40%"></span>
+              <span style="flex:1;background:var(--accent);opacity:.5;height:62%"></span>
+              <span style="flex:1;background:var(--accent);opacity:.5;height:52%"></span>
+              <span style="flex:1;background:var(--accent);opacity:.5;height:78%"></span>
+              <span style="flex:1;background:var(--accent);opacity:.5;height:70%"></span>
+              <span style="flex:1;background:var(--accent);opacity:.9;height:88%"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="wf-caption">// 파란 영역 = 집계 수치와 추이 차트</p>
+      <dl class="spec">
+        <dt>정보구조</dt>
+        <dd>거버넌스 주장을 뒷받침하는 수치 — 인용률, 거부율, ACL 차단 건수, 감사 이벤트, 최근 평가.</dd>
+        <dt>핵심 동선</dt>
+        <dd>수치 → 클릭 → <strong>그 수치를 만든 실제 트레이스</strong>. 주장과 증거가 이어집니다.</dd>
+        <dt>밀도</dt>
+        <dd>높음. 타일 + 차트.</dd>
+        <dt>빈 상태</dt>
+        <dd>“아직 실행 데이터가 없습니다” + 데모 시나리오 실행 버튼.</dd>
+        <dt>접근성</dt>
+        <dd>차트마다 동등한 표를 제공해야 합니다 — 안 하면 이 안이 가장 취약합니다.</dd>
+        <dt>구현 비용</dt>
+        <dd class="cost"><span class="pill high">높음</span> <b>집계 + 차트</b></dd>
+        <dt>위험</dt>
+        <dd><strong>이번 주에 확인한 실패 유형 그대로입니다</strong> — 납치된 답변 옆에 초록 배지 4개가 떠 있었습니다. 초록 숫자판은 과신을 만듭니다.</dd>
+      </dl>
+    </article>
+
+    <!-- ============ D ============ -->
+    <article class="opt">
+      <div class="opt-head">
+        <p class="opt-id">시안 D</p>
+        <p class="opt-name">되는 것 / 안 되는 것</p>
+        <p class="opt-for">우선 사용자 → 외부 검토자·감사</p>
+      </div>
+      <div class="wf" aria-hidden="true">
+        <div class="wf-side">
+          <span class="wf-logo"></span>
+          <span class="wf-nav on"></span><span class="wf-nav"></span><span class="wf-nav"></span>
+          <span class="wf-nav"></span><span class="wf-nav"></span><span class="wf-nav"></span>
+        </div>
+        <div class="wf-main">
+          <span class="wf-bar m"></span>
+          <div class="wf-row wf-grow">
+            <div class="wf-box wf-pad wf-grow">
+              <div class="wf-row"><span class="wf-chip ok"></span><span class="wf-line" style="flex:1"></span></div>
+              <div class="wf-row"><span class="wf-chip ok"></span><span class="wf-line" style="flex:1"></span></div>
+              <div class="wf-row"><span class="wf-chip ok"></span><span class="wf-line" style="flex:1"></span></div>
+              <div class="wf-row"><span class="wf-chip ok"></span><span class="wf-line" style="flex:1"></span></div>
+            </div>
+            <div class="wf-box diff wf-pad wf-grow">
+              <div class="wf-row"><span class="wf-chip stop"></span><span class="wf-line a" style="flex:1"></span></div>
+              <div class="wf-row"><span class="wf-chip stop"></span><span class="wf-line a" style="flex:1"></span></div>
+              <div class="wf-row"><span class="wf-chip stop"></span><span class="wf-line a" style="flex:1"></span></div>
+              <div class="wf-row"><span class="wf-chip stop"></span><span class="wf-line a" style="flex:1"></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="wf-caption">// 파란 열 = 아직 안 되는 것 + 근거 링크</p>
+      <dl class="spec">
+        <dt>정보구조</dt>
+        <dd>두 열. 왼쪽은 지금 동작하는 것, 오른쪽은 SSO 미연동·인젝션 미방어·운영통제 미결 — ADR과 Work Order로 링크.</dd>
+        <dt>핵심 동선</dt>
+        <dd>신뢰를 먼저 만들고 문서로 보냅니다. 작업 동선은 아닙니다.</dd>
+        <dt>밀도</dt>
+        <dd>중간. 목록 두 개.</dd>
+        <dt>빈 상태</dt>
+        <dd>빈 상태 없음. 내용이 SSOT에서 옵니다.</dd>
+        <dt>접근성</dt>
+        <dd>순수 텍스트·목록이라 네 안 중 가장 견고합니다.</dd>
+        <dt>구현 비용</dt>
+        <dd class="cost"><span class="pill low">낮음</span> <b>SSOT 파싱 또는 상수</b></dd>
+        <dt>위험</dt>
+        <dd>매일 쓰는 사람에게 아무 작업도 주지 않습니다. 첫 화면 전체를 여기 쓰기엔 아깝습니다.</dd>
+      </dl>
+    </article>
+
+  </div>
+
+  <h2>기준별 비교</h2>
+  <div class="scroll">
+    <table>
+      <caption>같은 기준을 행으로 정렬했습니다. 파란 왼쪽 선은 그 기준에서 가장 강한 안입니다.</caption>
+      <thead>
+        <tr>
+          <th scope="col">기준</th>
+          <th scope="col">A 작업 대기열</th>
+          <th scope="col">B 역할별 입구</th>
+          <th scope="col">C 증거 대시보드</th>
+          <th scope="col">D 되는 것/안 되는 것</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">우선 사용자</th>
+          <td>지식관리자(매일)</td>
+          <td>처음 온 사람 전원</td>
+          <td>결정자·방문자</td>
+          <td>외부 검토자</td>
+        </tr>
+        <tr>
+          <th scope="row">정보구조</th>
+          <td class="pick">할 일 단일 목록</td>
+          <td>의도별 카드 3개</td>
+          <td>수치 타일 + 차트</td>
+          <td>되는 것 / 안 되는 것 2열</td>
+        </tr>
+        <tr>
+          <th scope="row">탐색</th>
+          <td>사이드바 유지</td>
+          <td class="pick">역할에 따라 사이드바 축소</td>
+          <td>사이드바 유지</td>
+          <td>사이드바 유지</td>
+        </tr>
+        <tr>
+          <th scope="row">밀도</th>
+          <td>높음</td>
+          <td>낮음</td>
+          <td>높음</td>
+          <td>중간</td>
+        </tr>
+        <tr>
+          <th scope="row">클릭 수</th>
+          <td class="pick">1 (문제 → 수정)</td>
+          <td>1 (의도 → 화면)</td>
+          <td>2 (수치 → 트레이스)</td>
+          <td>1 (링크 → 문서)</td>
+        </tr>
+        <tr>
+          <th scope="row">오류·빈 상태</th>
+          <td>빈 화면 = 좋은 소식</td>
+          <td class="pick">권한 거부를 미리 설명</td>
+          <td>데모 실행 유도</td>
+          <td>해당 없음</td>
+        </tr>
+        <tr>
+          <th scope="row">접근성</th>
+          <td>좋음</td>
+          <td>좋음(큰 타깃)</td>
+          <td>약함(차트 대체표 필수)</td>
+          <td class="pick">가장 견고</td>
+        </tr>
+        <tr>
+          <th scope="row">신규 API</th>
+          <td>필요(집계)</td>
+          <td class="pick">없음</td>
+          <td>필요(집계 다수)</td>
+          <td>없음</td>
+        </tr>
+        <tr>
+          <th scope="row">구현 비용</th>
+          <td>중</td>
+          <td class="pick">낮음</td>
+          <td>높음</td>
+          <td>낮음</td>
+        </tr>
+        <tr>
+          <th scope="row">프리즈 적합성</th>
+          <td>Work Order 필요</td>
+          <td class="pick">UX만 — 통과 가능</td>
+          <td>Work Order 필요</td>
+          <td>문서 성격 — 통과 가능</td>
+        </tr>
+        <tr>
+          <th scope="row">과신 위험</th>
+          <td>낮음</td>
+          <td>낮음</td>
+          <td><strong>높음</strong></td>
+          <td class="pick">가장 낮음</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>권고</h2>
+  <div class="rec">
+    <h3>B를 지금, A를 다음에. C는 지금 하지 않기.</h3>
+    <p>
+      <strong>B(역할별 입구)를 먼저</strong> 하는 이유는 세 가지입니다. 새 API가 필요 없고
+      (<code>isPrivileged</code>가 이미 있습니다), 수치를 만들어내지 않으므로 피처 프리즈 하에서
+      순수 UX 변경으로 통과하며, 지금 가장 큰 실제 문제 — <strong>처음 온 사람이 무엇을 클릭할지
+      모른다</strong> — 를 바로 없앱니다. 권한 없는 카드를 그 자리에서 설명하는 것도 실질적입니다:
+      지금은 눌러 보고 나서 403을 맞습니다.
+    </p>
+    <p>
+      <strong>A(작업 대기열)가 최종 형태</strong>라고 봅니다. 이 제품의 매일 사용자는 지식관리자이고,
+      그들에게 첫 화면은 “할 일이 있는가”여야 합니다. 다만 실패 건수·거부 건수를 세는 집계
+      엔드포인트가 없어서 코드 작업이며, 프리즈 하에서는 Work Order가 필요합니다. B 다음 순서로
+      두는 게 맞습니다.
+    </p>
+    <p>
+      <strong>C는 지금 만들면 안 된다고 봅니다.</strong> 근거는 이번 주 측정입니다. 프롬프트 인젝션에
+      납치된 답변 옆에 배지 네 개가 전부 초록색으로 떠 있었고 그중 하나가 “그라운딩 가드 통과”였습니다.
+      집계 초록 숫자판은 정확히 그 과신을 화면 전체로 확대합니다. 통제가 실제로 검증되기 전에 증거
+      대시보드를 만들면, 그 대시보드가 틀렸을 때 아무도 모릅니다.
+    </p>
+    <p>
+      <strong>D는 독립된 화면이 아니라 한 줄로 접습니다.</strong> 어느 안을 골라도 첫 화면 하단에
+      “아직 안 되는 것 3가지 →” 링크 한 줄이면 D의 값어치는 대부분 확보됩니다. 첫 화면 전체를
+      한계 고백에 쓰는 것은 매일 사용자에게 손해입니다.
+    </p>
+    <div class="rejected">
+      <p style="margin-bottom:8px"><strong>포기한 대안과 이유</strong></p>
+      <ul>
+        <li><strong>C 단독</strong> — 구현 비용이 가장 높은데, 통제 검증 전에는 과신을 키웁니다. 통제가 증명된 뒤에 재검토.</li>
+        <li><strong>D 단독</strong> — 접근성과 정직성은 최고지만 작업 동선이 0입니다.</li>
+        <li><strong>A 먼저</strong> — 방향은 맞지만 신규 집계 API가 프리즈 예외 사유가 되지 못합니다.</li>
+        <li><strong>현재 화면 유지</strong> — 하드코딩된 “Live” 배지 5개는 실제 상태를 반영하지 않습니다. 이번 주에 정정한 과장 표현과 같은 유형입니다.</li>
+      </ul>
+    </div>
+  </div>
+
+  <footer>
+    작성 근거 · CLAUDE.md 5-d(실질적으로 다른 4안, 색상 변형 불인정) ·
+    현재 화면 apps/web/app/page.tsx · 역할 게이팅 apps/web/app/lib/demoRole.ts ·
+    과신 위험 근거 docs/40-delivery/live-demo-evidence-2026-08-12.md §5<br>
+    이 문서는 결정을 위한 것입니다. 선택 후 근거와 포기한 대안을 Work Order에 옮깁니다.
+  </footer>
+
+</div>

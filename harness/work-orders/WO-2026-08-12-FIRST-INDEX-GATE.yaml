@@ -1,0 +1,196 @@
+schema_version: agentforge.work_order/v1
+work_order_id: WO-2026-08-12-FIRST-INDEX-GATE-001
+title: Decide and enforce who may supply text for a document's first index
+status: draft
+problem: >-
+  WO-2026-08-12-UPLOAD-ROLE-GATE-001 gated document creation on PRIVILEGED_ROLES but did
+  not close the remaining ingestion path, and its AC-04 is therefore unmet by design.
+  POST /knowledge/documents/{id}/index-jobs and POST /knowledge/index-jobs/{id}/process
+  accept caller-supplied source_text and require only read access to the document while
+  that document has never successfully indexed (has_been_indexed == False). So a
+  non-privileged but read-authorized principal can still be the one who puts text into
+  the active index for a registered-but-never-indexed document, served under that
+  document's ACL tag and confidentiality level. The durable has_been_indexed flag from
+  PR #92 correctly gates RE-indexing of a document that has previously held trusted
+  content; first-time indexing was never gated. This is the fourth member of the reindex
+  trust-boundary family (PR #66, #83, #92, and this). It is reproducible today: the test
+  apps/api/tests/test_ingestion_role_gate.py
+  test_residual_first_time_index_by_non_privileged_reader_is_still_open passes on main,
+  and its passing is the reproduction.
+intended_outcome: >-
+  A decision is recorded on who may supply the text for a document's first index, and the
+  code enforces it. If the decision is to gate, the endpoints enforce it before any chunk
+  or vector is written and a denial is audited. If the decision is to keep it open, the
+  reason is recorded and the residual test is relabelled as accepted risk rather than a
+  gap.
+parent_issue_refs:
+  - "#141"
+scope:
+  included:
+    - record the product decision on first-index authorization
+    - if gating - enforce it on index-job create and process before any chunk or vector write
+    - if gating - emit a policy.denied audit event on refusal
+    - update the residual test to assert the decided behavior instead of the current gap
+    - update docs/20-security/trust-boundaries-and-data-flows.md section 6.1
+    - update any caller that must now send privileged headers
+  excluded:
+    - changes to re-index authorization (already correct via has_been_indexed)
+    - changes to retrieval, ACL evaluation, or authorization primitives
+    - content inspection, injection detection, or quarantine on index
+    - introducing a new document status or a separate approver role
+    - changes to SSO or identity resolution
+  affected_components:
+    - backend-api
+    - documentation
+  affected_trust_boundaries:
+    - knowledge-ingestion
+  affected_data_classifications:
+    - internal
+    - restricted
+  runtime_behavior_change: true
+requirements:
+  - requirement_id: SEC-001
+    description: >-
+      Every path that writes content into the active index shall have a recorded
+      authorization decision.
+    authority_ref: docs/20-security/trust-boundaries-and-data-flows.md
+    adr_refs: []
+  - requirement_id: SEC-003
+    description: >-
+      An accepted risk shall be labelled as accepted, not left presented as an open gap.
+    authority_ref: docs/40-delivery/current-state.md
+    adr_refs: []
+  - requirement_id: DEL-003
+    description: Completion shall be supported by an Evidence Package.
+    authority_ref: docs/40-delivery/evidence-package-guide.md
+    adr_refs: []
+assigned_roles:
+  - agent_role_id: pm-orchestrator
+    responsibility: Obtain the product decision, then accept scope and merge.
+    accountable: true
+  - agent_role_id: security-trust-architect
+    responsibility: Enforce the decision and verify no ingestion path remains unaccounted for.
+    accountable: false
+inputs:
+  - name: predecessor_work_order
+    reference: harness/work-orders/WO-2026-08-12-UPLOAD-ROLE-GATE.yaml
+    required: true
+  - name: residual_test
+    reference: apps/api/tests/test_ingestion_role_gate.py
+    required: true
+  - name: trust_boundaries
+    reference: docs/20-security/trust-boundaries-and-data-flows.md
+    required: true
+deliverables:
+  - name: recorded_decision
+    path_or_reference: docs/20-security/trust-boundaries-and-data-flows.md
+    owner_role: pm-orchestrator
+  - name: enforced_or_accepted_behavior
+    path_or_reference: apps/api/app/api/v1/knowledge.py
+    owner_role: security-trust-architect
+  - name: updated_residual_test
+    path_or_reference: apps/api/tests/test_ingestion_role_gate.py
+    owner_role: security-trust-architect
+acceptance_criteria:
+  - criterion_id: AC-01
+    description: >-
+      The product decision is recorded with its consequence, in the same form as the
+      2026-08-12 upload decision.
+    verification: Read the security doc section 6.1.
+    blocker: true
+  - criterion_id: AC-02
+    description: >-
+      If gating - a non-privileged reader receives 403 from both index-job endpoints for a
+      never-indexed document, and no chunk row or vector is written.
+    verification: Test asserts status plus unchanged chunk count and no vector upsert.
+    blocker: true
+  - criterion_id: AC-03
+    description: >-
+      If gating - re-index behavior for previously-indexed documents is unchanged, so the
+      PR #92 fix is not regressed.
+    verification: Existing reindex authorization tests pass untouched.
+    blocker: true
+  - criterion_id: AC-04
+    description: >-
+      No ingestion path into the active index remains without a recorded decision - each
+      is either gated or explicitly accepted.
+    verification: Enumerate every write path to document_chunks and the vector store in review.
+    blocker: true
+  - criterion_id: AC-05
+    description: Full suite green at or above the 241 baseline, and CI green.
+    verification: pytest with apps/api/.env moved aside; GitHub Actions on the candidate commit.
+    blocker: true
+verification_plan:
+  - check_id: AUTHZ-FIRST-INDEX
+    type: security
+    command_or_workflow: >-
+      apps/api/.venv/Scripts/python.exe -m pytest tests/test_ingestion_role_gate.py -v
+    expected_result: The decided behavior is asserted; no test still describes an open gap.
+    evidence_destination: Evidence Package verification section.
+  - check_id: NO-REINDEX-REGRESSION
+    type: security
+    command_or_workflow: >-
+      apps/api/.venv/Scripts/python.exe -m pytest tests -k "reindex or has_been_indexed" -v
+    expected_result: Unchanged and green.
+    evidence_destination: Evidence Package verification section.
+  - check_id: SUITE-BASELINE
+    type: unit
+    command_or_workflow: >-
+      apps/api/.venv/Scripts/python.exe -m pytest -q with apps/api/.env moved aside
+    expected_result: At or above 241 passed, 0 failed.
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-ALL
+    type: integration
+    command_or_workflow: GitHub Actions Backend, Frontend and E2E jobs
+    expected_result: success on the exact candidate commit
+    evidence_destination: Evidence Package verification section.
+required_reviews:
+  - reviewer_role: security-trust-architect
+    focus:
+      - every write path into the active index is accounted for
+      - re-index authorization is not regressed
+      - gate precedes any chunk or vector write
+    blocking: true
+  - reviewer_role: independent-release-governor
+    focus:
+      - the decision is recorded, not implied
+      - scope adherence
+      - CI and evidence freshness
+    blocking: true
+prohibited_actions:
+  - edit main directly
+  - proceed without a recorded product decision
+  - change re-index authorization
+  - add content inspection or injection detection under this Work Order
+  - claim this mitigates prompt injection
+  - leave the residual test asserting a gap that the decision has closed
+  - merge before required CI and security review
+dependencies:
+  - description: >-
+      Product decision on whether supplying text for a document's first index requires a
+      privileged role. This removes the last self-service ingest path, so it is a product
+      decision of the same kind as the 2026-08-12 upload decision, not a unilateral
+      security patch.
+    type: decision
+    status: pending
+    owner: product-owner
+    reference: harness/work-orders/WO-2026-08-12-UPLOAD-ROLE-GATE.yaml
+loop_budget:
+  self_review_passes: 2
+  formal_rework_passes: 1
+  same_failure_before_escalation: 2
+escalation:
+  - trigger: Gating breaks a legitimate caller that cannot hold a privileged role.
+    target_role: pm-orchestrator
+    action: Stop and report the caller; do not weaken the gate to accommodate it.
+  - trigger: A further ingestion path is discovered that neither Work Order covers.
+    target_role: security-trust-architect
+    action: Stop, report, and propose a follow-on Work Order.
+stop_conditions:
+  - the product decision is not yet recorded
+  - all acceptance criteria pass and required reviews accept
+  - re-index authorization would change
+  - work exceeds the approved scope
+  - loop budget is exhausted
+created_by: pm-orchestrator
+created_at: "2026-08-12T10:30:00Z"

@@ -1,7 +1,7 @@
 schema_version: agentforge.work_order/v1
 work_order_id: WO-2026-08-12-GROUNDING-CLAIMS-001
 title: Correct the grounding-guard claims and the inverted faithfulness metric
-status: draft
+status: accepted
 problem: >-
   A document-borne prompt injection reproducibly hijacks the answer while the output
   guard reports success. grounding_score(answer, context) compares two strings the
@@ -223,3 +223,5 @@ stop_conditions:
   - a blocker finding remains open
 created_by: pm-orchestrator
 created_at: "2026-08-12T09:00:00Z"
+accepted_by: product-owner
+accepted_at: "2026-08-12T09:30:00Z"

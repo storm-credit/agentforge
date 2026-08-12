@@ -1,10 +1,10 @@
 "use client";
 import { useEffect, useState } from "react";
-import { ask, firstAgentId, type MockUserKey } from "../lib/api";
+import { ask, firstAgentId } from "../lib/api";
+import { ActiveIdentityNote } from "../components/ActiveIdentityNote";
 
 export default function ChatPage() {
   const [agentId, setAgentId] = useState<string | null>(null);
-  const [user, setUser] = useState<MockUserKey>("finance");
   const [language, setLanguage] = useState<"auto" | "ko" | "en">("auto");
   const [message, setMessage] = useState("");
   const [answer, setAnswer] = useState("");
@@ -23,7 +23,7 @@ export default function ChatPage() {
     setLoading(true);
     setAskError("");
     try {
-      const run = await ask({ agentId, message, language, user });
+      const run = await ask({ agentId, message, language });
       setAnswer(run.answer);
       setCitations(run.citations ?? []);
     } catch (e) {
@@ -44,18 +44,8 @@ export default function ChatPage() {
       </div>
 
       <div className="panel">
+        <ActiveIdentityNote />
         <div style={{ display: "flex", gap: "20px", flexWrap: "wrap", marginBottom: "var(--space-4)" }}>
-          <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-base)" }}>
-            사용자(부서)
-            <select
-              value={user}
-              onChange={(e) => setUser(e.target.value as MockUserKey)}
-            >
-              <option value="finance">Finance</option>
-              <option value="hr">HR</option>
-            </select>
-          </label>
-
           <label style={{ display: "flex", alignItems: "center", gap: "var(--space-2)", fontSize: "var(--text-base)" }}>
             언어
             <select

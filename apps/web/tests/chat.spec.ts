@@ -4,6 +4,14 @@ test("chat page renders controls", async ({ page }) => {
   await page.goto("/chat");
   await expect(page.getByRole("heading", { name: "Chat" })).toBeVisible();
   await expect(page.getByPlaceholder("질문을 입력하세요")).toBeVisible();
+
+  // Identity is picked in ONE place (the sidebar demo-role switcher) and applied to
+  // every request, including this run. The chat form only DISPLAYS the principal the
+  // run will be attributed to — there is no second, page-local identity control that
+  // could disagree with the rest of the session.
+  await expect(page.getByTestId("active-identity-role")).toHaveText("admin");
+  await expect(page.getByTestId("active-identity")).toContainText("operator");
+  await expect(page.getByRole("combobox", { name: "사용자(부서)" })).toHaveCount(0);
 });
 
 test("failed ask shows a distinct error, not a fake answer", async ({ page }) => {

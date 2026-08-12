@@ -8,8 +8,8 @@ import {
   listSources,
   publishVersion,
   type KnowledgeSource,
-  type MockUserKey,
 } from "../../lib/api";
+import { ActiveIdentityNote } from "../../components/ActiveIdentityNote";
 
 export default function NewAgentPage() {
   const [name, setName] = useState("");
@@ -28,7 +28,6 @@ export default function NewAgentPage() {
   const [publishing, setPublishing] = useState(false);
   const [publishError, setPublishError] = useState("");
 
-  const [user, setUser] = useState<MockUserKey>("finance");
   const [language, setLanguage] = useState<"auto" | "ko" | "en">("auto");
   const [message, setMessage] = useState("");
   const [answer, setAnswer] = useState("");
@@ -82,7 +81,7 @@ export default function NewAgentPage() {
     setAsking(true);
     setAskError("");
     try {
-      const run = await ask({ agentId, message, language, user });
+      const run = await ask({ agentId, message, language });
       setAnswer(run.answer);
       setCitations(run.citations ?? []);
     } catch (e) {
@@ -163,12 +162,9 @@ export default function NewAgentPage() {
         <div className="panel" style={{ flex: "1 1 360px", opacity: published ? 1 : 0.5 }}>
           <h3>테스트</h3>
           {!published && <p data-testid="test-lock">🔒 게시하면 활성화됩니다.</p>}
+          <ActiveIdentityNote />
           <div style={{ display: "flex", gap: "var(--space-3)", marginBottom: "var(--space-3)" }}>
-            <select value={user} onChange={(e) => setUser(e.target.value as MockUserKey)} disabled={!published}>
-              <option value="finance">Finance</option>
-              <option value="hr">HR</option>
-            </select>
-            <select value={language} onChange={(e) => setLanguage(e.target.value as "auto" | "ko" | "en")} disabled={!published}>
+            <select aria-label="언어" value={language} onChange={(e) => setLanguage(e.target.value as "auto" | "ko" | "en")} disabled={!published}>
               <option value="auto">자동</option>
               <option value="ko">한국어</option>
               <option value="en">English</option>

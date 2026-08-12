@@ -19,7 +19,7 @@ export function RoleSwitcher() {
 
   return (
     <div>
-      <label htmlFor="demo-role">Demo role</label>
+      <label htmlFor="demo-role">데모 역할</label>
       <select
         id="demo-role"
         data-testid="demo-role-switcher"

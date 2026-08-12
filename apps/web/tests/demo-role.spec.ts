@@ -14,7 +14,7 @@ import { test, expect } from "@playwright/test";
 test("demo role switcher changes privileged controls and server-scoped lists", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("/knowledge");
-  await expect(page.getByRole("heading", { name: "Knowledge" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
 
   const stamp = Date.now();
   const publicTitle = `Demo Role Public Doc ${stamp}`;
@@ -52,7 +52,7 @@ test("demo role switcher changes privileged controls and server-scoped lists", a
   // --- Switch to developer (reloads the page with the developer header bundle).
   await page.getByTestId("demo-role-switcher").selectOption("developer");
   await page.waitForLoadState("load");
-  await expect(page.getByRole("heading", { name: "Knowledge" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
   await expect(page.getByTestId("demo-role-switcher")).toHaveValue("developer");
 
   // Server-side ACL scoping: the restricted doc is gone, the public doc remains.
@@ -68,7 +68,7 @@ test("demo role switcher changes privileged controls and server-scoped lists", a
   // --- Switch back to admin: full view restored.
   await page.getByTestId("demo-role-switcher").selectOption("admin");
   await page.waitForLoadState("load");
-  await expect(page.getByRole("heading", { name: "Knowledge" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
   await expect(page.getByTestId("demo-role-switcher")).toHaveValue("admin");
 
   const restoredRestrictedRow = page.getByTestId("doc-row").filter({ hasText: restrictedTitle });
@@ -101,7 +101,7 @@ test("demo role switcher changes privileged controls and server-scoped lists", a
 test("hr persona sees a group-restricted document that developer does not (group ACL)", async ({ page }) => {
   test.setTimeout(90_000);
   await page.goto("/knowledge");
-  await expect(page.getByRole("heading", { name: "Knowledge" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
 
   const hrOnlyTitle = `Group ACL HR Doc ${Date.now()}`;
   const row = () => page.getByTestId("doc-row").filter({ hasText: hrOnlyTitle });
@@ -131,7 +131,7 @@ test("hr persona sees a group-restricted document that developer does not (group
     await page.evaluate(() => { (window as { __afPreReload?: boolean }).__afPreReload = true; });
     await page.getByTestId("demo-role-switcher").selectOption(next);
     await page.waitForFunction(() => !(window as { __afPreReload?: boolean }).__afPreReload);
-    await expect(page.getByRole("heading", { name: "Knowledge" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "지식" })).toBeVisible();
     await expect(page.getByTestId("demo-role-switcher")).toHaveValue(next);
   }
 
@@ -165,7 +165,7 @@ test("hr persona sees a group-restricted document that developer does not (group
 // while the admin (default) role keeps seeing real events — no regression.
 test("audit page shows friendly placeholder for non-privileged role, real events for admin", async ({ page }) => {
   await page.goto("/audit");
-  await expect(page.getByRole("heading", { name: "Audit" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "감사" })).toBeVisible();
 
   // --- Admin (default role): real audit list, no restriction note.
   await expect(page.getByTestId("demo-role-switcher")).toHaveValue("admin");
@@ -175,7 +175,7 @@ test("audit page shows friendly placeholder for non-privileged role, real events
   // --- Switch to developer (reloads the page with the developer header bundle).
   await page.getByTestId("demo-role-switcher").selectOption("developer");
   await page.waitForLoadState("load");
-  await expect(page.getByRole("heading", { name: "Audit" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "감사" })).toBeVisible();
   await expect(page.getByTestId("demo-role-switcher")).toHaveValue("developer");
 
   // Friendly placeholder shown; no attempt to render the (403'd) event list/filter.
@@ -187,7 +187,7 @@ test("audit page shows friendly placeholder for non-privileged role, real events
   // --- Switch back to admin: full view restored.
   await page.getByTestId("demo-role-switcher").selectOption("admin");
   await page.waitForLoadState("load");
-  await expect(page.getByRole("heading", { name: "Audit" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "감사" })).toBeVisible();
   await expect(page.getByTestId("role-restricted-note")).toHaveCount(0);
   await expect(page.getByTestId("audit-row").first()).toBeVisible({ timeout: 15_000 });
 });

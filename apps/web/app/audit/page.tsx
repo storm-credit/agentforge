@@ -24,8 +24,8 @@ export default function AuditPage() {
   return (
     <section className="page">
       <div>
-        <p className="eyebrow">Governance</p>
-        <h1>Audit</h1>
+        <p className="eyebrow">거버넌스</p>
+        <h1>감사</h1>
         <p>actor·부서·이벤트·대상·사유와 페이로드로 메타데이터 변경을 감사합니다. (admin 전용)</p>
       </div>
       <section className="panel">

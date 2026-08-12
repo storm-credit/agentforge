@@ -27,7 +27,7 @@ export async function ask(params: {
       language: params.language,
     }),
   });
-  if (!r.ok) throw new Error(`run failed: ${r.status}`);
+  if (!r.ok) throw new Error(`실행 요청 실패: ${r.status}`);
   return r.json();
 }
 
@@ -42,7 +42,7 @@ export type AgentSummary = {
 export async function listAgents(): Promise<AgentSummary[]> {
   // Builder view is operator/admin; agent list is publish-status-scoped server-side.
   const r = await fetch(`${API_BASE}/agents`, { headers: { ...roleHeaders() } });
-  if (!r.ok) throw new Error(`list agents failed: ${r.status}`);
+  if (!r.ok) throw new Error(`에이전트 목록 조회 실패: ${r.status}`);
   return r.json();
 }
 
@@ -50,14 +50,14 @@ export async function listSources(): Promise<KnowledgeSource[]> {
   // The builder is an operator/admin view; the source list is now clearance-scoped
   // server-side, so send the operator identity to see the full source picker.
   const r = await fetch(`${API_BASE}/knowledge/sources`, { headers: { ...roleHeaders() } });
-  if (!r.ok) throw new Error(`list sources failed: ${r.status}`);
+  if (!r.ok) throw new Error(`지식소스 목록 조회 실패: ${r.status}`);
   return r.json();
 }
 
 // 소스별 status==="indexed" 문서 수
 export async function indexedDocCountBySource(): Promise<Record<string, number>> {
   const r = await fetch(`${API_BASE}/knowledge/documents`, { headers: { ...roleHeaders() } });
-  if (!r.ok) throw new Error(`list documents failed: ${r.status}`);
+  if (!r.ok) throw new Error(`문서 목록 조회 실패: ${r.status}`);
   const docs: Array<{ knowledge_source_id: string; status: string }> = await r.json();
   const counts: Record<string, number> = {};
   for (const d of docs) {
@@ -76,7 +76,7 @@ export async function createAgent(input: {
     headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify({ ...input, status: "draft" }),
   });
-  if (!r.ok) throw new Error(`create agent failed: ${r.status}`);
+  if (!r.ok) throw new Error(`에이전트 생성 실패: ${r.status}`);
   return r.json();
 }
 
@@ -97,7 +97,7 @@ export async function createVersion(input: {
       config,
     }),
   });
-  if (!r.ok) throw new Error(`create version failed: ${r.status}`);
+  if (!r.ok) throw new Error(`버전 생성 실패: ${r.status}`);
   return r.json();
 }
 
@@ -110,7 +110,7 @@ export async function publishVersion(
     headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify({ reason }),
   });
-  if (!r.ok) throw new Error(`publish failed: ${r.status}`);
+  if (!r.ok) throw new Error(`게시 실패: ${r.status}`);
   return r.json();
 }
 
@@ -134,19 +134,19 @@ export async function createDraftVersion(
     headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify({ agent_id: agentId, status: "draft", config }),
   });
-  if (!r.ok) throw new Error(`create version failed: ${r.status}`);
+  if (!r.ok) throw new Error(`버전 생성 실패: ${r.status}`);
   return r.json();
 }
 
 export async function getAgent(agentId: string): Promise<AgentSummary> {
   const r = await fetch(`${API_BASE}/agents/${agentId}`, { headers: { ...roleHeaders() } });
-  if (!r.ok) throw new Error(`get agent failed: ${r.status}`);
+  if (!r.ok) throw new Error(`에이전트 조회 실패: ${r.status}`);
   return r.json();
 }
 
 export async function listVersions(agentId: string): Promise<AgentVersionSummary[]> {
   const r = await fetch(`${API_BASE}/agents/${agentId}/versions`, { headers: { ...roleHeaders() } });
-  if (!r.ok) throw new Error(`list versions failed: ${r.status}`);
+  if (!r.ok) throw new Error(`버전 목록 조회 실패: ${r.status}`);
   return r.json();
 }
 
@@ -159,7 +159,7 @@ export async function validateVersion(
     headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify({ reason }),
   });
-  if (!r.ok) throw new Error(`validate failed: ${r.status}`);
+  if (!r.ok) throw new Error(`검증 실패: ${r.status}`);
   return r.json();
 }
 
@@ -175,7 +175,7 @@ export async function listDocuments(includeArchived = false): Promise<DocumentSu
   // additionally hides the toggle for non-privileged demo roles.
   const q = includeArchived ? "?include_archived=true" : "";
   const r = await fetch(`${API_BASE}/knowledge/documents${q}`, { headers: { ...roleHeaders() } });
-  if (!r.ok) throw new Error(`list documents failed: ${r.status}`);
+  if (!r.ok) throw new Error(`문서 목록 조회 실패: ${r.status}`);
   return r.json();
 }
 
@@ -188,7 +188,7 @@ export async function updateDocumentAcl(
     headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify(input),
   });
-  if (!r.ok) throw new Error(`acl update failed: ${r.status}`);
+  if (!r.ok) throw new Error(`ACL 변경 실패: ${r.status}`);
   return r.json();
 }
 
@@ -201,7 +201,7 @@ export async function archiveDocument(
     method: "DELETE",
     headers: { ...roleHeaders() },
   });
-  if (!r.ok) throw new Error(`archive failed: ${r.status}`);
+  if (!r.ok) throw new Error(`보관 실패: ${r.status}`);
   return r.json();
 }
 
@@ -217,7 +217,7 @@ export async function restoreDocument(
     method: "POST",
     headers: { ...roleHeaders() },
   });
-  if (!r.ok) throw new Error(`restore failed: ${r.status}`);
+  if (!r.ok) throw new Error(`복원 실패: ${r.status}`);
   return r.json();
 }
 
@@ -240,7 +240,7 @@ export async function listAuditEvents(
   if (params.event_type) q.set("event_type", params.event_type);
   q.set("limit", String(params.limit ?? 50));
   const r = await fetch(`${API_BASE}/audit/events?${q.toString()}`, { headers: { ...roleHeaders() } });
-  if (!r.ok) throw new Error(`list audit failed: ${r.status}`);
+  if (!r.ok) throw new Error(`감사 로그 조회 실패: ${r.status}`);
   return r.json();
 }
 
@@ -271,7 +271,7 @@ export async function listEvalRuns(
   if (params.corpus_id) q.set("corpus_id", params.corpus_id);
   q.set("limit", String(params.limit ?? 50));
   const r = await fetch(`${API_BASE}/eval/runs?${q.toString()}`, { headers: { ...roleHeaders() } });
-  if (!r.ok) throw new Error(`list eval runs failed: ${r.status}`);
+  if (!r.ok) throw new Error(`품질 평가 이력 조회 실패: ${r.status}`);
   return r.json();
 }
 
@@ -288,7 +288,7 @@ export async function createSource(input: {
     headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify(input),
   });
-  if (!r.ok) throw new Error(`create source failed: ${r.status}`);
+  if (!r.ok) throw new Error(`지식소스 생성 실패: ${r.status}`);
   return r.json();
 }
 
@@ -306,7 +306,7 @@ export async function registerDocument(input: {
     headers: { "Content-Type": "application/json", ...roleHeaders() },
     body: JSON.stringify({ ...input, status: "registered" }),
   });
-  if (!r.ok) throw new Error(`register document failed: ${r.status}`);
+  if (!r.ok) throw new Error(`문서 등록 실패: ${r.status}`);
   return r.json();
 }
 
@@ -337,7 +337,7 @@ export async function uploadDocument(input: {
     headers: { ...roleHeaders() },
     body: form,
   });
-  if (!r.ok) throw new Error(`upload failed: ${r.status}`);
+  if (!r.ok) throw new Error(`업로드 실패: ${r.status}`);
   return r.json();
 }
 
@@ -353,7 +353,7 @@ export async function indexDocument(input: {
       source_text: input.source_text,
     }),
   });
-  if (!r.ok) throw new Error(`index failed: ${r.status}`);
+  if (!r.ok) throw new Error(`색인 실패: ${r.status}`);
   return r.json();
 }
 
@@ -395,18 +395,18 @@ export type RetrievalHit = {
 // server-side, so send the operator identity to see all runs.
 export async function listRuns(): Promise<RunSummary[]> {
   const r = await fetch(`${API_BASE}/runs`, { headers: { ...roleHeaders() } });
-  if (!r.ok) throw new Error(`list runs failed: ${r.status}`);
+  if (!r.ok) throw new Error(`실행 기록 조회 실패: ${r.status}`);
   return r.json();
 }
 
 export async function getRunSteps(runId: string): Promise<RunStep[]> {
   const r = await fetch(`${API_BASE}/runs/${runId}/steps`, { headers: { ...roleHeaders() } });
-  if (!r.ok) throw new Error(`get steps failed: ${r.status}`);
+  if (!r.ok) throw new Error(`단계 조회 실패: ${r.status}`);
   return r.json();
 }
 
 export async function getRunHits(runId: string): Promise<RetrievalHit[]> {
   const r = await fetch(`${API_BASE}/runs/${runId}/retrieval-hits`, { headers: { ...roleHeaders() } });
-  if (!r.ok) throw new Error(`get hits failed: ${r.status}`);
+  if (!r.ok) throw new Error(`검색 근거 조회 실패: ${r.status}`);
   return r.json();
 }

@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 // Sidebar navigation with an active-route highlight. Rendered inside the
-// layout's <nav aria-label="Primary"> so the links stay direct children of
+// layout's <nav aria-label="주 메뉴"> so the links stay direct children of
 // the nav landmark (same accessible structure as before).
 export function NavLinks({ items }: { items: ReadonlyArray<{ href: string; label: string }> }) {
   const pathname = usePathname();

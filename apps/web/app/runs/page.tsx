@@ -33,8 +33,8 @@ export default function RunsPage() {
   return (
     <section className="page">
       <div>
-        <p className="eyebrow">Governance</p>
-        <h1>Runs</h1>
+        <p className="eyebrow">거버넌스</p>
+        <h1>실행 기록</h1>
         <p>실행 단계 트레이스, 검색 근거(본문·점수·권한), 거부/강등 사유를 확인합니다.</p>
       </div>
 

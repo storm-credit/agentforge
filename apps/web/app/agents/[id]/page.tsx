@@ -88,8 +88,8 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
   return (
     <section className="page">
       <div>
-        <p className="eyebrow">Builder</p>
-        <Link href="/agents" style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>← Agents</Link>
+        <p className="eyebrow">빌더</p>
+        <Link href="/agents" style={{ fontSize: "var(--text-sm)", color: "var(--text-muted)" }}>← 에이전트</Link>
         <h1>{agent ? agent.name : "에이전트"}</h1>
         {agent && (
           <p>
@@ -131,7 +131,7 @@ export default function AgentDetailPage({ params }: { params: Promise<{ id: stri
                 <strong>v{v.version}</strong>
                 <span className={STATUS_BADGE[v.status] ?? "badge"} data-testid="version-status">{v.status}</span>
                 <span className="meta">
-                  by {v.created_by}{v.published_at ? ` · 게시 ${v.published_at.slice(0, 10)}` : ""}
+                  작성자 {v.created_by}{v.published_at ? ` · 게시 ${v.published_at.slice(0, 10)}` : ""}
                 </span>
               </div>
               {isPrivileged && (v.status === "draft" || v.status === "validated" || v.status === "superseded") && (

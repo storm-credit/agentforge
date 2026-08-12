@@ -70,13 +70,23 @@ audit_events (독립)        eval_runs (독립)
 ⑦ 확신게이트 answer_min_score 미만 → LLM 호출 없이 거부
 ⑧ 판정자    judge (옵션) → 근거 부족이면 거부
 ⑨ 생성      LLM 호출
-⑩ 근거가드   grounding_min 미만 → 답변을 거부문으로 교체 (인젝션 납치 차단)
+⑩ 근거가드   grounding_min 미만 → 답변을 거부문으로 교체
+            ⚠ 문서에 심은 인젝션은 못 막는다(측정됨) — 아래 주석
 ⑪ PII       마스킹 (옵션)
 ⑫ 인용검증   citation_required
 ⑬ 트레이스   run_steps 5종 + retrieval_hits + audit_events
 ```
 
 `run_steps`의 5단계: `guard_input` · `retriever` · `generator` · `citation_validator` · `guard_output`.
+
+> **⑩번 가드의 한계를 과장하지 말 것 (2026-08-12 실측·독립 검증).** 근거 가드는 답변 토큰이 검색된
+> 컨텍스트에 있는지를 센다. 그런데 **문서에 프롬프트 인젝션을 심으면 공격자가 비교 대상 두 쪽을 모두
+> 쓰게 되므로**(답변=주입 결과, 컨텍스트=자기 문서) 점수가 **1.0**이 나오고 가드는 통과한다.
+> 임계값으로 고칠 수 없다. ③ `guard_input`은 청크 본문을 보지 못하고, 인용 검증은 메타데이터만 보며,
+> ⑧ 판정자는 생성 *이전*에 돌아 답변을 볼 수 없다. 실제로 이 경로를 막는 것은 ⑨의 프롬프트 하드닝
+> 하나뿐이고 그건 모델 의존적이다. 증거·재현·심각도 구분은
+> [Live Demo Evidence 2026-08-12](../40-delivery/live-demo-evidence-2026-08-12.md) §5.
+> (권한 우회는 아니다 — 검색은 생성 전에 ACL로 걸러지므로 데이터 유출 경로는 확인되지 않았다.)
 
 ## 4. 증상 → 고칠 위치
 

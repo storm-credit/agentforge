@@ -3,7 +3,7 @@ import { expect, test } from "@playwright/test";
 const routes = [
   { path: "/", heading: "사내 문서로 답하는 에이전트, 부서에서 직접 만들고 운영합니다" },
   { path: "/agents", heading: "에이전트" },
-  { path: "/knowledge", heading: "지식" },
+  { path: "/knowledge", heading: "지식 문서" },
   { path: "/eval", heading: "품질 평가" },
   { path: "/audit", heading: "감사" },
   { path: "/admin/settings", heading: "설정" },

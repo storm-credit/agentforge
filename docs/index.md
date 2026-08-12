@@ -48,6 +48,7 @@
 42. [Development MCP Registry](../harness/registries/development-mcp.yaml)
 43. [Product Tool Registry](../harness/registries/product-tools.yaml)
 44. [System Walkthrough — 실제 코드 기준](10-architecture/system-walkthrough.md)
+45. [Live Demo Evidence 2026-08-12 — 캡처·시나리오·회귀평가·발견된 결함](40-delivery/live-demo-evidence-2026-08-12.md)
 
 위 기준선은 기존 코드와 문서를 폐기하지 않는다. `docs/status-and-go-no-go.md`는 상세 구현·패널·검증 이력, `notes/01_PM/WBS.md`는 최초 계획 기준선으로 유지한다.
 

@@ -52,7 +52,7 @@ export default function EvalPage() {
                   <th>Citation</th>
                   <th>Useful</th>
                   <th>Refusal</th>
-                  <th>Faithfulness</th>
+                  <th>Lexical overlap</th>
                 </tr>
               </thead>
               <tbody>
@@ -70,9 +70,9 @@ export default function EvalPage() {
                     <td>{pct(r.useful_answer_pct)}</td>
                     <td>{pct(r.refusal_discipline_pct)}</td>
                     <td>
-                      {pct(r.faithfulness_pct)}
-                      {r.faithfulness_threshold != null && (
-                        <span style={{ color: "var(--text-muted)" }}> (≥{r.faithfulness_threshold})</span>
+                      {pct(r.lexical_overlap_pct)}
+                      {r.lexical_overlap_threshold != null && (
+                        <span style={{ color: "var(--text-muted)" }}> (≥{r.lexical_overlap_threshold})</span>
                       )}
                     </td>
                   </tr>

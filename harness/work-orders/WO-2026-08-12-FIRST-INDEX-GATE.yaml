@@ -172,7 +172,7 @@ dependencies:
       decision of the same kind as the 2026-08-12 upload decision, not a unilateral
       security patch.
     type: decision
-    status: pending
+    status: missing
     owner: product-owner
     reference: harness/work-orders/WO-2026-08-12-UPLOAD-ROLE-GATE.yaml
 loop_budget:

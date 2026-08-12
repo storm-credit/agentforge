@@ -10,6 +10,12 @@ This document defines the core domain concepts, ownership boundaries, identities
 
 It is a logical domain model. Database table names and API payloads may differ, but implementation must map back to these concepts and must not collapse entities whose lifecycle, authority, or audit requirements differ.
 
+> **This is the intended model, not the shipped schema.** Several entities below — `Build`, `Tool`,
+> `Tool Version`, `Approval Request`, `Approval Decision`, `Index Snapshot` — have **no counterpart in
+> code today**. The implemented schema is 11 tables in `apps/api/app/domain/models.py`. When you are
+> **debugging or locating a change**, use [System Walkthrough](system-walkthrough.md), which is written
+> from the code. Use this document for design intent and for what must still be built.
+
 ## 2. Domain Areas
 
 | Domain area | Purpose | Primary owner |

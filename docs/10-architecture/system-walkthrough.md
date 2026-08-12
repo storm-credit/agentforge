@@ -85,7 +85,7 @@ audit_events (독립)        eval_runs (독립)
 | **권한 없는 문서가 보임** ⚠️최우선 | ACL 필터 | `app/domain/acl.py`, `app/domain/vector.py`(`build_acl_filter`) |
 | 볼 수 있는 문서인데 답을 못 함 | 관련도 게이트가 셈 | `.env` `AGENT_FORGE_RETRIEVAL_MIN_SCORE` |
 | 근거 없이 지어냄 | 확신/근거 게이트 꺼짐 | `.env` `ANSWER_MIN_SCORE`, `GROUNDING_MIN` |
-| 인용이 안 붙음 | 인용 검증·로케이터 | `app/domain/citation.py`, `api/v1/runs.py` |
+| 인용이 안 붙음 | 인용 검증·로케이터 | `app/domain/citations.py`, `api/v1/runs.py` |
 | 문서를 아예 못 찾음 | 색인 실패 | `index_jobs.error_code`, `app/domain/indexing.py` |
 | 문서를 지웠는데 계속 나옴 | Qdrant 퍼지 누락 | `app/domain/indexing.py`(`delete_document`) |
 | 권한 변경이 반영 안 됨 | Qdrant payload 동기화 | `api/v1/knowledge.py`(`update_document_acl`) |

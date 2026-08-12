@@ -254,8 +254,12 @@ export type EvalRunSummary = {
   citation_pct: number | null;
   useful_answer_pct: number | null;
   refusal_discipline_pct: number | null;
-  faithfulness_pct: number | null;
-  faithfulness_threshold: number | null;
+  // Renamed from faithfulness_pct/_threshold on 2026-08-12: the backend value is
+  // grounding_score, a lexical substring-overlap check that reads 100% on a fully
+  // hijacked answer, so it never certified faithfulness. See
+  // docs/40-delivery/live-demo-evidence-2026-08-12.md section 5.
+  lexical_overlap_pct: number | null;
+  lexical_overlap_threshold: number | null;
 };
 
 export async function listEvalRuns(

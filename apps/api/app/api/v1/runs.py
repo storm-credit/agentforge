@@ -339,7 +339,6 @@ def create_run(
         "citation_validation_error_code": citation_validation.error_code,
         "citation_validation_missing_fields": list(citation_validation.missing_fields),
         "pii_masked": pii_masked,
-        "security_finalcheck_pass": citation_validation.passed,
     }
 
     _add_step(
@@ -378,7 +377,7 @@ def create_run(
         step_type="guard_output",
         input_summary={"answer_length": len(run.answer)},
         output_summary={
-            "security_finalcheck_pass": citation_validation.passed,
+            "citation_validation_pass": citation_validation.passed,
             "citation_count": len(citations),
             "grounding_score": grounding,
             "guard_tripped": guard_tripped,

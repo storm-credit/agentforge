@@ -7,11 +7,16 @@ Two complementary harnesses live here:
   scores live behavior: `acl_pass_pct`, `citation_pct`, `useful_answer_pct`, `leak_free_pct`,
   `refusal_discipline_pct`, plus `latency_p50_ms`/`latency_p95_ms` (from each run's own `latency_ms`)
   and `trace_completeness_pct` (percentage of runs that produced all five expected trace step types:
-  `guard_input`, `retriever`, `generator`, `citation_validator`, `guard_output`), and `faithfulness_pct`
+  `guard_input`, `retriever`, `generator`, `citation_validator`, `guard_output`), and `lexical_overlap_pct`
   (percentage of runs whose backend lexical `grounding_score` — read from the `guard_output` trace step —
   is at or above `AGENT_FORGE_EVAL_GROUNDING_MIN`, default `0.0` = the backend code default; set it to
   your live deployment's `AGENT_FORGE_GROUNDING_MIN` to track drift toward the guard threshold; `None`
-  when no run reported a grounding score). This is what CLAUDE.md
+  when no run reported a grounding score). **Named for what it measures, not "faithfulness":**
+  `grounding_score` is a lexical substring-overlap check between the answer and the context, and it is
+  defeated by construction when the context itself is attacker-authored (document-borne prompt
+  injection) — a fully hijacked run can and does read 100% on this metric. See
+  `apps/api/app/domain/grounding.py` and `docs/40-delivery/live-demo-evidence-2026-08-12.md` section 5.
+  This is what CLAUDE.md
   means by "before/after 수치". Default corpus `eval/synthetic-corpus/cases-live-v0.1.json` (override
   with `AGENT_FORGE_EVAL_CORPUS`, e.g. `cases-live-v0.2.json` or `cases-live-v0.3.json` — v0.3 expands
   the deny-class corpus from 3 to 9 cases for a more statistically stable `refusal_discipline_pct`).

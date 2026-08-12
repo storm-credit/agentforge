@@ -111,7 +111,7 @@ def latency_percentiles(latencies_ms: list[int]) -> tuple[float | None, float | 
 
 
 def grounding_min_from_env() -> float:
-    """Faithfulness threshold for aggregate(), from AGENT_FORGE_EVAL_GROUNDING_MIN.
+    """Lexical-overlap threshold for aggregate(), from AGENT_FORGE_EVAL_GROUNDING_MIN.
 
     Defaults to 0.0 — the backend's *code* default for AGENT_FORGE_GROUNDING_MIN
     (apps/api settings.grounding_min), NOT the deployment-tuned value some live
@@ -134,16 +134,25 @@ def aggregate(
     trace_completeness_pct = (
         _pct(sum(1 for t in trace_complete if t), len(trace_complete)) if trace_complete else None
     )
-    # Faithfulness: share of measured (non-None) backend grounding_scores at or above
+    # Lexical overlap: share of measured (non-None) backend grounding_scores at or above
     # the threshold. The backend already enforces this as a binary gate at generation
     # time (guard trips when grounding < grounding_min), so this is NOT a duplicate of
     # behavior_ok/guard_tripped — it is a continuous leading indicator across ALL cases
     # that catches drift toward the threshold before the guard starts tripping.
     # None (not 0.0/100.0) when nothing was measured, same convention as the metrics above.
+    #
+    # NAMED FOR WHAT IT MEASURES, NOT "faithfulness": grounding_score is a lexical
+    # substring-overlap check between the answer and the context, and it is defeated by
+    # construction when the context itself is attacker-authored (document-borne prompt
+    # injection) — the attacker then controls both operands, so a hijacked answer scores
+    # 1.0. This metric does NOT certify that a run is faithful/trustworthy; it only
+    # tracks lexical overlap, which can and does read 100% on a fully hijacked run. See
+    # apps/api/app/domain/grounding.py module docstring and
+    # docs/40-delivery/live-demo-evidence-2026-08-12.md section 5.
     if grounding_min is None:
         grounding_min = grounding_min_from_env()
     measured_grounding = [g for g in (grounding_scores or []) if g is not None]
-    faithfulness_pct = (
+    lexical_overlap_pct = (
         _pct(sum(1 for g in measured_grounding if g >= grounding_min), len(measured_grounding))
         if measured_grounding
         else None
@@ -160,12 +169,12 @@ def aggregate(
         "latency_p50_ms": p50,
         "latency_p95_ms": p95,
         "trace_completeness_pct": trace_completeness_pct,
-        "faithfulness_pct": faithfulness_pct,
-        # The grounding threshold actually used to compute faithfulness_pct above (explicit
-        # param or the AGENT_FORGE_EVAL_GROUNDING_MIN env fallback). Always present, even when
-        # faithfulness_pct is None, so a reader can tell a 100% reading apart from an
-        # untuned 0.0 default without going to read the source.
-        "faithfulness_threshold": grounding_min,
+        "lexical_overlap_pct": lexical_overlap_pct,
+        # The grounding threshold actually used to compute lexical_overlap_pct above
+        # (explicit param or the AGENT_FORGE_EVAL_GROUNDING_MIN env fallback). Always
+        # present, even when lexical_overlap_pct is None, so a reader can tell a 100%
+        # reading apart from an untuned 0.0 default without going to read the source.
+        "lexical_overlap_threshold": grounding_min,
         "cases": [
             {
                 "case_id": s.case_id, "behavior": s.expected_behavior, "answered": s.answered,

@@ -11,11 +11,17 @@
 
 ## 2. 라이브 실험 (각 조건 1회, C만 2회)
 
-| 조건 | min_score | rerank | top_k | answer_min | refusal | useful | citation | leak_free | faithfulness |
+| 조건 | min_score | rerank | top_k | answer_min | refusal | useful | citation | leak_free | lexical_overlap* |
 |---|---|---|---|---|---|---|---|---|---|
 | A (기준선 재현, 이 코드) | 0.53 | none | — | 0 | 88.9 | 83.3 | 100 | 100 | 100 |
 | B (패널 원안) | 0.35 | hybrid | 2 | 0 | **22.2** | 91.7 | 100 | 100 | 90.5 |
 | C (B + answer 게이트) | 0.35 | hybrid | 2 | 0.53 | 88.9 | **91.7** | 100 | 100 | 100 |
+
+\* 2026-08-12 renamed from "faithfulness": this column is `grounding_score`, a lexical
+substring-overlap check, not a faithfulness/trustworthiness guarantee — it is defeated by
+construction against document-borne prompt injection (attacker-authored context). See
+`docs/40-delivery/live-demo-evidence-2026-08-12.md` section 5. The numbers above are unchanged
+from the original 2026-07-11 measurement; only the label is corrected.
 
 - **A**: v0.4 기준선(88.9/83.3/100)과 동일 — 새 코드의 기본값이 라이브에서도 no-op임을 확인.
 - **B (정직한 부정적 결과)**: retrieval_min_score가 사실상 거부 게이트를 겸하고 있어서, 0.35로 낮추면 거부해야 할 9케이스 중 7건이 약하게 관련된 접근가능 청크로 과답변(88.9→22.2). 리랭커+컷오프는 "무엇을 인용할지"만 제어하고 "답변할지 말지"는 제어하지 못한다.

@@ -26,7 +26,7 @@ test("eval page lists a persisted eval run with its headline metrics", async ({ 
         citation_pct: 100.0,
         useful_answer_pct: 50.0,
         refusal_discipline_pct: 100.0,
-        faithfulness_pct: null,
+        lexical_overlap_pct: null,
         corpus_id: "e2e-corpus",
         cases: [
           { case_id: "c1", citation_ok: true },
@@ -46,7 +46,7 @@ test("eval page lists a persisted eval run with its headline metrics", async ({ 
   await expect(row).toContainText("e2e-corpus");
   await expect(row).toContainText("100.0%"); // citation_pct
   await expect(row).toContainText("50.0%"); // useful_answer_pct
-  await expect(row).toContainText("—"); // faithfulness_pct null renders as em-dash
+  await expect(row).toContainText("—"); // lexical_overlap_pct null renders as em-dash
   // No empty state once at least one run exists.
   await expect(page.getByTestId("eval-empty")).toHaveCount(0);
 });

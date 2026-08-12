@@ -1,10 +1,28 @@
-"""Deterministic grounding check for the output guard.
+"""Deterministic lexical-overlap check for the output guard.
 
-Measures how much of an answer is lexically supported by the retrieved context.
-A hijacked/hallucinated answer (e.g. a prompt-injection "PWNED") shares almost
-nothing with the Korean policy context and scores near zero, while a grounded
-answer that quotes or paraphrases the context scores high. Language-robust for
-Korean via prefix matching (particle suffixes are ignored).
+Measures how much of an answer is lexically supported by the retrieved context:
+the fraction of answer tokens that appear (via >=2-char prefix substring match)
+in the context string. Language-robust for Korean via prefix matching (particle
+suffixes are ignored).
+
+This is a lexical-overlap indicator, not a grounding/faithfulness guarantee, and
+it is defeated by construction for document-borne prompt injection: when the
+injected instruction is copied into the answer, the *context* it is compared
+against is the attacker's own uploaded document, so the attacker controls both
+operands being compared. A payload string echoed verbatim out of a poisoned
+context therefore scores 1.0, and no AGENT_FORGE_GROUNDING_MIN threshold in
+[0, 1] can trip on that case (see test_grounding.py's poisoned-context test and
+docs/40-delivery/live-demo-evidence-2026-08-12.md section 5). This score only
+distinguishes a hijacked answer from a clean context when the injected text is
+*absent* from that context (e.g. a user-turn injection with no matching
+document) -- it provides no protection when the answer and the context share
+an attacker-authored origin.
+
+Two additional fail-open behaviours, kept exactly as measured: tokens shorter
+than 2 characters are dropped entirely (never scored either way), and an
+answer with no scoreable tokens (empty, whitespace-only, or all short tokens)
+returns 1.0 -- not penalized. A bare "예" is therefore never flagged by this
+guard regardless of context.
 """
 
 from __future__ import annotations

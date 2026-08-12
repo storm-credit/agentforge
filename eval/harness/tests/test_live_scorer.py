@@ -142,67 +142,67 @@ def test_aggregate_latency_and_trace_are_none_when_not_supplied():
     assert rep["trace_completeness_pct"] is None
 
 
-def test_faithfulness_pct_mix_above_below_equal_threshold():
+def test_lexical_overlap_pct_mix_above_below_equal_threshold():
     scores = [score_case(_case(case_id=f"c{i}"), _run(), DOC_MAP) for i in range(4)]
     # 0.8 above, 0.5 equal (>= passes, mirroring the backend guard which trips only
     # on grounding < grounding_min), 0.3 below, None unmeasured (excluded from denominator).
     rep = aggregate(scores, grounding_scores=[0.8, 0.5, 0.3, None], grounding_min=0.5)
-    assert rep["faithfulness_pct"] == 66.7
+    assert rep["lexical_overlap_pct"] == 66.7
 
 
-def test_faithfulness_pct_all_none_is_none_not_fabricated():
+def test_lexical_overlap_pct_all_none_is_none_not_fabricated():
     scores = [score_case(_case(case_id=f"c{i}"), _run(), DOC_MAP) for i in range(2)]
     rep = aggregate(scores, grounding_scores=[None, None], grounding_min=0.5)
-    assert rep["faithfulness_pct"] is None
+    assert rep["lexical_overlap_pct"] is None
 
 
-def test_faithfulness_pct_none_when_grounding_scores_omitted_backward_compat():
+def test_lexical_overlap_pct_none_when_grounding_scores_omitted_backward_compat():
     # Old call signatures must keep working and report None, not a fabricated number.
     scores = [score_case(_case(), _run(), DOC_MAP)]
     rep = aggregate(scores)
-    assert rep["faithfulness_pct"] is None
+    assert rep["lexical_overlap_pct"] is None
     rep2 = aggregate(scores, latencies_ms=[100], trace_complete=[True])
-    assert rep2["faithfulness_pct"] is None
+    assert rep2["lexical_overlap_pct"] is None
 
 
-def test_faithfulness_threshold_from_env_var_override(monkeypatch):
+def test_lexical_overlap_threshold_from_env_var_override(monkeypatch):
     monkeypatch.setenv("AGENT_FORGE_EVAL_GROUNDING_MIN", "0.5")
     assert grounding_min_from_env() == 0.5
     scores = [score_case(_case(case_id=f"c{i}"), _run(), DOC_MAP) for i in range(3)]
     # grounding_min not passed -> resolved from the env var.
     rep = aggregate(scores, grounding_scores=[0.8, 0.5, 0.3])
-    assert rep["faithfulness_pct"] == 66.7
+    assert rep["lexical_overlap_pct"] == 66.7
 
 
-def test_faithfulness_default_threshold_is_backend_code_default_zero(monkeypatch):
+def test_lexical_overlap_default_threshold_is_backend_code_default_zero(monkeypatch):
     monkeypatch.delenv("AGENT_FORGE_EVAL_GROUNDING_MIN", raising=False)
     assert grounding_min_from_env() == 0.0
     scores = [score_case(_case(case_id=f"c{i}"), _run(), DOC_MAP) for i in range(2)]
     # With the 0.0 default every measured score passes (0.0 >= 0.0 included).
     rep = aggregate(scores, grounding_scores=[0.0, 0.9])
-    assert rep["faithfulness_pct"] == 100.0
+    assert rep["lexical_overlap_pct"] == 100.0
 
 
-def test_faithfulness_threshold_reports_explicit_grounding_min():
+def test_lexical_overlap_threshold_reports_explicit_grounding_min():
     scores = [score_case(_case(case_id=f"c{i}"), _run(), DOC_MAP) for i in range(4)]
     rep = aggregate(scores, grounding_scores=[0.8, 0.5, 0.3, None], grounding_min=0.5)
-    assert rep["faithfulness_threshold"] == 0.5
+    assert rep["lexical_overlap_threshold"] == 0.5
 
 
-def test_faithfulness_threshold_reports_env_fallback_when_not_passed(monkeypatch):
+def test_lexical_overlap_threshold_reports_env_fallback_when_not_passed(monkeypatch):
     monkeypatch.setenv("AGENT_FORGE_EVAL_GROUNDING_MIN", "0.5")
     scores = [score_case(_case(case_id=f"c{i}"), _run(), DOC_MAP) for i in range(3)]
     rep = aggregate(scores, grounding_scores=[0.8, 0.5, 0.3])
-    assert rep["faithfulness_threshold"] == 0.5
+    assert rep["lexical_overlap_threshold"] == 0.5
 
 
-def test_faithfulness_threshold_present_even_when_pct_is_none():
-    # No grounding_scores measured -> faithfulness_pct is None, but the threshold that
-    # WOULD have been used must still be reported so the field stays informative.
+def test_lexical_overlap_threshold_present_even_when_pct_is_none():
+    # No grounding_scores measured -> lexical_overlap_pct is None, but the threshold
+    # that WOULD have been used must still be reported so the field stays informative.
     scores = [score_case(_case(), _run(), DOC_MAP)]
     rep = aggregate(scores, grounding_min=0.5)
-    assert rep["faithfulness_pct"] is None
-    assert rep["faithfulness_threshold"] == 0.5
+    assert rep["lexical_overlap_pct"] is None
+    assert rep["lexical_overlap_threshold"] == 0.5
 
 
 def test_corpus_live_parses_and_is_consistent():

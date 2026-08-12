@@ -30,8 +30,8 @@ _SUMMARY_METRICS = (
     "citation_pct",
     "useful_answer_pct",
     "refusal_discipline_pct",
-    "faithfulness_pct",
-    "faithfulness_threshold",
+    "lexical_overlap_pct",
+    "lexical_overlap_threshold",
 )
 
 

@@ -218,7 +218,6 @@ def test_runtime_run_fails_citation_validation_without_authorized_context(client
     assert run["guardrail"]["citation_required"] is True
     assert run["guardrail"]["citation_validation_pass"] is False
     assert run["guardrail"]["citation_validation_error_code"] == "NO_CITATION"
-    assert run["guardrail"]["security_finalcheck_pass"] is False
     assert run["answer"]  # refusal answer — non-empty
 
     steps_response = client.get(

@@ -242,6 +242,19 @@ apps/api/.venv/Scripts/python.exe harness/tools/project_status.py
 
 이 문서는 코드로 닫을 수 있는 것을 더 만들자는 제안이 아니다. 피처 프리즈가 유효하며
 (`docs/40-delivery/current-state.md` §7·§8), 남은 것은 대부분 조직 결정이다. 다만 5절의 발견은
-프리즈 예외에 해당하는 **재현되는 보안·무결성 결함**이므로 Work Order 후보로 올린다.
+프리즈 예외(§7-10)에 해당하므로 Work Order 초안을 올려뒀다.
+
+**[WO-2026-08-12-GROUNDING-CLAIMS-001](../../harness/work-orders/WO-2026-08-12-GROUNDING-CLAIMS.yaml)
+— `status: draft`. 수락은 사용자(PM/스폰서)의 몫이며, 수락 전에는 착수하지 않는다.**
+
+이 Work Order는 **부작용 없는 것만** 담았다 — 독스트링 정정, 한계를 고정하는 오염 컨텍스트 테스트,
+`faithfulness_pct` 개명, `security_finalcheck_pass` 이름 정정. **명시적으로 제외한 것**: 인젝션 탐지·차단,
+판정자 재배치, 가드 동작·임계값 변경, 그리고 **문서 업로드 역할 게이트**. 마지막 항목은 보안 수정처럼
+보이지만 셀프서비스 업로드를 막는 **제품 결정**이라 별도 판단이 필요하다(공격자 집합을 "누구나"에서
+"지식 관리자"로 줄일 뿐, 실수로 인용문을 포함한 문서에 의한 오염은 그대로 남는다).
+
+인젝션 자체의 해결은 **생성 이후에, 공격자가 통제하지 않는 기준으로** 답변을 평가하는 계층이 필요하고,
+이는 사내 30B 모델 이관과 함께 결정할 사안이다. 이 Work Order는 그걸 하지 않으며, "완화됐다"고
+주장하는 것을 금지 행위로 명시했다.
 
 상세한 아키텍처·디버깅 지도는 [System Walkthrough](../10-architecture/system-walkthrough.md)에 있다.

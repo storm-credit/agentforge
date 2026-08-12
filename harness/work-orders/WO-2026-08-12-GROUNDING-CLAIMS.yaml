@@ -1,0 +1,225 @@
+schema_version: agentforge.work_order/v1
+work_order_id: WO-2026-08-12-GROUNDING-CLAIMS-001
+title: Correct the grounding-guard claims and the inverted faithfulness metric
+status: draft
+problem: >-
+  A document-borne prompt injection reproducibly hijacks the answer while the output
+  guard reports success. grounding_score(answer, context) compares two strings the
+  attacker authors both of -- the answer via the injection, the context via their own
+  uploaded document -- so a payload copied verbatim from that document scores 1.0 and
+  no AGENT_FORGE_GROUNDING_MIN value can trip on it. This is a metric inversion, not a
+  calibration error. Verified live 4/4 with varied phrasings and independently reviewed
+  on 2026-08-12. Three artifacts currently assert the opposite and are the real defect
+  surface: apps/api/app/domain/grounding.py states in its docstring that such an answer
+  "scores near zero"; apps/api/tests/test_grounding.py asserts that guarantee against a
+  clean context, so the suite stays green while the guarantee is false in production;
+  and eval/harness/agentforge_eval/live_scorer.py derives faithfulness_pct from this
+  same score, so a fully hijacked run is certified 100 percent faithful. The run trace
+  additionally emits security_finalcheck_pass, which is a verbatim alias of
+  citation_validation.passed and implies a security control that does not exist.
+  Classified under docs/40-delivery/current-state.md section 7 item 10 (evaluation,
+  trace, citation, refusal and audit integrity). It is NOT section 7 item 7: retrieval
+  is ACL-filtered before generation and the pipeline has no second retrieval and no
+  outbound path, so the model only ever holds chunks the asker was already cleared for.
+  No ACL bypass or data-exposure path was found.
+intended_outcome: >-
+  Every claim the repository makes about the grounding guard matches its measured
+  behavior, the limitation is frozen as an executable test rather than prose, and the
+  evaluation harness stops reporting lexical overlap under the name faithfulness. No
+  change to guard behavior, thresholds, or answer content.
+parent_issue_refs:
+  - "#137"
+scope:
+  included:
+    - correct the grounding.py module docstring to describe measured behavior
+    - add a poisoned-context test asserting the 1.0 score so the limitation is executable
+    - keep or replace test_injection_hijack_scores_near_zero so its name matches what it proves
+    - rename the faithfulness_pct field emitted by live_scorer.py to a name that states what it measures
+    - rename or remove the security_finalcheck_pass key in the run trace
+    - update the eval-results docs and release-gate references that consume the renamed field
+  excluded:
+    - any change to grounding guard behavior, scoring algorithm, or thresholds
+    - any attempt to detect or block prompt injection
+    - repositioning or enabling the answerability judge
+    - adding a role gate to document register/upload endpoints
+    - changes to ACL, retrieval, or authorization code
+    - changes to apps/web
+  affected_components:
+    - backend-api
+    - eval-harness
+    - documentation
+  affected_trust_boundaries: []
+  affected_data_classifications:
+    - internal
+  runtime_behavior_change: false
+requirements:
+  - requirement_id: INT-001
+    description: >-
+      A stated control shall not report success when it has not performed the function
+      its documentation claims.
+    authority_ref: docs/40-delivery/current-state.md
+    adr_refs: []
+  - requirement_id: INT-002
+    description: >-
+      An evaluation metric shall be named for what it measures, and shall not certify a
+      hijacked run as faithful.
+    authority_ref: docs/40-delivery/release-gates.md
+    adr_refs: []
+  - requirement_id: DEL-003
+    description: Completion shall be supported by an Evidence Package.
+    authority_ref: docs/40-delivery/evidence-package-guide.md
+    adr_refs: []
+assigned_roles:
+  - agent_role_id: pm-orchestrator
+    responsibility: Accept scope, hold the excluded list, sequence reviews, and merge.
+    accountable: true
+  - agent_role_id: qa-eval-specialist
+    responsibility: >-
+      Author the poisoned-context test and the eval-harness field rename, including every
+      consumer of the renamed field.
+    accountable: false
+  - agent_role_id: security-trust-architect
+    responsibility: >-
+      Verify the corrected claims understate rather than overstate, and that no behavior
+      changed.
+    accountable: false
+inputs:
+  - name: evidence
+    reference: docs/40-delivery/live-demo-evidence-2026-08-12.md
+    required: true
+  - name: current_state
+    reference: docs/40-delivery/current-state.md
+    required: true
+  - name: guard_implementation
+    reference: apps/api/app/domain/grounding.py
+    required: true
+  - name: eval_scorer
+    reference: eval/harness/agentforge_eval/live_scorer.py
+    required: true
+deliverables:
+  - name: corrected_guard_docstring
+    path_or_reference: apps/api/app/domain/grounding.py
+    owner_role: qa-eval-specialist
+  - name: executable_limitation_test
+    path_or_reference: apps/api/tests/test_grounding.py
+    owner_role: qa-eval-specialist
+  - name: renamed_eval_metric
+    path_or_reference: eval/harness/agentforge_eval/live_scorer.py
+    owner_role: qa-eval-specialist
+  - name: trace_key_correction
+    path_or_reference: apps/api/app/api/v1/runs.py
+    owner_role: qa-eval-specialist
+acceptance_criteria:
+  - criterion_id: AC-01
+    description: >-
+      A test asserts grounding_score returns 1.0 when the answer string is a verbatim span
+      of a poisoned context, and its name states that this is the known defeat.
+    verification: Read the test; run it and confirm it fails if the assertion is inverted.
+    blocker: true
+  - criterion_id: AC-02
+    description: >-
+      No test remains whose name claims injection hijacks score near zero unless its body
+      proves that for the document-borne case.
+    verification: Grep test names in apps/api/tests/test_grounding.py.
+    blocker: true
+  - criterion_id: AC-03
+    description: >-
+      The eval report no longer emits a field named faithfulness_pct derived from
+      grounding_score, and every consumer (docs, release gates, /eval UI, persisted
+      reports) is updated consistently.
+    verification: Grep faithfulness across repo; run eval/harness tests.
+    blocker: true
+  - criterion_id: AC-04
+    description: >-
+      Guard behavior is unchanged - identical grounding scores and identical
+      guard_tripped decisions before and after.
+    verification: Full pytest suite green at or above the 231 baseline, plus a diff review.
+    blocker: true
+  - criterion_id: AC-05
+    description: >-
+      No file outside the included scope is modified, in particular no ACL, retrieval, or
+      authorization file.
+    verification: Compare feature branch with main.
+    blocker: true
+verification_plan:
+  - check_id: UNIT-GROUNDING
+    type: unit
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest tests/test_grounding.py -v
+    expected_result: >-
+      The poisoned-context test passes and demonstrably fails when its expected value is
+      changed.
+    evidence_destination: Evidence Package verification section.
+  - check_id: SUITE-BASELINE
+    type: unit
+    command_or_workflow: >-
+      apps/api/.venv/Scripts/python.exe -m pytest -q with apps/api/.env moved aside and
+      restored afterwards
+    expected_result: At or above 231 passed, 0 failed.
+    evidence_destination: Evidence Package verification section.
+  - check_id: EVAL-HARNESS
+    type: eval
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest eval/harness/tests -q
+    expected_result: Green, with the renamed field asserted.
+    evidence_destination: Evidence Package verification section.
+  - check_id: NO-BEHAVIOR-CHANGE
+    type: manual_review
+    expected_result: >-
+      The diff contains no change to scoring logic, thresholds, or control flow - only
+      names, docstrings, and tests.
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-ALL
+    type: integration
+    command_or_workflow: GitHub Actions Backend, Frontend and E2E jobs
+    expected_result: success on the exact candidate commit
+    evidence_destination: Evidence Package verification section.
+required_reviews:
+  - reviewer_role: security-trust-architect
+    focus:
+      - corrected claims understate rather than overstate
+      - no behavior change smuggled in
+      - severity language stays answer-integrity and does not drift to data-exposure
+    blocking: true
+  - reviewer_role: independent-release-governor
+    focus:
+      - candidate identity
+      - scope adherence against the excluded list
+      - CI and evidence freshness
+    blocking: true
+prohibited_actions:
+  - edit main directly
+  - change grounding scores, thresholds, or any guard decision
+  - implement injection detection or blocking under this Work Order
+  - gate document upload endpoints under this Work Order
+  - claim the injection threat is mitigated
+  - merge before required CI and review
+  - continue into another slice before merge
+dependencies:
+  - description: >-
+      Verified live evidence and independent security review of the defect.
+    type: decision
+    status: available
+    owner: pm-orchestrator
+    reference: docs/40-delivery/live-demo-evidence-2026-08-12.md
+loop_budget:
+  self_review_passes: 2
+  formal_rework_passes: 1
+  same_failure_before_escalation: 2
+escalation:
+  - trigger: >-
+      Renaming faithfulness_pct would break a release gate whose threshold is set on the
+      old field.
+    target_role: pm-orchestrator
+    action: >-
+      Stop and request an explicit decision on gate migration before proceeding.
+  - trigger: >-
+      A correct docstring cannot be written without also changing behavior.
+    target_role: security-trust-architect
+    action: Stop and report; the behavior change belongs to a separate Work Order.
+stop_conditions:
+  - all acceptance criteria pass and required reviews accept
+  - the change would alter any guard decision
+  - work exceeds the approved scope
+  - loop budget is exhausted
+  - a blocker finding remains open
+created_by: pm-orchestrator
+created_at: "2026-08-12T09:00:00Z"

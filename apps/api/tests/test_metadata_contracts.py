@@ -142,6 +142,11 @@ def test_agent_and_version_contract(client):
 
 _ADMIN = {"X-Agent-Forge-User": "ops", "X-Agent-Forge-Roles": "admin"}
 _DEVELOPER = {"X-Agent-Forge-User": "dev", "X-Agent-Forge-Roles": "developer"}
+# Document registration and upload are PRIVILEGED_ROLES-gated
+# (WO-2026-08-12-UPLOAD-ROLE-GATE), so corpus setup below acts as a knowledge manager.
+# Deliberately NOT _ADMIN: "knowledge-manager" is the least-privileged role that passes
+# the gate, so these fixtures do not silently depend on admin's ACL bypass elsewhere.
+_KNOWLEDGE_MANAGER = {"X-Agent-Forge-User": "km", "X-Agent-Forge-Roles": "knowledge-manager"}
 
 
 def test_patch_agent_requires_admin(client):
@@ -278,6 +283,7 @@ def test_index_job_get_scoped_by_document_acl(client):
     ).json()
     doc = client.post(
         "/api/v1/knowledge/documents",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "knowledge_source_id": source["id"],
             "title": "HR Restricted",
@@ -544,6 +550,7 @@ def test_document_list_and_chunks_scoped_by_acl(client):
     ).json()
     doc = client.post(
         "/api/v1/knowledge/documents",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "knowledge_source_id": source["id"],
             "title": "HR Restricted Doc",
@@ -656,6 +663,7 @@ def test_list_documents_pagination_applies_after_acl_filter(client):
     def _register(title, level, groups):
         return client.post(
             "/api/v1/knowledge/documents",
+            headers=_KNOWLEDGE_MANAGER,
             json={
                 "knowledge_source_id": source["id"],
                 "title": title,
@@ -862,6 +870,7 @@ def _seed_preview_document(client, *, marker: str):
     ).json()
     document = client.post(
         "/api/v1/knowledge/documents",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "knowledge_source_id": source["id"],
             "title": f"Preview Store Doc {marker}",
@@ -954,6 +963,7 @@ def test_privileged_mutations_require_admin_role(client):
     ).json()
     doc = client.post(
         "/api/v1/knowledge/documents",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "knowledge_source_id": source["id"],
             "title": "RBAC Doc",
@@ -1164,7 +1174,7 @@ def test_knowledge_source_and_document_contract(client):
 
     document_response = client.post(
         "/api/v1/knowledge/documents",
-        headers={"X-Agent-Forge-User": "knowledge-manager"},
+        headers={"X-Agent-Forge-User": "knowledge-manager", "X-Agent-Forge-Roles": "knowledge-manager"},
         json={
             "knowledge_source_id": source["id"],
             "title": "Remote Work Policy",
@@ -1260,6 +1270,7 @@ def test_retrieval_preview_applies_document_acl(client):
 
     public_response = client.post(
         "/api/v1/knowledge/documents",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "knowledge_source_id": source["id"],
             "title": "Company Holiday Policy",
@@ -1272,6 +1283,7 @@ def test_retrieval_preview_applies_document_acl(client):
     )
     restricted_response = client.post(
         "/api/v1/knowledge/documents",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "knowledge_source_id": source["id"],
             "title": "HR Leave Exception Policy",
@@ -1284,6 +1296,7 @@ def test_retrieval_preview_applies_document_acl(client):
     )
     no_acl_response = client.post(
         "/api/v1/knowledge/documents",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "knowledge_source_id": source["id"],
             "title": "Unclassified Draft Policy",
@@ -1348,6 +1361,7 @@ def test_index_job_creates_txt_md_chunks_and_preview_uses_chunk_citations(client
     source = source_response.json()
     document_response = client.post(
         "/api/v1/knowledge/documents",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "knowledge_source_id": source["id"],
             "title": "Remote Work Policy",
@@ -1441,7 +1455,7 @@ def test_pdf_upload_extracts_text_and_indexes_chunks(client):
                 "application/pdf",
             )
         },
-        headers={"X-Agent-Forge-User": "binary-uploader"},
+        headers={"X-Agent-Forge-User": "binary-uploader", "X-Agent-Forge-Roles": "knowledge-manager"},
     )
 
     assert response.status_code == 201
@@ -1475,6 +1489,7 @@ def test_docx_upload_extracts_text_and_indexes_chunks(client):
 
     response = client.post(
         "/api/v1/knowledge/documents/upload",
+        headers=_KNOWLEDGE_MANAGER,
         data={
             "knowledge_source_id": source["id"],
             "title": "Travel Policy DOCX",
@@ -1518,6 +1533,7 @@ def test_binary_upload_rejects_unsupported_mime_type(client):
 
     response = client.post(
         "/api/v1/knowledge/documents/upload",
+        headers=_KNOWLEDGE_MANAGER,
         data={
             "knowledge_source_id": source["id"],
             "title": "Unsupported",
@@ -1543,6 +1559,7 @@ def test_index_job_fails_closed_for_missing_acl(client):
     source = source_response.json()
     document_response = client.post(
         "/api/v1/knowledge/documents",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "knowledge_source_id": source["id"],
             "title": "Unclassified Draft Policy",
@@ -1604,6 +1621,7 @@ def _create_restricted_document(client) -> dict:
     ).json()
     return client.post(
         "/api/v1/knowledge/documents",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "knowledge_source_id": source["id"],
             "title": "HR Restricted Index Policy",
@@ -2170,6 +2188,7 @@ def _create_indexable_document(client) -> dict:
     ).json()
     return client.post(
         "/api/v1/knowledge/documents",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "knowledge_source_id": source["id"],
             "title": "Async Remote Work Policy",
@@ -2335,6 +2354,7 @@ def test_process_rejects_non_queued_job(client):
 def test_document_registration_rejects_unknown_source(client):
     response = client.post(
         "/api/v1/knowledge/documents",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "knowledge_source_id": "missing-source",
             "title": "Unknown Source Document",

@@ -17,9 +17,17 @@ function Assert-Smoke {
 
 Write-Host "[smoke] Running indexing parser smoke against $ApiBaseUrl"
 
+# Roles = admin, for two independent reasons:
+#  1. document register/upload is PRIVILEGED_ROLES-gated (WO-2026-08-12-UPLOAD-ROLE-GATE),
+#     so a role-less caller (header default "developer") now gets 403 here;
+#  2. the no-ACL fail-closed scenario at the end of this script registers a document with
+#     access_groups = @(), which no non-admin can pass the index-job read-ACL check for
+#     (principal_can_access_document returns False when access_groups is empty), so a
+#     non-admin smoke run would 403 on that step instead of observing the fail-closed job.
 $headers = @{
     "X-Agent-Forge-User" = "smoke-indexer"
     "X-Agent-Forge-Department" = "Operations"
+    "X-Agent-Forge-Roles" = "admin"
     "X-Agent-Forge-Clearance" = "internal"
 }
 

@@ -263,8 +263,12 @@ def _register_document(
     access_groups: list[str],
     confidentiality_level: str = "internal",
 ) -> dict:
+    # Document registration is PRIVILEGED_ROLES-gated (WO-2026-08-12-UPLOAD-ROLE-GATE),
+    # so this corpus setup acts as a knowledge manager. These are RUNTIME tests: the
+    # identity that matters is the one asking the question, not the one that ingested.
     response = client.post(
         "/api/v1/knowledge/documents",
+        headers={"X-Agent-Forge-User": "runtime-indexer", "X-Agent-Forge-Roles": "knowledge-manager"},
         json={
             "knowledge_source_id": source_id,
             "title": title,

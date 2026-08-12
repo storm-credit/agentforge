@@ -1,0 +1,194 @@
+schema_version: agentforge.work_order/v1
+work_order_id: WO-2026-08-12-UPLOAD-ROLE-GATE-001
+title: Gate document register and upload on privileged roles
+status: accepted
+problem: >-
+  apps/api/app/api/v1/knowledge.py register_document and upload_document_and_index take
+  only principal = Depends(get_principal) with no enforce_roles call, unlike archive,
+  restore and the ACL patch endpoint, which are all gated on PRIVILEGED_ROLES. The caller
+  also freely sets confidentiality_level and access_groups, and the created index job is
+  processed inline, so any principal can plant a document readable by all-employees and
+  have it indexed immediately. Identity is currently a header stub (ADR-103 open), so in
+  practice "any principal" means anyone who can reach the API. This is the missing
+  enforcement half of the approval and quarantine flow already documented at
+  docs/20-security/trust-boundaries-and-data-flows.md lines 150-155 ("approve exact
+  content/checksum and ACL"; "Unapproved or quarantined documents never enter an active
+  index"), which is specified but not implemented. It was surfaced as an adjacent finding
+  during the independent review of the grounding-guard defect recorded in
+  docs/40-delivery/live-demo-evidence-2026-08-12.md section 5.
+intended_outcome: >-
+  Document creation and upload require a privileged role, consistently with every other
+  mutating knowledge endpoint, and a denied attempt is audited. Read paths, ACL semantics
+  and retrieval behavior are unchanged.
+parent_issue_refs:
+  - "#137"
+  - "#138"
+scope:
+  included:
+    - add enforce_roles(PRIVILEGED_ROLES) to register_document and upload_document_and_index
+    - emit a policy.denied audit event on refusal, matching the existing mutation pattern
+    - update tests to cover allowed and denied callers on both endpoints
+    - update any caller that must now send privileged headers (eval harness, e2e fixtures, seeds)
+    - record the product decision and its consequence in the knowledge docs
+  excluded:
+    - changes to retrieval, ACL evaluation, or authorization primitives themselves
+    - changes to the grounding guard, its scoring, or its thresholds
+    - injection detection, content inspection, or quarantine-on-index
+    - introducing a separate approval workflow or new document status
+    - changes to SSO or identity resolution (ADR-103 remains open)
+  affected_components:
+    - backend-api
+    - eval-harness
+    - documentation
+  affected_trust_boundaries:
+    - knowledge-ingestion
+  affected_data_classifications:
+    - internal
+    - restricted
+  runtime_behavior_change: true
+requirements:
+  - requirement_id: SEC-001
+    description: >-
+      Mutating knowledge endpoints shall enforce privileged roles consistently.
+    authority_ref: docs/20-security/trust-boundaries-and-data-flows.md
+    adr_refs: []
+  - requirement_id: SEC-002
+    description: >-
+      A denied privileged action shall produce an audit event.
+    authority_ref: docs/20-security/trust-boundaries-and-data-flows.md
+    adr_refs: []
+  - requirement_id: DEL-003
+    description: Completion shall be supported by an Evidence Package.
+    authority_ref: docs/40-delivery/evidence-package-guide.md
+    adr_refs: []
+assigned_roles:
+  - agent_role_id: pm-orchestrator
+    responsibility: Accept scope, sequence reviews, and merge.
+    accountable: true
+  - agent_role_id: security-trust-architect
+    responsibility: >-
+      Implement the gate and verify no bypass path remains, including the inline index-job
+      creation path.
+    accountable: false
+  - agent_role_id: qa-eval-specialist
+    responsibility: >-
+      Confirm every non-privileged caller in the repository is updated or intentionally
+      left failing.
+    accountable: false
+inputs:
+  - name: evidence
+    reference: docs/40-delivery/live-demo-evidence-2026-08-12.md
+    required: true
+  - name: trust_boundaries
+    reference: docs/20-security/trust-boundaries-and-data-flows.md
+    required: true
+  - name: existing_gate_pattern
+    reference: apps/api/app/infra/authz.py
+    required: true
+deliverables:
+  - name: gated_endpoints
+    path_or_reference: apps/api/app/api/v1/knowledge.py
+    owner_role: security-trust-architect
+  - name: authz_tests
+    path_or_reference: apps/api/tests
+    owner_role: security-trust-architect
+  - name: updated_callers
+    path_or_reference: eval/harness, apps/web/tests
+    owner_role: qa-eval-specialist
+acceptance_criteria:
+  - criterion_id: AC-01
+    description: >-
+      A non-privileged principal receives 403 from both register_document and
+      upload_document_and_index, and no document, index job, or vector is created.
+    verification: Test asserts the response status and that the tables and store are unchanged.
+    blocker: true
+  - criterion_id: AC-02
+    description: A privileged principal retains the existing behavior on both endpoints.
+    verification: Existing upload and register tests pass with privileged headers.
+    blocker: true
+  - criterion_id: AC-03
+    description: A denial emits a policy.denied audit event naming actor and target.
+    verification: Test asserts the audit row.
+    blocker: true
+  - criterion_id: AC-04
+    description: >-
+      No unauthenticated or non-privileged bypass remains, including via the separate
+      index-job creation and process endpoints.
+    verification: Security review of the diff plus a live attempt with employee headers.
+    blocker: true
+  - criterion_id: AC-05
+    description: Full suite green at or above the 231 baseline, and CI green.
+    verification: pytest with .env moved aside; GitHub Actions on the candidate commit.
+    blocker: true
+verification_plan:
+  - check_id: AUTHZ-DENIED
+    type: security
+    command_or_workflow: >-
+      apps/api/.venv/Scripts/python.exe -m pytest tests -k "upload or register" -v
+    expected_result: Denied cases return 403 and create nothing.
+    evidence_destination: Evidence Package verification section.
+  - check_id: LIVE-ATTEMPT
+    type: security
+    command_or_workflow: >-
+      POST /api/v1/knowledge/documents/upload with employee headers against a running API
+    expected_result: 403, with a policy.denied audit event.
+    evidence_destination: Evidence Package verification section.
+  - check_id: SUITE-BASELINE
+    type: unit
+    command_or_workflow: >-
+      apps/api/.venv/Scripts/python.exe -m pytest -q with apps/api/.env moved aside
+    expected_result: At or above 231 passed, 0 failed.
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-ALL
+    type: integration
+    command_or_workflow: GitHub Actions Backend, Frontend and E2E jobs
+    expected_result: success on the exact candidate commit
+    evidence_destination: Evidence Package verification section.
+required_reviews:
+  - reviewer_role: security-trust-architect
+    focus:
+      - no remaining ingestion bypass
+      - denial is audited
+      - gate placement precedes any write or index-job creation
+    blocking: true
+  - reviewer_role: independent-release-governor
+    focus:
+      - scope adherence
+      - CI and evidence freshness
+      - the self-service consequence is documented, not silently shipped
+    blocking: true
+prohibited_actions:
+  - edit main directly
+  - change retrieval or ACL evaluation
+  - add content inspection or injection detection under this Work Order
+  - claim this mitigates prompt injection
+  - merge before required CI and security review
+dependencies:
+  - description: >-
+      Product decision to restrict document creation to privileged roles, accepting that
+      self-service departmental upload stops working.
+    type: decision
+    status: available
+    owner: product-owner
+    reference: docs/40-delivery/live-demo-evidence-2026-08-12.md
+loop_budget:
+  self_review_passes: 2
+  formal_rework_passes: 1
+  same_failure_before_escalation: 2
+escalation:
+  - trigger: >-
+      Gating breaks a caller that cannot be given privileged headers legitimately.
+    target_role: pm-orchestrator
+    action: Stop and report the caller; do not weaken the gate to accommodate it.
+  - trigger: A bypass path is found that this Work Order's scope cannot close.
+    target_role: security-trust-architect
+    action: Stop, report, and propose a follow-on Work Order.
+stop_conditions:
+  - all acceptance criteria pass and required reviews accept
+  - a bypass remains open
+  - work exceeds the approved scope
+  - loop budget is exhausted
+created_by: pm-orchestrator
+created_at: "2026-08-12T09:30:00Z"
+accepted_by: product-owner
+accepted_at: "2026-08-12T09:30:00Z"

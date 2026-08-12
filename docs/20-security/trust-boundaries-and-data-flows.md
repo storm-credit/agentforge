@@ -166,6 +166,51 @@ Controls:
 - Revocation blocks retrieval before asynchronous physical deletion.
 - ACL changes rematerialize or invalidate derived index/cache state.
 
+### 6.1 Enforced today vs. designed (as of 2026-08-12)
+
+The sequence above is the designed target. This subsection records what the code actually
+enforces, so the diagram is not read as an implementation claim.
+
+| Designed step | Enforced today |
+|---|---|
+| `upload/register document` | **PRIVILEGED_ROLES only.** `POST /knowledge/documents` and `POST /knowledge/documents/upload` call `enforce_roles(PRIVILEGED_ROLES)` before any database write, object-store write, index job, or vector upsert. A denied attempt is audited as `policy.denied` naming the actor and the target knowledge source. (WO-2026-08-12-UPLOAD-ROLE-GATE-001) |
+| `store quarantined object + checksum` | Not implemented. The checksum is stored; the object is not quarantined, and object-store persistence is opt-in (`AGENT_FORGE_OBJECT_STORE_BACKEND`, default `none`). |
+| `create Document pending approval` / `approve exact content/checksum and ACL` | **Not implemented.** There is no approval state and no separate approver. A privileged register/upload *is* the approval, and the uploader chooses `confidentiality_level` and `access_groups`. |
+| `create Index Job` → `activate snapshot` | Partially. Index jobs exist and are authorized (read-ACL, plus PRIVILEGED_ROLES for re-indexing a document that has previously held trusted content). There are no isolated snapshot generations: a successful job upserts directly into the active collection. |
+| `document/job/snapshot audit events` | Implemented for document and job events. |
+
+**Product decision (owner: product owner, 2026-08-12).** Document creation is restricted to
+privileged roles, explicitly accepting that **self-service departmental upload stops
+working**: a plain employee identity can no longer register or upload a document and must
+route ingestion through a knowledge manager. This was chosen over leaving the ingestion
+boundary open while identity is still a header stub (ADR-103 open), because with a header
+stub "any principal" means anyone who can reach the API.
+
+**What this does not do.** It does not mitigate prompt injection. It shrinks the attacker
+set from "anyone who can reach the API" to "holders of a privileged role". A privileged
+uploader can still ingest poisoned content, and **accidental** contamination — a legitimate
+document that merely quotes an injection example, a pasted support thread, a security
+awareness memo containing a sample payload — is unaffected. The grounding guard's inability
+to detect either case is a separate, still-open defect.
+
+**Strength of the gate is bounded by identity (ADR-103).** Enforcement is on the *value* of
+`principal.roles`, which is independent of how roles are populated — but today they are
+populated from an `X-Agent-Forge-Roles` request header, so a caller who reaches the API can
+still self-assert a privileged role. That is true of every role gate in the product
+(archive, restore, ACL change, audit read) and is not specific to ingestion. Until SSO
+supplies the roles claim, this gate is an enforcement point that is *correct* but not
+*trustworthy against a deliberate attacker*; it does close the "no check at all" case, and
+it makes an unauthorized attempt visible in the audit trail.
+
+**Residual gap (not closed by the above).** `POST /knowledge/documents/{id}/index-jobs` and
+`POST /knowledge/index-jobs/{id}/process` accept caller-supplied `source_text` and require
+only read access to the document when that document has never been successfully indexed
+(`has_been_indexed == False`). So a non-privileged but read-authorized principal can still
+be the one who puts text into the active index for a registered-but-never-indexed document,
+under that document's ACL tag. Raising that bar is a product decision of the same kind as
+the one above (it removes the remaining self-service ingest path) and is deliberately out
+of scope for WO-2026-08-12-UPLOAD-ROLE-GATE-001; it needs its own Work Order.
+
 ## 7. Agent Validation, Build, and Publish Flow
 
 ```mermaid

@@ -113,6 +113,9 @@ def _indexed_document(client) -> dict:
     ).json()
     document = client.post(
         "/api/v1/knowledge/documents",
+        # Registration is PRIVILEGED_ROLES-gated (WO-2026-08-12-UPLOAD-ROLE-GATE); this
+        # corpus setup is a knowledge-manager action.
+        headers={"X-Agent-Forge-User": "acl-setup", "X-Agent-Forge-Roles": "knowledge-manager"},
         json={
             "knowledge_source_id": source["id"],
             "title": "Finance Forecast",

@@ -237,6 +237,38 @@ def register_document(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> Document:
+    """Register a document's metadata. PRIVILEGED_ROLES only (WO-2026-08-12-UPLOAD-ROLE-GATE).
+
+    Creating a Document is the entry point of the knowledge-ingestion trust boundary: the
+    caller chooses the ``confidentiality_level`` and ``access_groups`` the content will be
+    served under, and (via ``POST /documents/{id}/index-jobs``) what text lands in the
+    active index. Every other mutating knowledge endpoint (archive / restore / ACL patch)
+    is already gated on PRIVILEGED_ROLES; this one was not, so any principal could plant an
+    ``all-employees``-readable document. Identity is still a header stub (ADR-103 open), so
+    "any principal" meant anyone who could reach the API.
+
+    Consequence, accepted by the product owner on 2026-08-12: self-service departmental
+    upload no longer works. Ingestion is a knowledge-manager action.
+
+    This does NOT mitigate prompt injection. It shrinks the attacker set from "anyone
+    reaching the API" to "holders of a privileged role"; a privileged uploader can still
+    ingest a poisoned document, and a document that merely quotes an injection example
+    contaminates the index exactly as before.
+    """
+    # AUTHORIZE FIRST -- before the knowledge-source lookup, before validation, before any
+    # write. Nothing about this decision depends on the request body being valid or the
+    # source existing, so there is no reason to touch the database first (and gating after
+    # the 404 lookup would leak knowledge-source existence to unauthorized callers).
+    enforce_roles(
+        db, principal, PRIVILEGED_ROLES,
+        action="document.register",
+        target_type="knowledge_source",
+        # Caller-supplied and unbounded (DocumentCreate.knowledge_source_id has no
+        # max_length); audit_events.target_id is String(120), so clamp rather than let an
+        # oversized id turn a clean 403 into a write error on a length-checking backend.
+        target_id=payload.knowledge_source_id[:120],
+    )
+
     source = db.get(KnowledgeSource, payload.knowledge_source_id)
     if source is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge source not found")
@@ -348,6 +380,34 @@ def upload_document_and_index(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> dict[str, Document | IndexJob]:
+    """Upload a file, register it, and index it inline. PRIVILEGED_ROLES only
+    (WO-2026-08-12-UPLOAD-ROLE-GATE).
+
+    This is the strongest ingestion path in the API: one request creates the Document with
+    caller-chosen ``confidentiality_level``/``access_groups``, optionally persists the raw
+    bytes to the object store, creates the IndexJob, and runs it INLINE -- parse, chunk,
+    embed and vector upsert all complete before the response. See ``register_document``
+    for the rationale, the accepted self-service consequence, and the explicit statement
+    that this does not mitigate prompt injection.
+    """
+    # AUTHORIZE FIRST -- before the knowledge-source lookup, before the upload bytes are
+    # read, and therefore before every side effect this endpoint can have: the Document
+    # row, the object-store put, the IndexJob row, the chunk rows, and the vector upsert.
+    #
+    # Honest limitation of "before": Starlette parses the multipart body into a spooled
+    # temp file before this function's first statement runs (that is how FastAPI binds
+    # File/Form parameters), so a denied request still costs one body parse. No
+    # application-owned state is created, and nothing reaches the vector store or the
+    # object store.
+    enforce_roles(
+        db, principal, PRIVILEGED_ROLES,
+        action="document.upload",
+        target_type="knowledge_source",
+        # Form field, unbounded; audit_events.target_id is String(120) -- see
+        # register_document for why this is clamped.
+        target_id=knowledge_source_id[:120],
+    )
+
     source = db.get(KnowledgeSource, knowledge_source_id)
     if source is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge source not found")

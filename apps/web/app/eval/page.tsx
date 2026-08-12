@@ -24,13 +24,13 @@ export default function EvalPage() {
   return (
     <section className="page">
       <div>
-        <p className="eyebrow">Quality gates</p>
-        <h1>Evaluation</h1>
+        <p className="eyebrow">품질 게이트</p>
+        <h1>품질 평가</h1>
         <p>라이브 eval 하네스가 기록한 품질 이력입니다. (harness: AGENT_FORGE_EVAL_PERSIST=true)</p>
       </div>
       <section className="panel">
         <div style={{ display: "flex", gap: "var(--space-2)", marginBottom: "var(--space-3)", alignItems: "center" }}>
-          <h2 style={{ margin: 0 }}>Eval run history</h2>
+          <h2 style={{ margin: 0 }}>평가 실행 이력</h2>
           <button className="button secondary" onClick={refresh}>새로고침</button>
         </div>
         {error && <p className="error-text" data-testid="eval-error">{error}</p>}
@@ -45,14 +45,14 @@ export default function EvalPage() {
             <table data-testid="eval-run-table" className="table">
               <thead>
                 <tr>
-                  <th>Corpus</th>
-                  <th>Label</th>
-                  <th>Recorded</th>
-                  <th>Cases</th>
-                  <th>Citation</th>
-                  <th>Useful</th>
-                  <th>Refusal</th>
-                  <th>Lexical overlap</th>
+                  <th>코퍼스</th>
+                  <th>라벨</th>
+                  <th>기록 시각</th>
+                  <th>케이스 수</th>
+                  <th>인용</th>
+                  <th>유용성</th>
+                  <th>거부율</th>
+                  <th>어휘 중복도</th>
                 </tr>
               </thead>
               <tbody>

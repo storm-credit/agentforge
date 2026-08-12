@@ -18,18 +18,18 @@ const pretendard = localFont({
 
 export const metadata: Metadata = {
   title: "Agent Forge",
-  description: "Governed internal agent build platform",
+  description: "통제형 사내 문서 기반 에이전트 빌드 플랫폼",
 };
 
 const navItems = [
-  { href: "/", label: "Overview" },
-  { href: "/agents", label: "Agents" },
-  { href: "/knowledge", label: "Knowledge" },
-  { href: "/chat", label: "Chat" },
-  { href: "/runs", label: "Runs" },
-  { href: "/eval", label: "Eval" },
-  { href: "/audit", label: "Audit" },
-  { href: "/admin/settings", label: "Settings" },
+  { href: "/", label: "홈" },
+  { href: "/agents", label: "에이전트" },
+  { href: "/knowledge", label: "지식" },
+  { href: "/chat", label: "채팅" },
+  { href: "/runs", label: "실행 기록" },
+  { href: "/eval", label: "품질 평가" },
+  { href: "/audit", label: "감사" },
+  { href: "/admin/settings", label: "설정" },
 ];
 
 // Pre-applies the persisted theme before first paint to avoid a flash of the
@@ -43,7 +43,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={pretendard.variable} suppressHydrationWarning>
+    <html lang="ko" className={pretendard.variable} suppressHydrationWarning>
       <body>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <aside className="sidebar">
@@ -51,7 +51,7 @@ export default function RootLayout({
             <span className="brandMark">AF</span>
             <span>Agent Forge</span>
           </Link>
-          <nav aria-label="Primary">
+          <nav aria-label="주 메뉴">
             <NavLinks items={navItems} />
           </nav>
           <div className="sidebarFooter">

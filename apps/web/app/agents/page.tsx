@@ -14,8 +14,8 @@ export default function AgentsPage() {
   return (
     <section className="page">
       <div>
-        <p className="eyebrow">Builder</p>
-        <h1>Agents</h1>
+        <p className="eyebrow">빌더</p>
+        <h1>에이전트</h1>
         <p>에이전트를 만들고 게시한 뒤 바로 테스트하세요.</p>
       </div>
       <Link className="button" href="/agents/new">새 에이전트 만들기</Link>

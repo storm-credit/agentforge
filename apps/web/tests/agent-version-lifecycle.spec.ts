@@ -4,7 +4,7 @@ import { test, expect } from "@playwright/test";
 // agents (e.g. `python -m app.seed_demo_rich`) running behind the dev server.
 test("agent detail shows version lifecycle with validate/publish actions", async ({ page }) => {
   await page.goto("/agents");
-  await expect(page.getByRole("heading", { name: "Agents" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "에이전트" })).toBeVisible();
 
   const firstAgent = page.getByTestId("agent-card").first();
   await expect(firstAgent).toBeVisible();

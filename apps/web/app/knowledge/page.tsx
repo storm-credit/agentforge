@@ -225,8 +225,8 @@ export default function KnowledgePage() {
   return (
     <section className="page">
       <div>
-        <p className="eyebrow">RAG data</p>
-        <h1>Knowledge</h1>
+        <p className="eyebrow">RAG 데이터</p>
+        <h1>지식 문서</h1>
         <p>지식소스에 TXT/MD/PDF/DOCX 문서를 추가하면 임베딩 색인되어 에이전트가 답할 수 있습니다.</p>
       </div>
 

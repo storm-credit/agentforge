@@ -48,16 +48,16 @@ export function ThemeSwitcher() {
 
   return (
     <div>
-      <label htmlFor="theme-switcher">Theme</label>
+      <label htmlFor="theme-switcher">테마</label>
       <select
         id="theme-switcher"
         data-testid="theme-switcher"
         value={theme}
         onChange={(e) => onChange(e.target.value as ThemePreference)}
       >
-        <option value="system">system</option>
-        <option value="light">light</option>
-        <option value="dark">dark</option>
+        <option value="system">시스템</option>
+        <option value="light">라이트</option>
+        <option value="dark">다크</option>
       </select>
     </div>
   );

@@ -38,9 +38,9 @@ export default function ChatPage() {
   return (
     <section className="page">
       <div>
-        <p className="eyebrow">Agent interaction</p>
-        <h1>Chat</h1>
-        <p>Ask the agent a question and review the cited sources.</p>
+        <p className="eyebrow">에이전트 대화</p>
+        <h1>채팅</h1>
+        <p>에이전트에게 질문하고 인용된 출처를 확인하세요.</p>
       </div>
 
       <div className="panel">
@@ -54,7 +54,7 @@ export default function ChatPage() {
             >
               <option value="auto">자동</option>
               <option value="ko">한국어</option>
-              <option value="en">English</option>
+              <option value="en">영어</option>
             </select>
           </label>
         </div>
@@ -74,7 +74,7 @@ export default function ChatPage() {
           onClick={onAsk}
           disabled={loading || !agentId}
         >
-          {loading ? "..." : "질문"}
+          {loading ? "생성 중…" : "질문"}
         </button>
       </div>
 

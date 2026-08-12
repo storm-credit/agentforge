@@ -38,8 +38,8 @@ test("eval page lists a persisted eval run with its headline metrics", async ({ 
   expect(created.status()).toBe(201);
 
   await page.goto("/eval");
-  // Keep parity with smoke.spec.ts: the heading must stay "Evaluation".
-  await expect(page.getByRole("heading", { name: "Evaluation", exact: true })).toBeVisible();
+  // Keep parity with smoke.spec.ts: the heading must stay "품질 평가".
+  await expect(page.getByRole("heading", { name: "품질 평가", exact: true })).toBeVisible();
 
   const row = page.getByTestId("eval-run-row").filter({ hasText: label });
   await expect(row).toBeVisible();

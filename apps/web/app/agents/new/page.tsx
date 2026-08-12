@@ -96,7 +96,7 @@ export default function NewAgentPage() {
   return (
     <section className="page">
       <div>
-        <p className="eyebrow">Builder</p>
+        <p className="eyebrow">빌더</p>
         <h1>에이전트 만들기</h1>
         <p>생성 → 지식소스 연결 → 게시 → 바로 테스트.</p>
       </div>
@@ -115,7 +115,7 @@ export default function NewAgentPage() {
           {sourcesError && <p className="error-text">{sourcesError}</p>}
           {!sourcesError && sources.length === 0 && (
             <p data-testid="no-sources">
-              지식소스가 없습니다. 시드(<code>python -m app.seed_demo</code>)를 실행하거나 Knowledge에서 추가하세요.
+              지식소스가 없습니다. 시드(<code>python -m app.seed_demo</code>)를 실행하거나 지식 화면에서 추가하세요.
             </p>
           )}
           <ul style={{ listStyle: "none", padding: 0 }}>
@@ -167,7 +167,7 @@ export default function NewAgentPage() {
             <select aria-label="언어" value={language} onChange={(e) => setLanguage(e.target.value as "auto" | "ko" | "en")} disabled={!published}>
               <option value="auto">자동</option>
               <option value="ko">한국어</option>
-              <option value="en">English</option>
+              <option value="en">영어</option>
             </select>
           </div>
           <textarea className="field" rows={3} placeholder="질문 (예: 연차 며칠 쓸 수 있어?)"

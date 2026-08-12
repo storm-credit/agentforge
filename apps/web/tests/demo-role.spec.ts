@@ -86,6 +86,79 @@ test("demo role switcher changes privileged controls and server-scoped lists", a
   }
 });
 
+// GROUP-based ACL (as opposed to clearance-rank filtering, covered above).
+//
+// The "hr" persona is the only demo identity in a non-default group
+// ("hr-restricted"); "developer" and "hr" both clear an *internal* document on
+// clearance rank (internal=1 and restricted=2 are both >= internal), so a document
+// whose access_groups is exactly ["hr-restricted"] can only differ between them
+// because of GROUP MEMBERSHIP. That makes this a clean group-ACL assertion, not a
+// clearance one.
+//
+// Before the identity unification these personas only existed inside the chat/builder
+// ask dropdowns, so group ACL was undemonstrable outside a single chat answer; now the
+// sidebar switcher applies them app-wide and the effect is visible on the document list.
+test("hr persona sees a group-restricted document that developer does not (group ACL)", async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto("/knowledge");
+  await expect(page.getByRole("heading", { name: "Knowledge" })).toBeVisible();
+
+  const hrOnlyTitle = `Group ACL HR Doc ${Date.now()}`;
+  const row = () => page.getByTestId("doc-row").filter({ hasText: hrOnlyTitle });
+
+  // The switcher now offers all four unified personas (one identity control).
+  const switcher = page.getByTestId("demo-role-switcher");
+  await expect(switcher).toHaveValue("admin");
+  await expect(switcher.locator("option")).toHaveText(["admin", "developer", "finance", "hr"]);
+
+  // --- Admin ingests a document restricted to the "hr-restricted" GROUP, at the
+  // ordinary "internal" confidentiality level (so clearance cannot explain the
+  // difference between developer and hr below).
+  await page.getByTestId("source-select").selectOption({ index: 1 });
+  await page.getByPlaceholder("문서 제목").fill(hrOnlyTitle);
+  await page.getByPlaceholder(/본문/).fill("HR-group-only e2e document body.");
+  await page.getByTestId("confidentiality-select").selectOption("internal");
+  await page.getByPlaceholder("접근그룹(쉼표)").fill("hr-restricted");
+  await expect(page.getByTestId("ingest")).toBeEnabled();
+  await page.getByTestId("ingest").click();
+  await expect(row()).toBeVisible({ timeout: 15_000 });
+  await expect(row().getByTestId("doc-groups")).toHaveText("hr-restricted");
+  await expect(row().getByTestId("doc-confidentiality")).toHaveText("internal");
+
+  // RoleSwitcher re-renders the OLD page before window.location.reload() lands, so
+  // mark the page and wait for the real reload (same technique as knowledge-archive).
+  async function switchRole(next: string) {
+    await page.evaluate(() => { (window as { __afPreReload?: boolean }).__afPreReload = true; });
+    await page.getByTestId("demo-role-switcher").selectOption(next);
+    await page.waitForFunction(() => !(window as { __afPreReload?: boolean }).__afPreReload);
+    await expect(page.getByRole("heading", { name: "Knowledge" })).toBeVisible();
+    await expect(page.getByTestId("demo-role-switcher")).toHaveValue(next);
+  }
+
+  // --- hr: in the "hr-restricted" group -> the document is visible server-side.
+  await switchRole("hr");
+  await expect(page.getByTestId("role-restricted-note")).toBeVisible(); // non-privileged
+  await expect(page.getByTestId("acl-edit")).toHaveCount(0);
+  await expect(row()).toBeVisible({ timeout: 15_000 });
+
+  // --- developer: same clearance rank, NOT in the group -> filtered out server-side.
+  await switchRole("developer");
+  await expect(row()).toHaveCount(0);
+
+  // --- finance: also non-privileged, also outside the group -> filtered out.
+  await switchRole("finance");
+  await expect(page.getByTestId("role-restricted-note")).toBeVisible();
+  await expect(row()).toHaveCount(0);
+
+  // --- Cleanup as admin: archive so repeated runs don't pile up rows.
+  await switchRole("admin");
+  await expect(row()).toBeVisible({ timeout: 15_000 });
+  await row().getByTestId("archive-doc").click();
+  await row().getByTestId("archive-reason").fill("group-acl e2e cleanup");
+  await row().getByTestId("archive-confirm").click();
+  await expect(row()).toHaveCount(0);
+});
+
 // The audit page's GET /audit/events is admin-scoped server-side (403 for other
 // roles). Verifies the frontend skips the doomed fetch for non-privileged roles
 // and shows the same friendly role-restricted-note pattern used on Knowledge,

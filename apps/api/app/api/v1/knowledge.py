@@ -20,7 +20,12 @@ from app.domain.parsers import (
     SUPPORTED_DOCUMENT_MIME_TYPES,
     SUPPORTED_TEXT_MIME_TYPES,
 )
-from app.domain.acl import CONFIDENTIALITY_RANK, confidentiality_rank, principal_can_access_document
+from app.domain.acl import (
+    CONFIDENTIALITY_RANK,
+    confidentiality_rank,
+    principal_can_access_document,
+    principal_clearance_rank,
+)
 from app.domain.vector import FakeVectorStore, VectorQuery, build_acl_filter, get_vector_store
 from app.domain.schemas import (
     DocumentAclUpdate,
@@ -64,7 +69,8 @@ def list_sources(
         # rank. It deliberately does NOT enforce group/department scoping for sources (none
         # exists in the schema); adding that requires a schema/migration change (out of scope).
         # Do not mistake this for document-style ACL enforcement.
-        principal_rank = confidentiality_rank(principal.clearance_level)
+        # Subject side: an unknown/malformed clearance resolves to the LOWEST rank.
+        principal_rank = principal_clearance_rank(principal.clearance_level)
         sources = [
             s
             for s in sources

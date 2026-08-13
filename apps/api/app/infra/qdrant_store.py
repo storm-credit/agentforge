@@ -6,7 +6,7 @@ from collections.abc import Callable, Sequence
 
 from qdrant_client import models as qm
 
-from app.domain.acl import confidentiality_rank
+from app.domain.acl import confidentiality_rank, principal_clearance_rank
 from app.domain.vector import (
     AclFilter,
     VectorHit,
@@ -34,7 +34,8 @@ def build_qdrant_acl_filter(acl: AclFilter, knowledge_source_ids: tuple[str, ...
     - access_groups intersects principal's subjects
     - knowledge_source_id in knowledge_source_ids (when supplied)
     """
-    clearance = confidentiality_rank(acl.clearance_level)
+    # Subject side: a malformed clearance claim narrows the range, never widens it.
+    clearance = principal_clearance_rank(acl.clearance_level)
     must: list[qm.FieldCondition] = [
         qm.FieldCondition(key="status", match=qm.MatchValue(value="indexed")),
         qm.FieldCondition(key="confidentiality_rank", range=qm.Range(lte=clearance)),
@@ -68,7 +69,7 @@ def payload_allows(payload: dict, acl: AclFilter) -> bool:
         return False
 
     # Principal's clearance must meet or exceed the document's rank.
-    if level_rank > confidentiality_rank(acl.clearance_level):
+    if level_rank > principal_clearance_rank(acl.clearance_level):
         return False
 
     # Deny-by-default: empty access_groups means no one can read it.

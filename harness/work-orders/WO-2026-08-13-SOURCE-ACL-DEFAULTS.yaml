@@ -1,0 +1,216 @@
+schema_version: agentforge.work_order/v1
+work_order_id: WO-2026-08-13-SOURCE-ACL-DEFAULTS-001
+title: Wire source-level classification defaults so an administrator stops retyping ACLs
+status: accepted
+problem: >-
+  In the planned whole-system pilot one administrator ingests on behalf of several
+  departments, and today classification is retyped per document. Two concrete defects make
+  that worse than tedious. First, KnowledgeSource.default_confidentiality_level already
+  exists on the model and in the create schema and is never read by anything - both
+  register_document and upload_document_and_index take the caller's value directly, so a
+  designed feature is dead code. Second, access_groups has no vocabulary validation at all
+  (_parse_access_groups splits on commas and falls back to all-employees when empty;
+  the schema field is an unconstrained list[str]), so a typo produces a document that is
+  either silently invisible, which is an availability failure, or scoped more broadly than
+  intended, which is an exposure failure. Nothing detects either outcome: audit records the
+  decision without evaluating it, and denied_count counts over-restriction only, never
+  under-restriction. Retyping a group string per document across several departments is
+  precisely the operation where a human makes that mistake, and the pilot multiplies it.
+intended_outcome: >-
+  A source carries administrator-configured classification defaults that a document inherits
+  when it does not specify its own, removing the per-document retyping that causes typos.
+  Every document records where its classification came from, so a wrong default can be
+  found and corrected as a set rather than discovered by accident.
+parent_issue_refs:
+  - "#147"
+  - "#157"
+scope:
+  included:
+    - wire the existing KnowledgeSource.default_confidentiality_level into document creation
+    - add KnowledgeSource.default_access_groups and wire it the same way
+    - record on each document whether its classification was explicit or inherited
+    - validate access-group strings against a shape rule at write time
+    - Alembic revision with an honest backfill
+    - tests covering inheritance, explicit override, and the recorded provenance
+  excluded:
+    - inferring classification from filename, folder path, or document content
+    - creating a departments or access-groups master table
+    - the ingestion_profiles table, which is a later step in the design
+    - any format or parser change
+    - changes to ACL evaluation, clearance ranking, or group semantics
+    - bulk ingest, dry run, or staged activation
+    - frontend changes, including the owner_department hardcode
+  affected_components:
+    - backend-api
+  affected_trust_boundaries:
+    - knowledge-ingestion
+  affected_data_classifications:
+    - internal
+    - restricted
+  runtime_behavior_change: true
+requirements:
+  - requirement_id: SEC-010
+    description: >-
+      Classification automation shall only ever produce a result at least as restrictive as
+      the fallback, and shall never derive a classification from artifact-controlled input.
+    authority_ref: docs/10-architecture/ingestion-normalization-design.md
+    adr_refs: []
+  - requirement_id: SEC-011
+    description: >-
+      A document shall record the provenance of its classification, so the population
+      affected by a wrong default is queryable.
+    authority_ref: docs/10-architecture/ingestion-normalization-design.md
+    adr_refs: []
+  - requirement_id: DEL-003
+    description: Completion shall be supported by an Evidence Package.
+    authority_ref: docs/40-delivery/evidence-package-guide.md
+    adr_refs: []
+assigned_roles:
+  - agent_role_id: pm-orchestrator
+    responsibility: Accept scope, review, and merge.
+    accountable: true
+  - agent_role_id: security-trust-architect
+    responsibility: >-
+      Implement inheritance so it cannot widen access, and prove the monotonic property.
+    accountable: false
+inputs:
+  - name: normalization_design
+    reference: docs/10-architecture/ingestion-normalization-design.md
+    required: true
+  - name: role_model
+    reference: docs/10-architecture/roles-and-permissions.md
+    required: true
+  - name: acl_evaluation
+    reference: apps/api/app/domain/acl.py
+    required: true
+deliverables:
+  - name: source_defaults
+    path_or_reference: apps/api/app/domain/models.py, schemas.py
+    owner_role: security-trust-architect
+  - name: inheritance_at_creation
+    path_or_reference: apps/api/app/api/v1/knowledge.py
+    owner_role: security-trust-architect
+  - name: migration
+    path_or_reference: apps/api/alembic/versions
+    owner_role: security-trust-architect
+  - name: tests
+    path_or_reference: apps/api/tests
+    owner_role: security-trust-architect
+acceptance_criteria:
+  - criterion_id: AC-01
+    description: >-
+      A document that specifies no classification inherits the source's defaults; a document
+      that specifies its own keeps it exactly.
+    verification: Tests for both directions against the same source.
+    blocker: true
+  - criterion_id: AC-02
+    description: >-
+      Inheritance is monotonic toward restriction - it can never yield access broader than
+      the platform fallback would have. A source with no configured defaults behaves exactly
+      as today.
+    verification: >-
+      Table-driven test over source-default and document-value combinations asserting the
+      resulting effective access is never broader than the current behaviour.
+    blocker: true
+  - criterion_id: AC-03
+    description: >-
+      Each document records whether its classification was explicit or inherited, and from
+      which source, so the set affected by a wrong default is queryable.
+    verification: Test asserting the recorded value for both paths.
+    blocker: true
+  - criterion_id: AC-04
+    description: >-
+      Access-group strings are validated at write time against a stated shape rule, and an
+      invalid group is rejected rather than silently stored.
+    verification: >-
+      Test asserting rejection, and asserting the rule does not reject any group string
+      already present in the repository's fixtures or seeds.
+    blocker: true
+  - criterion_id: AC-05
+    description: >-
+      The Alembic revision applies and reverses cleanly against real Postgres, and the
+      backfill invents nothing - existing rows record their classification provenance as
+      unknown rather than as explicit.
+    verification: CI's Alembic round-trip job plus a review of the backfill statement.
+    blocker: true
+  - criterion_id: AC-06
+    description: Full suite green at or above the 356 baseline, ruff clean, CI green.
+    verification: pytest with apps/api/.env moved aside; GitHub Actions on the candidate commit.
+    blocker: true
+verification_plan:
+  - check_id: MONOTONIC
+    type: security
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest tests -k "inherit or default" -v
+    expected_result: >-
+      No combination of source defaults and document values yields access broader than today.
+    evidence_destination: Evidence Package verification section.
+  - check_id: MIGRATION-ROUNDTRIP
+    type: migration
+    command_or_workflow: GitHub Actions Alembic upgrade/downgrade/upgrade against Postgres
+    expected_result: clean in both directions
+    evidence_destination: Evidence Package verification section.
+  - check_id: SUITE-BASELINE
+    type: unit
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest -q
+    expected_result: At or above 356 passed, 0 failed.
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-ALL
+    type: integration
+    command_or_workflow: GitHub Actions Backend, Frontend and E2E jobs
+    expected_result: success on the exact candidate commit
+    evidence_destination: Evidence Package verification section.
+required_reviews:
+  - reviewer_role: security-trust-architect
+    focus:
+      - inheritance cannot widen access under any input combination
+      - no classification is derived from artifact-controlled input
+      - provenance is recorded for every document
+    blocking: true
+  - reviewer_role: independent-release-governor
+    focus:
+      - scope adherence
+      - migration reversibility and backfill honesty
+      - CI and evidence freshness
+    blocking: true
+prohibited_actions:
+  - edit main directly
+  - infer classification from filename, folder, or document content
+  - create a departments or access-groups master table
+  - implement the ingestion_profiles table under this Work Order
+  - let a source default widen access relative to current behaviour
+  - backfill existing rows as though their classification provenance were known
+  - merge before required CI and security review
+dependencies:
+  - description: >-
+      The ingestion normalization design, including its finding that
+      default_confidentiality_level exists and is never read, and the security panel's
+      required properties for any classification automation.
+    type: decision
+    status: available
+    owner: pm-orchestrator
+    reference: docs/10-architecture/ingestion-normalization-design.md
+loop_budget:
+  self_review_passes: 2
+  formal_rework_passes: 1
+  same_failure_before_escalation: 2
+escalation:
+  - trigger: >-
+      A group-shape validation rule would reject a group string already used in fixtures,
+      seeds, or the eval corpus.
+    target_role: pm-orchestrator
+    action: >-
+      Stop and report the string and the rule; do not loosen the rule silently and do not
+      rewrite existing data.
+  - trigger: >-
+      Inheritance cannot be implemented without touching ACL evaluation.
+    target_role: security-trust-architect
+    action: Stop and report; that is excluded scope.
+stop_conditions:
+  - all acceptance criteria pass and required reviews accept
+  - any input combination would widen access
+  - work exceeds the approved scope
+  - loop budget is exhausted
+created_by: pm-orchestrator
+created_at: "2026-08-13T09:00:00Z"
+accepted_by: product-owner
+accepted_at: "2026-08-13T09:00:00Z"

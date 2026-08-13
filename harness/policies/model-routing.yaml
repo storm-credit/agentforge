@@ -5,6 +5,20 @@ status: draft
 owner: ai-architect
 schema_ref: harness/schemas/model-routing-policy.schema.json
 
+# ENFORCEMENT STATUS
+# No routing code in this repository reads this file. `model_id:
+# environment_selected_reasoning_model` / `environment_selected_implementation_model`
+# and the `PILOT_DECISION_REQUIRED` placeholders below were never wired to an
+# actual model call -- the product's real LLM/embedding/reranker selection today
+# lives entirely in apps/api environment configuration (base_url/model env
+# vars), independent of this file. The fail-closed, no-silent-fallback, and
+# trace_policy guarantees described below are not exercised anywhere.
+# What would close the gap: a routing layer that resolves route_id -> model_ref
+# from this file at call time, with the failure/fallback behavior actually
+# enforced in code rather than only described here.
+# Re-check rather than trust this comment as it ages:
+#   apps/api/.venv/Scripts/python.exe harness/tools/project_status.py
+
 principles:
   approved_models_only: true
   no_silent_external_fallback: true

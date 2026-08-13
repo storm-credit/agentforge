@@ -4,6 +4,14 @@ Status: Draft harness baseline
 Owner: PM Orchestrator / QA-Eval  
 Related: #108, #120
 
+## Enforcement Status
+
+Every budget and gate described below — self-review passes, rework limits, escalation triggers, stop conditions — is a written expectation for how a session should behave, not a running check. Nothing in this repository counts attempt passes against a Work Order, reads a loop budget field, or blocks a slice from continuing past a stated limit. The only way a limit here has effect today is a session choosing, on its own, to honor it.
+
+Making a budget real would mean an agent or tool that tracks attempts against a Work Order and actually stops or escalates when a limit in this file is reached — not just a document a session is expected to have read.
+
+Check what's actually true today rather than assuming this document describes it: `apps/api/.venv/Scripts/python.exe harness/tools/project_status.py`
+
 ## 1. Purpose
 
 Engineering loops turn uncertain work into a bounded sequence of hypotheses, checks, decisions, and evidence. They are not permission to iterate indefinitely.

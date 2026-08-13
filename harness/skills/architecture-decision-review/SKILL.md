@@ -1,5 +1,11 @@
 # Architecture Decision Review Skill
 
+## Enforcement Status
+
+Nothing loads or runs this procedure today. Files under `harness/skills/*/SKILL.md` carry no frontmatter, so Claude Code's Skill tool cannot discover this one on its own, and no agent contract points a dispatched subagent at it. Following the checklist below is currently up to an individual session choosing to open and read this file — there is no gate behind it. Compare `harness/skills/threat-modeling/`, the one skill in this directory that *is* reachable: it works because a matching `.claude/skills/threat-modeling/SKILL.md` wrapper exists and references (not copies) it. Making this skill real means the same thing here — a discoverable wrapper, plus something that actually invokes it at the trigger point below.
+
+Do not take this note's word for what's wired — it will drift. Check yourself: `apps/api/.venv/Scripts/python.exe harness/tools/project_status.py`
+
 ## Trigger
 
 Use when a change affects component ownership, authoritative stores, state machines, trust boundaries, model/vector/object-store choices, deployment topology, or a consequential technical tradeoff.

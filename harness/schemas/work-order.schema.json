@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agentforge.local/schemas/work-order.schema.json",
+  "$comment": "ENFORCEMENT STATUS: this one is genuinely exercised, not just declared -- harness/tools/validate_examples.py loads this schema and validates the illustrative example plus every real file under harness/work-orders/ against it. That only proves the YAML shape is well-formed; it does not prove anyone actually followed the Work Order before acting, or that the fields below (loop budgets, escalation, stop conditions) are read by anything at runtime. Re-check rather than trust this comment as it ages: apps/api/.venv/Scripts/python.exe harness/tools/validate_examples.py",
   "title": "Agent Forge Work Order",
   "type": "object",
   "additionalProperties": false,

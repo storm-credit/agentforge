@@ -4,6 +4,14 @@ Status: Draft harness baseline
 Owner: Delivery Harness / Security & Trust Architect  
 Related: #108, #120
 
+## Enforcement Status
+
+This document, and the `harness/hooks/policy.yaml` it names as its machine-readable baseline, describe intended lifecycle controls. As of this writing the real scripts under `.claude/hooks/` are a direct-main-push blocker and a secret-scan warning (never blocking), wired via `.claude/settings.json`, and both fail open on their own error. Neither script is written against a `rule_id` from `harness/hooks/policy.yaml`, so the overlap between "declared here" and "actually runs" is coincidental, not traceable: a change to one will not visibly change the other. SessionStart, SubagentStop, and most of the PreToolUse/PostToolUse rules described below (§3.1–3.4) have no executing counterpart of any kind — reading them tells you what was designed to happen, not what happens in a session.
+
+Closing this gap means writing hook scripts that read specific `rule_id` values from `harness/hooks/policy.yaml` and wiring them into `.claude/settings.json` — not scripts that merely happen to produce a similar effect.
+
+Verify the current state yourself instead of relying on this paragraph staying accurate: `apps/api/.venv/Scripts/python.exe harness/tools/project_status.py`
+
 ## 1. Purpose
 
 Hooks provide deterministic lifecycle controls around model-assisted delivery work. They load authoritative context, validate tool actions, trigger checks, require evidence, and stop unsafe or unbounded execution.

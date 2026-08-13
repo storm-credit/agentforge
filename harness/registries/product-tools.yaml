@@ -3,6 +3,19 @@ status: draft
 owner: runtime-mcp-specialist
 security_owner: security-trust-architect
 
+# ENFORCEMENT STATUS
+# servers: [] and tools: [] below are not merely "nothing registered yet" --
+# there is no Product Tool execution path in this codebase that would consult
+# this registry even if entries existed. No runtime component calls a Product
+# Tool at all today, so nothing has ever needed to check admission_gates or
+# activation_rules against a real entry.
+# What would close the gap: a runtime component that actually invokes product
+# tools, wired to refuse anything not listed here with an approved contract
+# (harness/schemas/tool-contract.schema.json, itself also never validated --
+# see that schema's own status note).
+# Re-check rather than trust this comment as it ages:
+#   apps/api/.venv/Scripts/python.exe harness/tools/project_status.py
+
 pilot_policy:
   consequential_write_tools_allowed: false
   arbitrary_user_added_mcp_servers: false

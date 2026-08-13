@@ -1,0 +1,228 @@
+schema_version: agentforge.work_order/v1
+work_order_id: WO-2026-08-14-INGESTION-INSTRUMENTATION-001
+title: Record what each index attempt actually produced, so silent citation collapse is visible
+status: accepted
+problem: >-
+  PDF and DOCX citations collapse and nobody can see it. chunker_mime_type_for maps both
+  binary formats to text/plain, so the markdown heading detector never runs, section_path is
+  always empty, and every citation becomes "{title} / body / lines N-M" - line numbers into an
+  extracted text stream that have no correspondence to a page or clause in the original file,
+  so a reader has no coordinate to verify against. This is the default behaviour for the two
+  binary formats the product supports, not an edge case, and it was reproduced by execution in
+  docs/10-architecture/ingestion-normalization-design.md section 1. It has stayed invisible for
+  two compounding reasons. The evaluation harness registers every document as text/markdown, so
+  the measured citation rate of 100 percent was obtained entirely on the best case and does not
+  transfer to the files a real department uploads. And nothing in the product records what a
+  conversion produced: an administrator sees "indexed, N chunks" whether the document yielded a
+  usable heading hierarchy or one undifferentiated blob. A partially scanned PDF is worse still
+  - a cover page with a text layer makes extraction non-empty, so the document indexes
+  successfully while its actual policy text is unreachable, with no signal at all. The product
+  claim is that every answer carries a verifiable citation; for real departmental formats the
+  citation is currently present but not verifiable, and the system reports success either way.
+intended_outcome: >-
+  Every index attempt records what the conversion actually produced - what the chunker saw,
+  which converter ran, how much structure survived, and any quality warnings - as append-only
+  lineage that survives re-indexing. An administrator can identify documents whose citations
+  collapsed, and the difference between markdown and real formats becomes measurable rather
+  than assumed. No format support is added and no conversion behaviour changes.
+parent_issue_refs:
+  - "#147"
+  - "#159"
+scope:
+  included:
+    - a document_ingestions table recording one row per index attempt, append-only
+    - populate it from the indexing pipeline
+    - counts that make structure loss visible, including how many chunks carried a section path
+    - a text-density signal so a partially scanned PDF is distinguishable from a text document
+    - warning codes for the conditions above
+    - expose the signal through the existing index-job read model
+    - an honest backfill for existing documents
+  excluded:
+    - adding any document format
+    - changing conversion, chunking, or citation-locator behaviour
+    - the ingestion_profiles table, which is a later design step
+    - any change to ACL, classification, or authorization
+    - frontend changes
+    - OCR
+  affected_components:
+    - backend-api
+  affected_trust_boundaries: []
+  affected_data_classifications:
+    - internal
+  runtime_behavior_change: false
+requirements:
+  - requirement_id: OBS-001
+    description: >-
+      An index attempt shall record what it produced, not merely that it succeeded.
+    authority_ref: docs/10-architecture/ingestion-normalization-design.md
+    adr_refs: []
+  - requirement_id: OBS-002
+    description: >-
+      Lineage shall survive re-indexing, so the population affected by a converter defect
+      remains identifiable.
+    authority_ref: docs/10-architecture/ingestion-normalization-design.md
+    adr_refs: []
+  - requirement_id: DEL-003
+    description: Completion shall be supported by an Evidence Package.
+    authority_ref: docs/40-delivery/evidence-package-guide.md
+    adr_refs: []
+assigned_roles:
+  - agent_role_id: pm-orchestrator
+    responsibility: Accept scope, review, and merge.
+    accountable: true
+  - agent_role_id: backend-specialist
+    responsibility: >-
+      Implement the lineage table and its population without changing any conversion behaviour.
+    accountable: false
+inputs:
+  - name: normalization_design
+    reference: docs/10-architecture/ingestion-normalization-design.md
+    required: true
+  - name: indexing_pipeline
+    reference: apps/api/app/domain/indexing.py
+    required: true
+  - name: parsers
+    reference: apps/api/app/domain/parsers.py
+    required: true
+deliverables:
+  - name: lineage_table
+    path_or_reference: apps/api/app/domain/models.py
+    owner_role: backend-specialist
+  - name: pipeline_population
+    path_or_reference: apps/api/app/domain/indexing.py
+    owner_role: backend-specialist
+  - name: migration
+    path_or_reference: apps/api/alembic/versions
+    owner_role: backend-specialist
+  - name: tests
+    path_or_reference: apps/api/tests
+    owner_role: backend-specialist
+acceptance_criteria:
+  - criterion_id: AC-01
+    description: >-
+      A markdown document and a PDF or DOCX document with identical text produce visibly
+      different lineage rows, and the difference identifies the structure loss.
+    verification: >-
+      Test asserting the structured-chunk count differs and the warning is raised for the
+      binary path only.
+    blocker: true
+  - criterion_id: AC-02
+    description: >-
+      Lineage is append-only across re-indexing - a re-index adds a row rather than
+      overwriting the previous attempt.
+    verification: Test indexing twice and asserting two rows survive with distinct job ids.
+    blocker: true
+  - criterion_id: AC-03
+    description: >-
+      No conversion, chunking, or citation-locator output changes. Existing chunk ids,
+      section paths and citation locators are byte-identical before and after.
+    verification: >-
+      Test comparing parser output before and after; the full existing suite passing is
+      necessary but not sufficient evidence.
+    blocker: true
+  - criterion_id: AC-04
+    description: >-
+      A document whose extracted text is implausibly small relative to its page count raises
+      a distinct warning, so a partially scanned PDF is distinguishable from a text document.
+    verification: Test with a low-density fixture.
+    blocker: true
+  - criterion_id: AC-05
+    description: >-
+      The backfill records what is derivable from existing rows and marks the rest unknown.
+      No existing document is recorded as having a verified extraction status.
+    verification: Review of the backfill statement; test asserting the unknown marker.
+    blocker: true
+  - criterion_id: AC-06
+    description: >-
+      The Alembic revision identifier fits alembic_version.version_num, applies and reverses
+      cleanly against real Postgres.
+    verification: The revision-id length test plus CI's Alembic round-trip.
+    blocker: true
+  - criterion_id: AC-07
+    description: Full suite green at or above the 414 baseline, ruff clean, CI green.
+    verification: pytest with apps/api/.env moved aside; GitHub Actions on the candidate commit.
+    blocker: true
+verification_plan:
+  - check_id: STRUCTURE-LOSS-VISIBLE
+    type: unit
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest tests -k "ingestion_lineage" -v
+    expected_result: >-
+      Markdown and binary paths produce distinguishable lineage; the collapse is identifiable.
+    evidence_destination: Evidence Package verification section.
+  - check_id: NO-BEHAVIOR-CHANGE
+    type: unit
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest -q
+    expected_result: >-
+      At or above 414 passed, and parser output is byte-identical to before.
+    evidence_destination: Evidence Package verification section.
+  - check_id: LIVE-CONTRAST
+    type: integration
+    command_or_workflow: >-
+      Against the running stack, index the same text as markdown and as PDF or DOCX and
+      compare the recorded lineage and the resulting citation locators.
+    expected_result: >-
+      The markdown document carries section paths; the binary one does not, and the lineage
+      says so.
+    evidence_destination: Evidence Package verification section.
+  - check_id: MIGRATION-ROUNDTRIP
+    type: migration
+    command_or_workflow: GitHub Actions Alembic upgrade/downgrade/upgrade against Postgres
+    expected_result: clean in both directions
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-ALL
+    type: integration
+    command_or_workflow: GitHub Actions Backend, Frontend and E2E jobs
+    expected_result: success on the exact candidate commit
+    evidence_destination: Evidence Package verification section.
+required_reviews:
+  - reviewer_role: rag-data-specialist
+    focus:
+      - the recorded counts actually distinguish structure loss
+      - no conversion or chunking behaviour changed
+    blocking: true
+  - reviewer_role: independent-release-governor
+    focus:
+      - scope adherence
+      - migration reversibility and backfill honesty
+      - CI and evidence freshness
+    blocking: true
+prohibited_actions:
+  - edit main directly
+  - add or change any document format or parser
+  - change chunking, section paths, or citation locators
+  - implement the ingestion_profiles table under this Work Order
+  - record a derived quality judgement as though it were measured
+  - backfill existing rows with a verified extraction status
+  - merge before required CI and review
+dependencies:
+  - description: >-
+      The ingestion normalization design, including the reproduced citation collapse and the
+      finding that all existing measurement used markdown only.
+    type: decision
+    status: available
+    owner: pm-orchestrator
+    reference: docs/10-architecture/ingestion-normalization-design.md
+loop_budget:
+  self_review_passes: 2
+  formal_rework_passes: 1
+  same_failure_before_escalation: 2
+escalation:
+  - trigger: >-
+      Recording the lineage cannot be done without changing conversion or chunking behaviour.
+    target_role: pm-orchestrator
+    action: Stop and report; behaviour change belongs to a separate Work Order.
+  - trigger: >-
+      The signal chosen would report a quality judgement the pipeline cannot actually measure.
+    target_role: pm-orchestrator
+    action: >-
+      Stop and report; an invented quality score reproduces the failure this Work Order exists
+      to expose.
+stop_conditions:
+  - all acceptance criteria pass and required reviews accept
+  - any conversion or citation output would change
+  - work exceeds the approved scope
+  - loop budget is exhausted
+created_by: pm-orchestrator
+created_at: "2026-08-14T00:00:00Z"
+accepted_by: product-owner
+accepted_at: "2026-08-14T00:00:00Z"

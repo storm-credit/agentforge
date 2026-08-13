@@ -64,6 +64,16 @@ class KnowledgeSource(Base):
     default_confidentiality_level: Mapped[str] = mapped_column(
         String(40), default="internal", nullable=False
     )
+    # Administrator-configured governance defaults a new Document INHERITS when its own
+    # request specifies nothing (WO-2026-08-13-SOURCE-ACL-DEFAULTS). An empty list means NOT
+    # CONFIGURED -- the endpoint's own platform fallback then applies, i.e. a source that
+    # configures nothing behaves exactly as it did before this column existed.
+    #
+    # Inheritance is resolved by domain/classification.py, which clamps the confidentiality
+    # level UP to the endpoint's fallback and never derives anything from the artifact. This
+    # column is NOT consulted by ACL evaluation and NOT part of `list_sources`' clearance
+    # filter: a KnowledgeSource still carries no per-source ACL (see list_sources).
+    default_access_groups: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
     status: Mapped[str] = mapped_column(String(40), default="active", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
@@ -97,6 +107,35 @@ class Document(Base):
     # the reindex authorization gate cannot be bypassed through that operational-failure
     # side door. See create_index_job / process_index_job in api/v1/knowledge.py.
     has_been_indexed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Classification PROVENANCE (WO-2026-08-13-SOURCE-ACL-DEFAULTS, SEC-011): where each half
+    # of this document's ACL came from, so the population affected by a wrong source default is
+    # QUERYABLE as a set instead of being discovered by accident. Values come from
+    # domain/classification.py: "explicit" | "source_default" | "platform_default" | "unknown".
+    #
+    # The two halves are recorded separately on purpose. Confidentiality inheritance is clamped
+    # and can only ever RAISE the level, so it cannot widen access; group inheritance is the
+    # half that can, which makes "which documents inherited their GROUPS from source X" the
+    # exact question an incident needs answered:
+    #   SELECT id FROM documents
+    #    WHERE access_groups_source = 'source_default' AND classification_source_id = :src;
+    #
+    # The ORM default is "unknown", never "explicit": a Document built directly through the
+    # ORM (seed scripts) records that nobody decided, rather than falsely asserting a choice.
+    #
+    # HONEST LIMITATION: these are CURRENT-STATE columns, not lineage. A later
+    # `PATCH /documents/{id}/acl` overwrites them with "explicit" (correctly -- after a manual
+    # relabel the value is no longer inherited), so the historical trail lives in
+    # `audit_events`, which records the resolved classification and its provenance for every
+    # registration and every ACL change. Append-only per-attempt lineage is
+    # `document_ingestions`, a later step in docs/10-architecture/ingestion-normalization-design.md.
+    confidentiality_source: Mapped[str] = mapped_column(
+        String(40), default="unknown", nullable=False
+    )
+    access_groups_source: Mapped[str] = mapped_column(String(40), default="unknown", nullable=False)
+    #: The knowledge source whose configured defaults were applied, or NULL when nothing was
+    #: inherited. Deliberately NOT a foreign key: it is a provenance snapshot of what was
+    #: applied, not a live relationship (knowledge_source_id already carries that).
+    classification_source_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     effective_date: Mapped[str | None] = mapped_column(String(20), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(

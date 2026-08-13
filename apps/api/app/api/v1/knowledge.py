@@ -27,6 +27,12 @@ from app.domain.acl import (
     principal_can_discover_archived_document,
     principal_clearance_rank,
 )
+from app.domain.classification import (
+    CLASSIFICATION_EXPLICIT,
+    ResolvedClassification,
+    access_group_shape_errors,
+    resolve_document_classification,
+)
 from app.domain.vector import FakeVectorStore, VectorQuery, build_acl_filter, get_vector_store
 from app.domain.schemas import (
     DocumentAclUpdate,
@@ -50,6 +56,24 @@ from app.infra.object_store import document_object_key, get_object_store
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# --------------------------------------------------------------------------------------
+# PLATFORM CLASSIFICATION FALLBACKS -- the behaviour each ingestion endpoint had before
+# source-level defaults existed (WO-2026-08-13-SOURCE-ACL-DEFAULTS). They are named
+# constants, not literals buried in signatures, because they are the BASELINE the
+# monotonicity proof is stated against: a source that configures no defaults must resolve to
+# exactly these values, and an inherited confidentiality level may never rank below them.
+#
+# The two endpoints genuinely differ and are deliberately NOT unified here (that would change
+# behaviour for a defaults-free source, which AC-02 forbids):
+#   * register falls back to NO groups, which is deny-all and unindexable;
+#   * upload falls back to ["all-employees"], which every principal holds unconditionally.
+# Unifying them is a product decision about what an omitted ACL should mean, not a wiring one.
+# --------------------------------------------------------------------------------------
+_REGISTER_FALLBACK_CONFIDENTIALITY = "internal"
+_REGISTER_FALLBACK_ACCESS_GROUPS: tuple[str, ...] = ()
+_UPLOAD_FALLBACK_CONFIDENTIALITY = "internal"
+_UPLOAD_FALLBACK_ACCESS_GROUPS: tuple[str, ...] = ("all-employees",)
 
 
 @router.get("/sources", response_model=list[KnowledgeSourceRead])
@@ -124,6 +148,11 @@ def create_source(
     )
 
     _validate_confidentiality(payload.default_confidentiality_level)
+    # WO-2026-08-13-SOURCE-ACL-DEFAULTS: the source's configured group default is the value
+    # every document that omits its own groups will INHERIT, so a malformed group typed here
+    # propagates to a whole department's documents. Validate it at the point of entry, not
+    # only where it is consumed.
+    _validate_access_groups(payload.default_access_groups, field="default_access_groups")
     source = KnowledgeSource(**payload.model_dump())
     db.add(source)
     db.flush()
@@ -133,7 +162,15 @@ def create_source(
         event_type="knowledge_source.created",
         target_type="knowledge_source",
         target_id=source.id,
-        payload={"name": source.name, "owner_department": source.owner_department},
+        payload={
+            "name": source.name,
+            "owner_department": source.owner_department,
+            # The governance defaults chosen here are an authorization-relevant decision:
+            # record them so a later "which sources hand out this group" question is
+            # answerable from the audit trail and not only from current table state.
+            "default_confidentiality_level": source.default_confidentiality_level,
+            "default_access_groups": list(source.default_access_groups),
+        },
     )
     db.commit()
     db.refresh(source)
@@ -341,9 +378,40 @@ def register_document(
     source = db.get(KnowledgeSource, payload.knowledge_source_id)
     if source is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Knowledge source not found")
-    _validate_confidentiality(payload.confidentiality_level)
+    if payload.confidentiality_level is not None:
+        _validate_confidentiality(payload.confidentiality_level)
 
-    document = Document(**payload.model_dump())
+    # Source-default inheritance (WO-2026-08-13-SOURCE-ACL-DEFAULTS). The platform fallbacks
+    # passed here are THIS endpoint's current behaviour for an unspecified value -- "internal"
+    # and no groups -- so a source that configures no defaults resolves to exactly what it
+    # resolved to before. Nothing about the artifact (title, object_uri, mime_type, checksum,
+    # bytes) is passed in: classification must never be derived from content the uploader
+    # controls. See domain/classification.py.
+    resolved = resolve_document_classification(
+        requested_confidentiality_level=payload.confidentiality_level,
+        requested_access_groups=payload.access_groups,
+        source_id=source.id,
+        source_default_confidentiality_level=source.default_confidentiality_level,
+        source_default_access_groups=source.default_access_groups,
+        platform_fallback_confidentiality_level=_REGISTER_FALLBACK_CONFIDENTIALITY,
+        platform_fallback_access_groups=_REGISTER_FALLBACK_ACCESS_GROUPS,
+    )
+    _validate_access_groups(resolved.access_groups)
+
+    document = Document(
+        knowledge_source_id=payload.knowledge_source_id,
+        title=payload.title,
+        object_uri=payload.object_uri,
+        checksum=payload.checksum,
+        mime_type=payload.mime_type,
+        confidentiality_level=resolved.confidentiality_level,
+        access_groups=resolved.access_groups,
+        status=payload.status,
+        effective_date=payload.effective_date,
+        confidentiality_source=resolved.confidentiality_source,
+        access_groups_source=resolved.access_groups_source,
+        classification_source_id=resolved.classification_source_id,
+    )
     db.add(document)
     db.flush()
     write_audit_event(
@@ -352,11 +420,7 @@ def register_document(
         event_type="document.registered",
         target_type="document",
         target_id=document.id,
-        payload={
-            "knowledge_source_id": document.knowledge_source_id,
-            "title": document.title,
-            "confidentiality_level": document.confidentiality_level,
-        },
+        payload=_classification_audit_payload(document, resolved),
     )
     db.commit()
     db.refresh(document)
@@ -391,6 +455,11 @@ def update_document_acl(
     before = {
         "access_groups": list(document.access_groups),
         "confidentiality_level": document.confidentiality_level,
+        # Provenance before the relabel, so the audit trail keeps the fact that this document
+        # once carried an inherited classification even though the columns stop saying so.
+        "confidentiality_source": document.confidentiality_source,
+        "access_groups_source": document.access_groups_source,
+        "classification_source_id": document.classification_source_id,
     }
     new_groups = list(dict.fromkeys(g.strip() for g in payload.access_groups if g.strip()))
     if not new_groups:
@@ -398,9 +467,21 @@ def update_document_acl(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="access_groups must not be empty",
         )
+    # Shape rule applied to the values about to be PERSISTED -- this endpoint has always
+    # stripped and de-duplicated its input, and that pre-existing normalisation is preserved
+    # (changing it is not this Work Order's business), so what is validated here is the
+    # normalised result. Same rule, same point of application, on every write path.
+    _validate_access_groups(new_groups)
 
     document.access_groups = new_groups
     document.confidentiality_level = payload.confidentiality_level.lower()
+    # A manual relabel makes the classification EXPLICIT: it is no longer whatever a source
+    # default handed out. Leaving stale "source_default" provenance here would poison the one
+    # query this feature exists to support -- "which documents did the broken default touch"
+    # would keep returning documents an administrator has already corrected.
+    document.confidentiality_source = CLASSIFICATION_EXPLICIT
+    document.access_groups_source = CLASSIFICATION_EXPLICIT
+    document.classification_source_id = None
     rank = confidentiality_rank(document.confidentiality_level)
 
     for chunk in document.chunks:
@@ -427,6 +508,9 @@ def update_document_acl(
             "after": {
                 "access_groups": new_groups,
                 "confidentiality_level": document.confidentiality_level,
+                "confidentiality_source": document.confidentiality_source,
+                "access_groups_source": document.access_groups_source,
+                "classification_source_id": document.classification_source_id,
             },
             "chunks_synced": chunks_synced,
         },
@@ -444,8 +528,13 @@ def update_document_acl(
 def upload_document_and_index(
     knowledge_source_id: str = Form(...),
     title: str = Form(...),
-    confidentiality_level: str = Form("internal"),
-    access_groups: str = Form("all-employees"),
+    # Default None, NOT the previous literal "internal" / "all-employees": those literals made
+    # an omitted field indistinguishable from a deliberate one, so the source's configured
+    # default could never be consulted (WO-2026-08-13-SOURCE-ACL-DEFAULTS). The literals now
+    # live in _UPLOAD_FALLBACK_* and are applied by the resolver when the source configures
+    # nothing, so an omitting caller under a defaults-free source gets the identical result.
+    confidentiality_level: str | None = Form(None),
+    access_groups: str | None = Form(None),
     effective_date: str | None = Form(None),
     embedding_model: str = Form("bge-m3"),
     file: UploadFile = File(...),
@@ -492,7 +581,23 @@ def upload_document_and_index(
     mime_type = _upload_mime_type(file.content_type, filename)
     if mime_type not in SUPPORTED_DOCUMENT_MIME_TYPES:
         raise HTTPException(status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, detail="Unsupported file type")
-    _validate_confidentiality(confidentiality_level)
+    if confidentiality_level is not None:
+        _validate_confidentiality(confidentiality_level)
+
+    # Source-default inheritance, same resolver and same rules as register_document. The
+    # fallbacks passed here are THIS endpoint's own pre-existing defaults, which differ from
+    # register's (upload has always fallen back to "all-employees"), so both endpoints keep
+    # behaving exactly as they do today whenever the source configures nothing.
+    resolved = resolve_document_classification(
+        requested_confidentiality_level=confidentiality_level,
+        requested_access_groups=_requested_upload_access_groups(access_groups),
+        source_id=source.id,
+        source_default_confidentiality_level=source.default_confidentiality_level,
+        source_default_access_groups=source.default_access_groups,
+        platform_fallback_confidentiality_level=_UPLOAD_FALLBACK_CONFIDENTIALITY,
+        platform_fallback_access_groups=_UPLOAD_FALLBACK_ACCESS_GROUPS,
+    )
+    _validate_access_groups(resolved.access_groups)
 
     document = Document(
         knowledge_source_id=source.id,
@@ -500,10 +605,13 @@ def upload_document_and_index(
         object_uri=f"upload://{filename}",
         checksum="sha256-" + hashlib.sha256(raw).hexdigest(),
         mime_type=mime_type,
-        confidentiality_level=confidentiality_level,
-        access_groups=_parse_access_groups(access_groups),
+        confidentiality_level=resolved.confidentiality_level,
+        access_groups=resolved.access_groups,
         status="registered",
         effective_date=effective_date,
+        confidentiality_source=resolved.confidentiality_source,
+        access_groups_source=resolved.access_groups_source,
+        classification_source_id=resolved.classification_source_id,
     )
     db.add(document)
     db.flush()
@@ -519,9 +627,7 @@ def upload_document_and_index(
         target_type="document",
         target_id=document.id,
         payload={
-            "knowledge_source_id": document.knowledge_source_id,
-            "title": document.title,
-            "confidentiality_level": document.confidentiality_level,
+            **_classification_audit_payload(document, resolved),
             "upload_mime_type": document.mime_type,
         },
     )
@@ -910,6 +1016,57 @@ def _validate_confidentiality(level: str) -> None:
         )
 
 
+def _validate_access_groups(groups: list[str], *, field: str = "access_groups") -> None:
+    """Reject malformed access-group strings at write time (AC-04).
+
+    Applied to the values that are about to be PERSISTED, on every write path that stores
+    group strings: source defaults (create_source), both ingestion endpoints (after
+    inheritance is resolved, so an inherited group is checked too) and the ACL patch. A
+    validation that covered only some write paths would just move the hole.
+
+    HONEST SCOPE: this is a SHAPE rule (see domain/classification.access_group_shape_error),
+    not a vocabulary rule. It catches padding, control characters, commas, over-length values
+    and empty reserved prefixes -- the mechanically detectable half of the typo problem. It
+    cannot catch ``all-employes``, which is well-shaped and simply names the wrong audience;
+    that needs the authoritative group vocabulary, which SSO owns and which this Work Order
+    explicitly excludes reproducing locally. The other half of the mitigation is removing the
+    per-document retyping in the first place, which is what source defaults do.
+    """
+    errors = access_group_shape_errors(groups)
+    if not errors:
+        return
+    detail = "; ".join(f"{group!r} {reason}" for group, reason in errors)
+    raise HTTPException(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        detail=f"Invalid {field}: {detail}",
+    )
+
+
+def _classification_audit_payload(
+    document: Document, resolved: ResolvedClassification
+) -> dict:
+    """Audit body for a document registration: the ACL and WHERE IT CAME FROM.
+
+    The audit trail previously recorded ``confidentiality_level`` alone, which is exactly the
+    "records the decision without evaluating it" gap that made a wrong classification
+    undetectable. Recording the resolved groups plus the provenance of both halves makes the
+    affected population reconstructable from the trail even after the current-state columns
+    are overwritten by a later ACL patch. ``confidentiality_floor_applied`` is the detective
+    signal for a source configured LESS restrictively than the platform fallback: the
+    resolution silently raised it, and silent is exactly what must not go unrecorded.
+    """
+    return {
+        "knowledge_source_id": document.knowledge_source_id,
+        "title": document.title,
+        "confidentiality_level": document.confidentiality_level,
+        "access_groups": list(document.access_groups),
+        "confidentiality_source": resolved.confidentiality_source,
+        "access_groups_source": resolved.access_groups_source,
+        "classification_source_id": resolved.classification_source_id,
+        "confidentiality_floor_applied": resolved.confidentiality_floor_applied,
+    }
+
+
 def _fetch_object_bytes(document: Document) -> bytes | None:
     """Fetch a document's original bytes from object storage, or None if unavailable."""
     store = get_object_store()
@@ -921,9 +1078,24 @@ def _fetch_object_bytes(document: Document) -> bytes | None:
     return store.get(key)
 
 
-def _parse_access_groups(value: str) -> list[str]:
+def _requested_upload_access_groups(value: str | None) -> list[str] | None:
+    """Groups the UPLOAD request actually expressed, or None when it expressed none.
+
+    The form field is comma-delimited, and splitting/stripping it is pre-existing transport
+    behaviour that is preserved exactly. What changes is only how "nothing" is represented:
+
+    * field absent            -> None (inherit)
+    * field blank / ","-only  -> None (inherit). A blank field expresses no intent; the old
+      code discarded it too, falling back to ["all-employees"] inside the parser. The only
+      difference now is WHICH fallback applies, and a source default is never broader than
+      "all-employees" (which every principal holds unconditionally), so this cannot widen.
+    * field with tokens       -> those tokens, verbatim after the split/strip, treated as an
+      explicit value exactly as before.
+    """
+    if value is None:
+        return None
     groups = [group.strip() for group in value.split(",") if group.strip()]
-    return groups or ["all-employees"]
+    return groups or None
 
 
 def _safe_upload_filename(filename: str | None) -> str:

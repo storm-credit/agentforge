@@ -54,7 +54,7 @@ database. ``op.batch_alter_table`` is used because SQLite cannot attach a NOT NU
 constraint through a plain ``ALTER TABLE ADD COLUMN`` and cannot ``DROP COLUMN`` at all
 without a table rebuild; on Postgres batch mode degrades to plain ALTER statements.
 
-Revision ID: 0006_source_classification_defaults
+Revision ID: 0006_source_class_defaults
 Revises: 0005_document_has_been_indexed
 Create Date: 2026-08-13
 """
@@ -64,7 +64,7 @@ from collections.abc import Sequence
 import sqlalchemy as sa
 from alembic import op
 
-revision: str = "0006_source_classification_defaults"
+revision: str = "0006_source_class_defaults"
 down_revision: str | None = "0005_document_has_been_indexed"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

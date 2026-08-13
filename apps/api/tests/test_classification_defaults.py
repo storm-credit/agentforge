@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import importlib.util
 import itertools
+import re
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -891,16 +892,41 @@ class TestAuditTrail:
 # AC-05: the migration matches the model (tests build the schema with create_all, never
 # Alembic, so nothing else in this suite would notice a divergence)
 # =======================================================================================
+#: Alembic creates ``alembic_version.version_num`` as ``VARCHAR(32)``.
+ALEMBIC_VERSION_NUM_MAX_LENGTH = 32
+
+
 class TestMigrationParity:
     REVISION = (
-        Path(__file__).resolve().parents[1]
-        / "alembic/versions/0006_source_classification_defaults.py"
+        Path(__file__).resolve().parents[1] / "alembic/versions/0006_source_class_defaults.py"
     )
 
     def test_revision_file_exists_and_chains_to_0005(self):
         text = self.REVISION.read_text(encoding="utf-8")
-        assert 'revision: str = "0006_source_classification_defaults"' in text
+        assert 'revision: str = "0006_source_class_defaults"' in text
         assert 'down_revision: str | None = "0005_document_has_been_indexed"' in text
+
+    def test_every_revision_id_fits_alembics_version_column(self):
+        """Alembic's own ``alembic_version.version_num`` is ``VARCHAR(32)``.
+
+        A longer revision id passes every SQLite-backed test in this suite -- SQLite ignores
+        VARCHAR length limits entirely -- and then fails at ``alembic upgrade head`` against
+        real Postgres with ``StringDataRightTruncation``. This revision was originally named
+        ``0006_source_classification_defaults`` (35 characters) and CI's Postgres round-trip
+        was the only thing that caught it. Asserted for EVERY revision, not just this one, so
+        the next long name fails here instead of in CI.
+        """
+        versions = self.REVISION.parent
+        too_long = {}
+        for path in sorted(versions.glob("*.py")):
+            match = re.search(r'^revision: str = "([^"]+)"', path.read_text(encoding="utf-8"), re.M)
+            assert match is not None, f"{path.name}: no revision id found"
+            revision_id = match.group(1)
+            if len(revision_id) > ALEMBIC_VERSION_NUM_MAX_LENGTH:
+                too_long[path.name] = (revision_id, len(revision_id))
+        assert not too_long, (
+            "revision id(s) exceed alembic_version.version_num VARCHAR(32): " f"{too_long}"
+        )
 
     def test_every_new_model_column_is_added_and_dropped_by_the_revision(self):
         from app.domain.models import Document, KnowledgeSource

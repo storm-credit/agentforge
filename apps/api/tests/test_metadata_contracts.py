@@ -449,7 +449,11 @@ def test_restore_non_archived_document_conflicts(client):
     ).status_code == 404
 
 
-def test_list_documents_include_archived_is_admin_only(client):
+def test_list_documents_include_archived_requires_the_restore_capability(client):
+    # Renamed from ..._is_admin_only by WO-2026-08-13-ROLE-READ-COHERENCE: the flag is now
+    # scoped to PRIVILEGED_ROLES (the set that may restore), not the literal "admin". This
+    # test still covers the admin and the entirely-unprivileged ends; the privileged-non-admin
+    # middle (platform-admin / knowledge-manager) lives in test_role_read_coherence.py.
     active = _create_indexable_document(client)
     archived = _create_indexable_document(client)
     client.delete(f"/api/v1/knowledge/documents/{archived['id']}", headers=_ADMIN)
@@ -478,10 +482,11 @@ def test_list_documents_include_archived_is_admin_only(client):
     assert status_by_id.get(archived["id"]) == "archived"
     assert active["id"] in status_by_id
 
-    # (c) non-admin + include_archived=true: the flag is SILENTLY IGNORED (200, normal
-    # non-archived ACL-scoped list -- not 403, matching this file's quiet-scoping GET
+    # (c) unprivileged caller + include_archived=true: the flag is SILENTLY IGNORED (200,
+    # normal non-archived ACL-scoped list -- not 403, matching this file's quiet-scoping GET
     # convention). The archived doc stays hidden even though its ACL (all-employees /
-    # internal) would otherwise let this caller read it.
+    # internal) would otherwise let this caller read it: _DEVELOPER holds no restore right,
+    # so it gets no archived discovery.
     dev_ids = _ids(headers=_DEVELOPER, params={"include_archived": "true"})
     assert archived["id"] not in dev_ids
     assert active["id"] in dev_ids

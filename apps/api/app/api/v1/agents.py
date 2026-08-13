@@ -19,6 +19,28 @@ from app.infra.authz import PRIVILEGED_ROLES, enforce_roles
 router = APIRouter()
 
 
+def _is_builder(principal: Principal) -> bool:
+    """May this principal see unpublished agents and their draft/validated versions?
+
+    RULE (WO-2026-08-13-ROLE-READ-COHERENCE): agent build-state visibility is scoped to
+    PRIVILEGED_ROLES -- the exact set that may already create, update, validate and publish
+    agent versions. The gate these reads apply is a PUBLICATION-STATUS gate ("hide work in
+    progress"), NOT an ACL: Agent and AgentVersion carry no access_groups/clearance, so this
+    widens no ACL bypass. Every non-privileged caller (the default `developer` principal
+    included) is unaffected and still sees published agents only.
+
+    Why this is not a privilege increase for platform-admin / knowledge-manager: both roles
+    can ALREADY read exactly this data through mutations they hold, on any id, with no
+    publication-status check -- `PATCH /agents/{id}` with an empty body returns a draft
+    agent's full record, and `POST /agents/versions/{id}/validate` returns any version's full
+    config. Those paths merely add an audit event and (for validate) a status change. So the
+    previous literal "admin" read gate did not withhold anything from these roles; it only
+    forced them to use a mutating call to read, and denied them ENUMERATION -- the one step
+    that turns "may publish version X" into a workflow that can actually be started.
+    """
+    return bool(PRIVILEGED_ROLES.intersection(principal.roles))
+
+
 @router.get("", response_model=list[AgentRead])
 def list_agents(
     limit: int = Query(default=200, ge=1, le=500),
@@ -26,10 +48,11 @@ def list_agents(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> list[Agent]:
-    # Admins see every agent; non-admins only see published ones (drafts/validated
-    # configs — including their system prompts and wired knowledge ids — stay hidden).
+    # Builders (PRIVILEGED_ROLES) see every agent; everyone else only published ones
+    # (drafts/validated configs — including their system prompts and wired knowledge ids —
+    # stay hidden). See _is_builder for why this set, not the literal "admin".
     query = select(Agent).order_by(Agent.created_at.desc())
-    if "admin" not in principal.roles:
+    if not _is_builder(principal):
         query = query.where(Agent.status == "published")
     # Unlike list_documents/list_sources, the publish-status scoping here is already a
     # SQL WHERE (no Python post-filter), so LIMIT/OFFSET can safely live in SQL: the
@@ -44,8 +67,10 @@ def get_agent(
     principal: Principal = Depends(get_principal),
 ) -> Agent:
     agent = db.get(Agent, agent_id)
-    # 404 (not 403) for unpublished agents so a non-admin can't even learn they exist.
-    if agent is None or ("admin" not in principal.roles and agent.status != "published"):
+    # 404 (not 403) for unpublished agents so a non-builder can't even learn they exist.
+    # Builder = PRIVILEGED_ROLES, the set that may already update/publish this agent; see
+    # _is_builder for the rule and for why this is not a read-privilege increase.
+    if agent is None or (not _is_builder(principal) and agent.status != "published"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
     return agent
 
@@ -161,9 +186,12 @@ def list_agent_versions(
     principal: Principal = Depends(get_principal),
 ) -> list[AgentVersion]:
     agent = db.get(Agent, agent_id)
-    is_admin = "admin" in principal.roles
-    # Same existence-hiding rule as get_agent: an unpublished agent is 404 to non-admins.
-    if agent is None or (not is_admin and agent.status != "published"):
+    # Same existence-hiding rule as get_agent: an unpublished agent is 404 to non-builders.
+    # Scoped to PRIVILEGED_ROLES rather than the literal "admin" (see _is_builder) because
+    # validate/publish are: a knowledge-manager that may publish a version but gets 404
+    # enumerating that agent's versions holds a capability it cannot start.
+    is_builder = _is_builder(principal)
+    if agent is None or (not is_builder and agent.status != "published"):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
     query = (
@@ -171,7 +199,7 @@ def list_agent_versions(
         .where(AgentVersion.agent_id == agent_id)
         .order_by(AgentVersion.version.desc())
     )
-    if not is_admin:
+    if not is_builder:
         # Even on a published agent, never expose draft/validated (untested) configs.
         query = query.where(AgentVersion.status.in_(("published", "superseded")))
     # Status scoping above is a SQL WHERE (no Python post-filter), so LIMIT/OFFSET can

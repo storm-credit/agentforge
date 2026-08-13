@@ -61,10 +61,14 @@ def principal_acl_subjects(principal: Principal) -> set[str]:
     return subjects
 
 
-def principal_can_access_document(principal: Principal, document: Document) -> bool:
-    if document.status not in SEARCHABLE_DOCUMENT_STATUSES:
-        return False
+def _acl_permits(principal: Principal, document: Document) -> bool:
+    """The ACL decision proper: classification exclusion, clearance rank, group intersection.
 
+    Deliberately excludes the document LIFECYCLE-STATUS gate, which is a separate concern
+    (see the two callers below). Everything in here is the authorization decision; nothing
+    in here is about where the document sits in its lifecycle. Both public predicates route
+    through this single body so the two can never drift apart.
+    """
     if document.confidentiality_level in EXCLUDED_INDEX_CONFIDENTIALITY_LEVELS:
         return False
 
@@ -77,6 +81,42 @@ def principal_can_access_document(principal: Principal, document: Document) -> b
         return False
 
     return bool(principal_acl_subjects(principal).intersection(document.access_groups))
+
+
+def principal_can_access_document(principal: Principal, document: Document) -> bool:
+    if document.status not in SEARCHABLE_DOCUMENT_STATUSES:
+        return False
+
+    return _acl_permits(principal, document)
+
+
+def principal_can_discover_archived_document(principal: Principal, document: Document) -> bool:
+    """May this principal DISCOVER (see the metadata row of) an archived document?
+
+    WO-2026-08-13-ROLE-READ-COHERENCE. Restore (``POST /documents/{id}/restore``) is granted
+    to every ``PRIVILEGED_ROLES`` member, but an archived document fails
+    ``principal_can_access_document``'s lifecycle-status gate, so two of the three roles that
+    may restore could not find the id to restore. This predicate closes exactly that gap and
+    nothing else:
+
+    * the ACL decision is UNCHANGED -- same ``_acl_permits`` body as
+      ``principal_can_access_document``, so classification exclusion, clearance rank and
+      group intersection all still apply. A principal that could not read this document
+      while it was active still cannot see it now that it is archived.
+    * only the LIFECYCLE-STATUS gate is relaxed, and only in the ``archived`` direction --
+      other non-searchable states (e.g. ``index_failed``) stay hidden.
+
+    This is DISCOVERY of a metadata row (``DocumentRead``: title, checksum, classification,
+    lifecycle status), not access to content. Chunk listing and retrieval keep using
+    ``principal_can_access_document``, so an archived document's text remains unreachable.
+
+    Callers must additionally require the restore capability itself (``PRIVILEGED_ROLES``);
+    holding the ACL alone is not enough to justify seeing archived rows.
+    """
+    if document.status != "archived":
+        return False
+
+    return _acl_permits(principal, document)
 
 
 def document_can_be_indexed(document: Document) -> bool:

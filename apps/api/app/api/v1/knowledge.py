@@ -24,6 +24,7 @@ from app.domain.acl import (
     CONFIDENTIALITY_RANK,
     confidentiality_rank,
     principal_can_access_document,
+    principal_can_discover_archived_document,
     principal_clearance_rank,
 )
 from app.domain.vector import FakeVectorStore, VectorQuery, build_acl_filter, get_vector_store
@@ -116,20 +117,42 @@ def list_documents(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> list[Document]:
+    # RULE (WO-2026-08-13-ROLE-READ-COHERENCE): this endpoint mixes TWO different
+    # authorization questions that used to share one literal "admin" check. They are
+    # deliberately kept separate, and only the first was reconciled with mutation rights.
+    #
+    #   (a) DISCOVERY of archived rows (include_archived) -- scoped to PRIVILEGED_ROLES,
+    #       because restore is. It is the lookup step of a mutation these roles already
+    #       hold; a permission whose target cannot be found is not a permission.
+    #   (b) The general ACL BYPASS ("see every document regardless of authorization") --
+    #       still literally "admin", unchanged. Widening this to PRIVILEGED_ROLES would
+    #       hand knowledge-manager blanket read of every document's metadata, which no
+    #       mutation right implies. Do not fold (b) back into (a).
     is_admin = "admin" in principal.roles
+    # Restore (POST /documents/{id}/restore) is gated on PRIVILEGED_ROLES, so archived-row
+    # discovery is too -- see (a). Admin is a member of PRIVILEGED_ROLES, so this covers it.
+    may_restore = bool(PRIVILEGED_ROLES.intersection(principal.roles))
+    show_archived = include_archived and may_restore
     statement = select(Document).order_by(Document.created_at.desc())
-    # include_archived is admin-only: it exists so admins can discover an archived
-    # document's id to restore it (POST /documents/{id}/restore). For non-admins the
-    # flag is silently ignored (NOT 403), matching this file's convention that GET
-    # list endpoints scope results quietly (ACL filter below, list_sources' clearance
-    # filter) rather than reject the request; 403 here is reserved for per-resource
-    # reads and enforce_roles-gated mutations.
-    if not (include_archived and is_admin):
+    # For callers without the restore right the flag is silently ignored (NOT 403),
+    # matching this file's convention that GET list endpoints scope results quietly (ACL
+    # filter below, list_sources' clearance filter) rather than reject the request; 403
+    # here is reserved for per-resource reads and enforce_roles-gated mutations.
+    if not show_archived:
         statement = statement.where(Document.status != "archived")
     documents = list(db.scalars(statement))
     if not is_admin:
-        # Non-admins only see document metadata they're authorized to access.
-        documents = [d for d in documents if principal_can_access_document(principal, d)]
+        # Non-admins only see document metadata they're authorized to access -- (b) above.
+        # The archived branch does NOT relax that: principal_can_discover_archived_document
+        # runs the identical ACL body (clearance + groups + confidential exclusion) and only
+        # lifts the lifecycle-status gate, so a privileged role sees archived rows strictly
+        # inside its own ACL scope and nothing more.
+        documents = [
+            d
+            for d in documents
+            if principal_can_access_document(principal, d)
+            or (show_archived and principal_can_discover_archived_document(principal, d))
+        ]
     # Pagination is applied in PYTHON, after the ACL filter above -- deliberately NOT
     # as SQL LIMIT/OFFSET. A SQL-level window would be computed against the unfiltered
     # superset: a non-admin's page would then be filtered down further, producing

@@ -1,0 +1,200 @@
+schema_version: agentforge.work_order/v1
+work_order_id: WO-2026-08-13-CLEARANCE-FAIL-OPEN-001
+title: Make subject-side clearance resolution fail closed
+status: accepted
+problem: >-
+  apps/api/app/domain/acl.py confidentiality_rank() resolves an unrecognised level to
+  CONFIDENTIALITY_RANK["confidential"], the HIGHEST rank. The same function is applied to
+  both operands of the clearance comparison. On the object side that is correct and
+  fail-closed: an unknown document level is treated as maximally sensitive. On the subject
+  side it is inverted: an unknown principal clearance is treated as maximum clearance. The
+  object side is validated on every write by _validate_confidentiality in
+  apps/api/app/api/v1/knowledge.py; the subject side is never validated anywhere, and
+  principal.clearance_level flows straight from the X-Agent-Forge-Clearance header
+  (apps/api/app/core/principal.py) into confidentiality_rank. The same defect is present in
+  three call sites: acl.py principal_can_access_document, the knowledge-source list filter
+  in api/v1/knowledge.py, and the Qdrant range filter in app/infra/qdrant_store.py, so the
+  in-query vector filter is affected as well as the Python-side checks. Reproduced live
+  against the running stack on 2026-08-13 with one principal and one group set, varying only
+  the clearance header: "internal" returned 25 documents and correctly withheld a restricted
+  one; "internal " with a single trailing space, "typo-xyz", and "" each returned 26 and
+  disclosed it. Blast radius today is bounded because "confidential" is excluded globally and
+  group intersection still applies, so the ceiling is restricted-level material the principal
+  already matches by group. It is nonetheless a classification control that fails open on
+  malformed input, and it sits exactly on the path ADR-103 will take: when SSO begins
+  supplying a clearance claim, a single unmapped IdP attribute value silently elevates every
+  principal carrying it.
+intended_outcome: >-
+  An unrecognised, empty, or whitespace-padded principal clearance resolves to the lowest
+  rank rather than the highest, so a malformed identity claim can never widen access. Object
+  side behaviour is unchanged and remains fail-closed.
+parent_issue_refs:
+  - "#147"
+scope:
+  included:
+    - separate subject-side clearance resolution from object-side confidentiality resolution
+    - resolve an unknown or malformed principal clearance to the lowest rank
+    - normalise whitespace and case on the principal clearance value
+    - apply the corrected resolution at every call site including the Qdrant range filter
+    - tests covering trailing whitespace, typo, empty string, and case variation
+  excluded:
+    - changes to the confidentiality vocabulary or its ranking
+    - changes to object-side validation, which is already correct
+    - changes to group or role evaluation
+    - changes to SSO or identity resolution, which remain ADR-103
+    - any change to ingestion, parsing, or normalization
+  affected_components:
+    - backend-api
+  affected_trust_boundaries:
+    - retrieval-authorization
+  affected_data_classifications:
+    - internal
+    - restricted
+  runtime_behavior_change: true
+requirements:
+  - requirement_id: SEC-004
+    description: >-
+      An authorization control shall fail closed on malformed input.
+    authority_ref: docs/20-security/trust-boundaries-and-data-flows.md
+    adr_refs: []
+  - requirement_id: SEC-005
+    description: >-
+      Subject-supplied identity attributes shall be validated before use in an authorization
+      decision.
+    authority_ref: docs/20-security/trust-boundaries-and-data-flows.md
+    adr_refs: []
+  - requirement_id: DEL-003
+    description: Completion shall be supported by an Evidence Package.
+    authority_ref: docs/40-delivery/evidence-package-guide.md
+    adr_refs: []
+assigned_roles:
+  - agent_role_id: pm-orchestrator
+    responsibility: Accept scope, review, and merge.
+    accountable: true
+  - agent_role_id: security-trust-architect
+    responsibility: >-
+      Implement the fail-closed resolution and prove no call site retains the old behaviour.
+    accountable: false
+inputs:
+  - name: design_doc
+    reference: docs/10-architecture/ingestion-normalization-design.md
+    required: true
+  - name: acl_implementation
+    reference: apps/api/app/domain/acl.py
+    required: true
+  - name: vector_filter
+    reference: apps/api/app/infra/qdrant_store.py
+    required: true
+deliverables:
+  - name: fail_closed_resolution
+    path_or_reference: apps/api/app/domain/acl.py
+    owner_role: security-trust-architect
+  - name: corrected_call_sites
+    path_or_reference: apps/api/app/api/v1/knowledge.py, apps/api/app/infra/qdrant_store.py
+    owner_role: security-trust-architect
+  - name: regression_tests
+    path_or_reference: apps/api/tests
+    owner_role: security-trust-architect
+acceptance_criteria:
+  - criterion_id: AC-01
+    description: >-
+      A principal whose clearance is unknown, empty, whitespace-only, or whitespace-padded
+      to an unknown value resolves to the lowest rank and cannot see material above public.
+    verification: Table-driven test over the malformed variants asserting denial.
+    blocker: true
+  - criterion_id: AC-02
+    description: >-
+      A well-formed clearance keeps its exact current behaviour, including case and
+      surrounding whitespace being tolerated where that yields a known level.
+    verification: Existing ACL tests pass unchanged plus explicit cases for "internal " and "INTERNAL".
+    blocker: true
+  - criterion_id: AC-03
+    description: >-
+      Object-side resolution is unchanged - an unknown document confidentiality level still
+      resolves to the highest rank.
+    verification: Test asserting object-side behaviour explicitly, so the two directions cannot drift.
+    blocker: true
+  - criterion_id: AC-04
+    description: >-
+      No call site still applies object-side resolution to a principal clearance, including
+      the Qdrant range filter.
+    verification: Grep every confidentiality_rank call site and review each; live check of the vector path.
+    blocker: true
+  - criterion_id: AC-05
+    description: Full suite green at or above the 241 baseline, ruff clean, CI green.
+    verification: pytest with apps/api/.env moved aside; GitHub Actions on the candidate commit.
+    blocker: true
+verification_plan:
+  - check_id: LIVE-REPRO
+    type: security
+    command_or_workflow: >-
+      GET /api/v1/knowledge/documents with identical user and groups, varying the
+      X-Agent-Forge-Clearance header across "internal", "internal ", "typo-xyz", ""
+    expected_result: >-
+      Before the fix the malformed variants disclose a restricted document; after the fix
+      they disclose strictly less than the well-formed "internal" case.
+    evidence_destination: Evidence Package verification section.
+  - check_id: AUTHZ-UNIT
+    type: security
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest tests -k "clearance or acl" -v
+    expected_result: Malformed-clearance denial cases pass and fail when the fix is reverted.
+    evidence_destination: Evidence Package verification section.
+  - check_id: SUITE-BASELINE
+    type: unit
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest -q with apps/api/.env moved aside
+    expected_result: At or above 241 passed, 0 failed.
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-ALL
+    type: integration
+    command_or_workflow: GitHub Actions Backend, Frontend and E2E jobs
+    expected_result: success on the exact candidate commit
+    evidence_destination: Evidence Package verification section.
+required_reviews:
+  - reviewer_role: security-trust-architect
+    focus:
+      - every call site corrected, including the vector filter
+      - object side still fails closed
+      - no widening of access for any well-formed clearance
+    blocking: true
+  - reviewer_role: independent-release-governor
+    focus:
+      - scope adherence
+      - CI and evidence freshness
+    blocking: true
+prohibited_actions:
+  - edit main directly
+  - change the confidentiality vocabulary or its ranking
+  - weaken object-side resolution to make the two sides symmetric
+  - touch ingestion, parsing, or normalization under this Work Order
+  - merge before required CI and security review
+dependencies:
+  - description: >-
+      Live reproduction of the fail-open, recorded in the ingestion normalization design.
+    type: decision
+    status: available
+    owner: pm-orchestrator
+    reference: docs/10-architecture/ingestion-normalization-design.md
+loop_budget:
+  self_review_passes: 2
+  formal_rework_passes: 1
+  same_failure_before_escalation: 2
+escalation:
+  - trigger: >-
+      Failing closed breaks a legitimate caller that supplies a clearance value not in the
+      vocabulary.
+    target_role: pm-orchestrator
+    action: >-
+      Stop and report the caller and its value; do not widen the vocabulary to accommodate it
+      without a decision.
+  - trigger: A call site cannot be corrected without changing group or role evaluation.
+    target_role: security-trust-architect
+    action: Stop and report; that belongs to a separate Work Order.
+stop_conditions:
+  - all acceptance criteria pass and required reviews accept
+  - any well-formed clearance would lose access
+  - work exceeds the approved scope
+  - loop budget is exhausted
+created_by: pm-orchestrator
+created_at: "2026-08-13T02:00:00Z"
+accepted_by: product-owner
+accepted_at: "2026-08-13T02:00:00Z"

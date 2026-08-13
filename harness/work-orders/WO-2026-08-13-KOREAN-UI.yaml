@@ -1,0 +1,165 @@
+schema_version: agentforge.work_order/v1
+work_order_id: WO-2026-08-13-KOREAN-UI-001
+title: Make the operator console Korean-first
+status: accepted
+problem: >-
+  AgentForge is a closed-network tool for a Korean enterprise, and the planned first pilot
+  is 5 to 10 Korean employees in one department, but the console's entire chrome is in
+  English while only some body copy is Korean. The home page is English end to end
+  (Governed agent build workspace, Permission-scoped RAG question answering, Workspace
+  capabilities, Live). Every page eyebrow and title is English (Builder / Agents,
+  RAG data / Knowledge, Governance / Audit, Quality gates / Evaluation, Agent interaction
+  / Chat, Admin / Settings). The navigation, the eval table headers, the settings labels
+  and the theme and demo-role switchers are English. The result is a screen that a pilot
+  participant cannot read fluently and that a sponsor cannot be shown, which makes it a
+  direct pilot-usability blocker rather than a cosmetic preference.
+intended_outcome: >-
+  Every string a pilot user or a sponsor sees is Korean, written as product language
+  rather than translated jargon, with behavior, routes, test ids and API contracts
+  unchanged.
+parent_issue_refs:
+  - "#143"
+scope:
+  included:
+    - translate all user-visible strings in apps/web/app to Korean
+    - rewrite the home page copy as Korean product language, not a literal translation
+    - keep or update Playwright specs that assert on visible text
+    - set the html lang attribute to ko
+  excluded:
+    - introducing an i18n framework, locale files, or a language toggle
+    - changing routes, test ids, component structure, or styling
+    - changing any API request or response field name
+    - changing backend messages, audit event types, or log text
+    - translating developer-facing code comments
+  affected_components:
+    - frontend-web
+  affected_trust_boundaries: []
+  affected_data_classifications:
+    - internal
+  runtime_behavior_change: false
+requirements:
+  - requirement_id: UX-001
+    description: >-
+      The pilot user interface shall be readable by its intended users without
+      translation.
+    authority_ref: docs/40-delivery/current-state.md
+    adr_refs: []
+  - requirement_id: UX-002
+    description: >-
+      Product copy shall name things as users recognize them, not as the system is built.
+    authority_ref: CLAUDE.md
+    adr_refs: []
+  - requirement_id: DEL-003
+    description: Completion shall be supported by an Evidence Package.
+    authority_ref: docs/40-delivery/evidence-package-guide.md
+    adr_refs: []
+assigned_roles:
+  - agent_role_id: pm-orchestrator
+    responsibility: Accept scope, review copy quality, and merge.
+    accountable: true
+  - agent_role_id: frontend-specialist
+    responsibility: Translate and verify without changing behavior.
+    accountable: false
+inputs:
+  - name: current_console
+    reference: apps/web/app
+    required: true
+  - name: product_language
+    reference: docs/00-product/glossary.md
+    required: true
+  - name: known_limits
+    reference: docs/40-delivery/live-demo-evidence-2026-08-12.md
+    required: true
+deliverables:
+  - name: korean_console
+    path_or_reference: apps/web/app
+    owner_role: frontend-specialist
+  - name: updated_specs
+    path_or_reference: apps/web/tests
+    owner_role: frontend-specialist
+acceptance_criteria:
+  - criterion_id: AC-01
+    description: >-
+      No English user-visible string remains in apps/web/app, excluding proper nouns and
+      established technical tokens that Korean staff use untranslated.
+    verification: Grep for Latin-script text in JSX text positions; manual page-by-page pass.
+    blocker: true
+  - criterion_id: AC-02
+    description: Routes, test ids, component structure and API field names are unchanged.
+    verification: Diff review; test-id inventory before and after must be identical.
+    blocker: true
+  - criterion_id: AC-03
+    description: Playwright suite green, tsc clean, and CI green on the candidate commit.
+    verification: node-direct tsc and CI run.
+    blocker: true
+  - criterion_id: AC-04
+    description: >-
+      Home page copy states what the product does for a pilot user, and does not claim
+      protections the product does not have.
+    verification: Manual review against the known-limits document.
+    blocker: true
+verification_plan:
+  - check_id: STRING-SWEEP
+    type: manual_review
+    expected_result: Every page reviewed; remaining Latin text is justified per file.
+    evidence_destination: Evidence Package verification section.
+  - check_id: TESTID-DIFF
+    type: manual_review
+    command_or_workflow: compare data-testid inventory before and after
+    expected_result: identical
+    evidence_destination: Evidence Package verification section.
+  - check_id: FRONTEND-TSC
+    type: lint
+    command_or_workflow: node node_modules/typescript/bin/tsc --noEmit
+    expected_result: clean
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-ALL
+    type: e2e
+    command_or_workflow: GitHub Actions Backend, Frontend and E2E jobs
+    expected_result: success on the exact candidate commit
+    evidence_destination: Evidence Package verification section.
+required_reviews:
+  - reviewer_role: product-architect
+    focus:
+      - copy reads as product language, not machine translation
+      - no capability is overclaimed
+    blocking: true
+  - reviewer_role: independent-release-governor
+    focus:
+      - scope adherence
+      - no behavior change
+      - CI freshness
+    blocking: true
+prohibited_actions:
+  - edit main directly
+  - add an i18n framework or language toggle under this Work Order
+  - change routes, test ids, or API field names
+  - overclaim protections in the new copy
+  - merge before required CI and review
+dependencies:
+  - description: >-
+      Product decision that the pilot audience is Korean-speaking and the console is
+      Korean-first without an English toggle.
+    type: decision
+    status: available
+    owner: product-owner
+    reference: harness/work-orders/WO-2026-08-13-KOREAN-UI.yaml
+loop_budget:
+  self_review_passes: 2
+  formal_rework_passes: 1
+  same_failure_before_escalation: 2
+escalation:
+  - trigger: A string cannot be translated without changing a test id or an API field.
+    target_role: pm-orchestrator
+    action: Stop and report; do not rename the identifier.
+  - trigger: Existing copy asserts a protection the product does not have.
+    target_role: pm-orchestrator
+    action: Report it rather than translating the overclaim into Korean.
+stop_conditions:
+  - all acceptance criteria pass and required reviews accept
+  - work exceeds the approved scope
+  - loop budget is exhausted
+created_by: pm-orchestrator
+created_at: "2026-08-13T00:00:00Z"
+accepted_by: product-owner
+accepted_at: "2026-08-13T00:00:00Z"

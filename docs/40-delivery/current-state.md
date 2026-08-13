@@ -25,7 +25,7 @@ When historical plans or status logs conflict with current delivery status, this
 | Product boundary | ACCEPTED | Closed-network Governed Internal Document RAG Agent Builder |
 | Technical MVP | GO-capable | Core controlled RAG loop is implemented and backed by repository tests/evaluation evidence |
 | Architecture Recovery | COMPLETE | Product, C4/domain/state, trust/MCP, ADR, traceability, gate, and convergence assets are versioned |
-| Harness Productization | COMPLETE — repository foundation | Contracts, roles, Skills, Hooks policy, loops, registries, routing, and evidence assets exist; provider adapters/CI validators remain implementation work |
+| Harness Productization | COMPLETE — repository foundation | Contracts, roles, Skills, Hooks policy, loops, registries, routing, and evidence assets exist; harness schema validation (`validate_examples.py`) now runs in CI, and GitHub branch protection is enabled on `main` (required status checks, `enforce_admins`, no force-push/deletion — verified live, no required-reviewer enforcement). Most of the declared harness surface is still not wired to any dispatch/load/enforcement path; run `python harness/tools/project_status.py` for current declared-vs-wired counts, not a number written here |
 | First real pilot | HOLD | Accountable business, document, identity, model, environment, operations, and release inputs remain open |
 | Production readiness | NOT ASSESSED | Target-environment and organizational evidence does not exist and must not be inferred |
 | Speculative features | FROZEN | Only direct pilot blockers or critical security/integrity/deployment/evaluation defects may enter accepted Work Orders |
@@ -219,13 +219,12 @@ Pilot GO requires all applicable Pilot Entry gates, including:
 
 ## 10. Known Recovery Limitations
 
-The repository baseline is complete, but the following enforcement remains future bounded implementation:
+The repository baseline is complete, but most declared harness enforcement remains undispatched. Run `python harness/tools/project_status.py` for current declared-vs-wired counts (specialist roles, Skills, schemas, Hook rules, registries, Evidence Package instances) — do not hardcode a fraction here, it goes stale the moment one more thing is wired. As of this writing, known gaps include:
 
-- automated CI validation for all harness JSON/YAML schemas and examples;
-- provider-specific deterministic Hook adapters;
-- generated Work Order/Review/Evidence tooling;
-- automated traceability consistency checks;
-- registry and model-routing conformance validators.
+- CI now validates an explicit, small set of harness examples/Work Orders against only some of the declared JSON Schemas (`validate_examples.py`); most schemas have no validator or runtime consumer;
+- GitHub branch protection on `main` is live (required status checks, `enforce_admins`, no force-push/deletion), but it does not require reviewer approval, and it is a repository-host control, not a Claude Code Hook adapter — most rules in `harness/hooks/policy.yaml` still have no corresponding provider script, and the few real `.claude/hooks/*.mjs` scripts that coincidentally exist are not traceably linked to any rule ID;
+- generated Work Order/Review/Evidence tooling, automated traceability consistency checks, and registry/model-routing conformance validators remain unimplemented;
+- zero Evidence Package instances exist for any accepted Work Order.
 
 These limitations do not change Pilot HOLD and do not authorize speculative product features.
 

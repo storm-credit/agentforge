@@ -233,6 +233,7 @@ def _seed_corpus(client) -> dict[str, str]:
     """One public, one internal, one restricted document, all group-visible."""
     source = client.post(
         "/api/v1/knowledge/sources",
+        headers={"X-Agent-Forge-User": "clearance-setup", "X-Agent-Forge-Roles": "knowledge-manager"},
         json={
             "name": "Clearance Corpus",
             "description": "Fixture for clearance fail-closed tests.",
@@ -312,6 +313,7 @@ def test_document_list_preserves_well_formed_internal_clearance(client, value):
 def test_source_list_clearance_filter_fails_closed(client):
     internal_source = client.post(
         "/api/v1/knowledge/sources",
+        headers={"X-Agent-Forge-User": "clearance-setup", "X-Agent-Forge-Roles": "knowledge-manager"},
         json={
             "name": "Internal Source",
             "description": "Internal-default source.",

@@ -75,6 +75,16 @@ def create_run(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> Run:
+    # AUTHZ-DECISION: deliberately-open -- asking a PUBLISHED agent a question is the product's
+    # one end-user action; role-gating it would leave the platform with no users. It is not
+    # ungoverned: only a published AgentVersion can be run (_resolve_agent_version rejects
+    # draft/validated with 400/404, so an unpublished config is unreachable here), retrieval is
+    # restricted to the CALLER's own ACL via build_acl_filter(principal) enforced in the vector
+    # store, and every row it writes (Run, RunStep, RetrievalHit) is stamped with
+    # principal.user_id and readable only by that owner or an admin (_can_read_run). It cannot
+    # create, relabel or reclassify knowledge. Residual risk, unchanged by this decision: an
+    # LLM call per request is a cost/DoS surface with no rate limit, and prompt injection is a
+    # baseline-hardened, unsolved problem (see docs/20-security).
     agent = db.get(Agent, payload.agent_id)
     if agent is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")

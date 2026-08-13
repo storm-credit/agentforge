@@ -81,6 +81,23 @@ def create_agent(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> Agent:
+    # AUTHZ-DECISION: unclosed-gap -- ESCALATED by WO-2026-08-13-MUTATION-GATE-SWEEP, NOT
+    # fixed there. This endpoint has no enforce_roles call, so any principal (including the
+    # header-stub default `developer`, i.e. a caller sending no identity headers) can create
+    # an Agent row. Worse, AgentCreate.status is caller-settable and unvalidated, so the row
+    # can be created directly in `published` state -- which makes it visible to EVERY
+    # principal through list_agents/get_agent (both scope non-builders to
+    # status == "published"), even though publish_agent_version and PATCH /agents are both
+    # PRIVILEGED_ROLES-gated. Reproduced live on 2026-08-13: a `developer` principal created
+    # "HR Policy Assistant (spoofed)" with status=published and the default header-stub
+    # identity then saw it in GET /agents. It is not runnable (POST /runs needs a published
+    # AgentVersion and create_agent_version IS gated), so the impact is a spoofable catalog
+    # entry rather than an executable agent.
+    # Why it was reported instead of gated: gating it removes an effective capability
+    # (self-service agent creation) on an "agent builder" platform, which is a product
+    # decision, and the Work Order prohibits taking one. Note that docs section 8 of
+    # docs/10-architecture/roles-and-permissions.md previously ASSERTED this was privileged;
+    # that row was corrected to match the code, not the other way round.
     agent = Agent(**payload.model_dump())
     db.add(agent)
     db.flush()

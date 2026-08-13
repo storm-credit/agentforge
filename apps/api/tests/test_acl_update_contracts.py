@@ -109,6 +109,7 @@ def client_with_db():
 def _indexed_document(client) -> dict:
     source = client.post(
         "/api/v1/knowledge/sources",
+        headers={"X-Agent-Forge-User": "acl-setup", "X-Agent-Forge-Roles": "knowledge-manager"},
         json={"name": "ACL Edit Corpus", "description": "x", "owner_department": "Security"},
     ).json()
     document = client.post(

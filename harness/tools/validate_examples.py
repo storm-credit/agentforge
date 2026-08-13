@@ -71,6 +71,10 @@ PAIRS: list[tuple[Path, Path]] = [
         HARNESS_DIR / "work-orders" / "WO-2026-08-13-SOURCE-ACL-DEFAULTS.yaml",
         HARNESS_DIR / "schemas" / "work-order.schema.json",
     ),
+    (
+        HARNESS_DIR / "work-orders" / "WO-2026-08-14-INGESTION-INSTRUMENTATION.yaml",
+        HARNESS_DIR / "schemas" / "work-order.schema.json",
+    ),
 ]
 
 

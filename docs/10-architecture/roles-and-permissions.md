@@ -3,9 +3,10 @@
 Status: 설명용 (파일럿 범위를 정하는 제품 책임자를 위한 문서, 개발자용 소스 안내가 아님)
 As of: 2026-08-13 · 근거: `apps/api/app/infra/authz.py`, `apps/api/app/domain/acl.py`,
 `apps/api/app/core/principal.py`, `apps/api/app/infra/qdrant_store.py`, `apps/api/app/api/v1/*.py`,
-`apps/web/app/lib/demoRole.ts` 등 실제 코드. Line 번호는 위 커밋 시점 기준이며, 병행 작업
-(`WO-2026-08-13-CLEARANCE-FAIL-OPEN`)이 `acl.py`를 수정 중이므로 이후 달라질 수 있다 — 내용(코드
-동작)을 근거로 삼고, 줄 번호는 참고용으로만 취급할 것.
+`apps/web/app/lib/demoRole.ts` 등 실제 코드. Line 번호는 위 커밋 시점 기준이며 병행 작업으로
+달라질 수 있다 — 내용(코드 동작)을 근거로 삼고, 줄 번호는 참고용으로만 취급할 것. §1-c와 §3, §8은
+`WO-2026-08-13-ROLE-READ-COHERENCE`로 2026-08-13에 갱신됐고(그 과정에서 줄 번호 참조는 함수명
+참조로 바꿨다), §7-a의 clearance fail-open 항목은 별도 Work Order 소관이므로 그대로 두었다.
 
 > **이 문서와 `domain-model.md`의 관계.** `system-walkthrough.md`가 이미 밝힌 대로
 > `docs/10-architecture/domain-model.md`는 **의도된 목표 모델**이고 실제 코드에는 없는 엔티티
@@ -20,6 +21,12 @@ As of: 2026-08-13 · 근거: `apps/api/app/infra/authz.py`, `apps/api/app/domain
 헤더에서 온다. 문서 접근은 역할이 아니라 **등급(clearance) × 그룹(access_groups) 교집합**으로
 결정되며, 이 결정은 Python과 Qdrant 필터에 **두 번** 구현돼 있다. 데모 화면의 역할 스위처는 이
 중 일부만 흉내 낸다.
+
+> **2026-08-13 갱신 (`WO-2026-08-13-ROLE-READ-COHERENCE`).** 이 문서 초판은 "뮤테이션 권한
+> 3역할 vs 조회 바이패스 1역할(`admin`)"의 비대칭을 **현재 상태로 기록**했다. 그 비대칭 중
+> "부여된 뮤테이션을 수행하기 위해 반드시 필요한 조회(discovery)" 부분은 이제 해소됐고, 문서도
+> 그에 맞춰 갱신했다. **해소되지 않은(=의도적으로 유지한) 부분**은 일반 ACL 바이패스로, 여전히
+> 리터럴 `"admin"` 전용이다. 두 가지를 구분해서 읽을 것 — §1-c의 분류 열이 그 구분이다.
 
 ---
 
@@ -91,32 +98,61 @@ def enforce_roles(db, principal, allowed, *, action, target_type="endpoint", tar
 콘텐츠가 있는 문서를 재색인(=벡터를 지우고 다시 심는 것)하려면 `PRIVILEGED_ROLES`가
 필요하다."
 
-### 1-c. 리터럴 `"admin"` 체크 — `enforce_roles`와 다른 별도의 메커니즘
+### 1-c. 읽기 측 게이트 전수 — 두 종류로 분류된 상태
 
-`enforce_roles`/`PRIVILEGED_ROLES`(3개 역할)와 별개로, **오직 문자열 `"admin"`만** 검사하는
-코드가 11곳 있다. 이 두 메커니즘은 **다른 것**이며 혼동하면 안 된다 — `platform-admin`이나
-`knowledge-manager` 역할을 가진 사람은 뮤테이션은 할 수 있지만, 아래 목록의 "관리자는 전체를
-본다" 우회는 **적용받지 못한다**(리터럴 문자열이 `"admin"`이 아니므로).
+초판 기준으로 **오직 문자열 `"admin"`만** 검사하는 읽기 게이트가 11곳 있었고, 왜
+`PRIVILEGED_ROLES`(3역할)와 다른지 설명하는 주석이 하나도 없었다.
+`WO-2026-08-13-ROLE-READ-COHERENCE`가 이 11곳을 하나씩 두 종류로 분류했다:
 
-| 파일:라인 | 용도 | 효과 |
-|---|---|---|
-| `agents.py:32` | `list_agents` | non-admin은 `published` 에이전트만 조회 |
-| `agents.py:48` | `get_agent` | non-admin이 미공개 에이전트를 조회하면 403이 아니라 **404**(존재 자체를 숨김) |
-| `agents.py:164` | `list_agent_versions` | non-admin은 `published`/`superseded` 버전만 |
-| `knowledge.py:59` | `list_sources` | non-admin은 등급(clearance) 필터만 적용(그룹/부서 필터는 없음, 2-a 참고) |
-| `knowledge.py:113` | `list_documents` | non-admin은 `principal_can_access_document` 통과분만 |
-| `knowledge.py:510` | `create_index_job` 읽기-ACL 체크 | non-admin은 문서를 읽을 권한이 없으면 403 |
-| `knowledge.py:613` | `process_index_job` 읽기-ACL 체크 | 위와 동일 |
-| `knowledge.py:689` | `get_index_job` | non-admin은 문서 읽기 권한 없으면 403 |
-| `knowledge.py:708` | `list_document_chunks` | non-admin은 문서 읽기 권한 없으면 403 |
-| `runs.py:53` | `_can_read_run` | run의 소유자(`user_id` 일치) 또는 `"admin"`만 읽기 허용 |
-| `runs.py:64` | `list_runs` | non-admin은 본인 소유 run만 |
+- **D = discovery-for-a-granted-mutation** — 그 역할이 **이미 보유한 뮤테이션**을 수행하려면
+  반드시 거쳐야 하는 조회 단계. 대상을 찾을 수 없는 권한은 권한이 아니므로, 해당 뮤테이션과
+  같은 집합(`PRIVILEGED_ROLES`)으로 맞췄다.
+- **B = general ACL bypass** — "권한과 무관하게 전부 본다". 어떤 뮤테이션 권한도 이것을
+  함의하지 않으므로 **리터럴 `"admin"` 그대로 유지**했다. 넓히지 않았다.
 
-**함의**: "관리자 모드로 전체 시스템을 시연"할 때, 실제로 "전체를 보는" 사람은 정확히
-`roles`에 리터럴 `"admin"`을 가진 사람뿐이다. `platform-admin`이나 `knowledge-manager`로는
-비공개 에이전트 목록·타인의 run·미공개 지식소스가 안 보인다(문서 뮤테이션은 되지만 조회
-바이패스는 안 된다). 이는 코드에 **의도가 명시돼 있지 않은** 비대칭이다 — 왜 뮤테이션 권한
-집합(3개 역할)과 조회-전체-바이패스(`"admin"` 1개 역할)가 다른지 설명하는 주석은 없다.
+| 파일 | 용도 | 분류 | 현재 게이트 |
+|---|---|:---:|---|
+| `agents.py` `list_agents` | 미공개 에이전트 목록 | **D** | `PRIVILEGED_ROLES` (`_is_builder`) |
+| `agents.py` `get_agent` | 미공개 에이전트 단건(없으면 404로 존재 은닉) | **D** | `PRIVILEGED_ROLES` (`_is_builder`) |
+| `agents.py` `list_agent_versions` | 미공개 에이전트의 draft/validated 버전 | **D** | `PRIVILEGED_ROLES` (`_is_builder`) |
+| `knowledge.py` `list_documents` — `include_archived` | 보관(archived) 문서 **행 발견** | **D** | `PRIVILEGED_ROLES` + **ACL 그대로 적용** |
+| `knowledge.py` `list_documents` — ACL 필터 생략 | 권한 무관 전체 문서 메타데이터 | **B** | 리터럴 `"admin"` (변경 없음) |
+| `knowledge.py` `list_sources` | 지식소스 등급 필터 생략 | **B** | 리터럴 `"admin"` (변경 없음) |
+| `knowledge.py` `create_index_job` 읽기-ACL | 문서 읽기 권한 없으면 403 | **B** | 리터럴 `"admin"` (변경 없음) |
+| `knowledge.py` `process_index_job` 읽기-ACL | 위와 동일 | **B** | 리터럴 `"admin"` (변경 없음) |
+| `knowledge.py` `get_index_job` | 위와 동일 | **B** | 리터럴 `"admin"` (변경 없음) |
+| `knowledge.py` `list_document_chunks` | 위와 동일 | **B** | 리터럴 `"admin"` (변경 없음) |
+| `runs.py` `_can_read_run` | 타인 run의 답변/트레이스 | **B** | 리터럴 `"admin"` (변경 없음) |
+| `runs.py` `list_runs` | 타인 run 목록 | **B** | 리터럴 `"admin"` (변경 없음) |
+
+(초판의 11곳이 12줄이 된 이유: `list_documents`의 `is_admin` **하나**가 서로 다른 두 가지를
+동시에 게이트하고 있었다 — 보관 문서 발견(D)과 ACL 필터 생략(B). 이 둘을 분리한 것이 이번
+작업의 핵심이다. 리터럴 `"admin"` 체크는 이제 코드상 8곳이다: `knowledge.py` 6, `runs.py` 2.)
+
+**왜 D는 넓히고 B는 안 넓혔나**
+
+- D-문서(`include_archived`): `restore`(`POST /documents/{id}/restore`)는 이미
+  `PRIVILEGED_ROLES` 전체에 열려 있는데, 보관 문서는 `principal_can_access_document`의
+  **상태 게이트**에 걸려 목록에 뜨지 않았다. 즉 `knowledge-manager`는 복원할 수 있지만 복원할
+  대상의 id를 찾을 방법이 없었다 — 그 플래그의 코드 주석("admins can discover an archived
+  document's id to restore it")이 설명하는 바로 그 워크플로가 복원 권한자 3명 중 2명에게
+  막혀 있었다.
+- D-에이전트: `knowledge-manager`는 버전을 `validate`/`publish`할 수 있는데 미공개 에이전트의
+  버전 목록에서는 404를 받았다. 게다가 이 역할은 **이미** `PATCH /agents/{id}`(빈 바디)와
+  `POST /agents/versions/{id}/validate`로 같은 데이터를 읽을 수 있었다(두 경로 모두
+  공개상태를 검사하지 않음). 즉 종전 게이트가 실제로 막고 있던 것은 데이터 자체가 아니라
+  **열거(enumeration)** 뿐이었고, 열거야말로 "발행할 수 있다"를 실행 가능한 워크플로로
+  만드는 단계다.
+- B: `knowledge-manager`에게 전체 문서 메타데이터·타인 run·등급 초과 지식소스를 여는 것은
+  어떤 뮤테이션 권한으로도 정당화되지 않는 **권한 상승**이다. Work Order가 명시적으로 금지한
+  항목이기도 하다.
+
+**남은(의도적) 비대칭 — 파일럿에서 알고 있어야 할 것**: `archive`/`restore`/`acl_update`는
+**ACL을 전혀 보지 않는다**(`PRIVILEGED_ROLES`만 검사). 반면 위 D-문서 발견은 ACL을 적용한다.
+따라서 `knowledge-manager`는 자기 ACL 밖 문서라도 **id를 알면** 보관/복원할 수 있지만, 그런
+문서를 **목록에서 찾아낼 수는 없다**. 이 간극을 완전히 없애려면 (a) 발견 범위를 ACL 밖으로
+넓히거나 — 금지된 일반 바이패스 확대 — (b) 보관/복원에 ACL 검사를 추가해 **권한을 축소**해야
+하는데, 후자는 역할의 권한을 줄이는 **제품 결정**이므로 이 Work Order에서 하지 않았다.
 
 ---
 
@@ -157,20 +193,38 @@ def principal_acl_subjects(principal: Principal) -> set[str]:
 ## 3. 전체 접근 결정 — `principal_can_access_document`
 
 ```python
-# apps/api/app/domain/acl.py:37-52
-def principal_can_access_document(principal: Principal, document: Document) -> bool:
-    if document.status not in SEARCHABLE_DOCUMENT_STATUSES:          # ① 상태 게이트
-        return False
+# apps/api/app/domain/acl.py
+def _acl_permits(principal: Principal, document: Document) -> bool:
+    """ACL 판정 본체 — 라이프사이클 상태는 보지 않는다."""
     if document.confidentiality_level in EXCLUDED_INDEX_CONFIDENTIALITY_LEVELS:  # ② 등급 전면 배제
         return False
-    if confidentiality_rank(principal.clearance_level) < confidentiality_rank(
+    if principal_clearance_rank(principal.clearance_level) < confidentiality_rank(
         document.confidentiality_level
     ):                                                                # ③ 등급 비교
         return False
     if not document.access_groups:                                   # ④ 빈 그룹 = 아무도 못 봄
         return False
     return bool(principal_acl_subjects(principal).intersection(document.access_groups))  # ⑤ 교집합
+
+
+def principal_can_access_document(principal: Principal, document: Document) -> bool:
+    if document.status not in SEARCHABLE_DOCUMENT_STATUSES:          # ① 상태 게이트
+        return False
+    return _acl_permits(principal, document)
+
+
+def principal_can_discover_archived_document(principal, document) -> bool:
+    if document.status != "archived":                                # ①' 상태 게이트(보관 전용)
+        return False
+    return _acl_permits(principal, document)
 ```
+
+**두 술어의 관계(`WO-2026-08-13-ROLE-READ-COHERENCE`에서 추가)**: `_acl_permits`가 ACL 판정
+**본체**이고, 두 공개 술어는 **①번 라이프사이클 상태 게이트만** 다르다. ②③④⑤는 한 벌의 코드를
+공유하므로 둘이 갈라질 수 없다. `principal_can_discover_archived_document`는 §1-c의 D-문서
+분류에 해당하는 **메타데이터 행 발견** 전용이며, 청크 조회·검색·retrieval은 전부 여전히
+`principal_can_access_document`를 쓴다 — 즉 보관 문서의 **본문은 아무도 못 읽는다**. 호출부는
+이 술어와 별개로 복원 권한(`PRIVILEGED_ROLES`) 자체도 요구한다(ACL만으로는 부족).
 
 순서대로 무엇을 거르는가:
 
@@ -377,7 +431,8 @@ Work Order의 범위는 subject 쪽 등급 해석을 fail-closed로 바꾸는 �
 ## 8. 역할×기능 매트릭스 — 요약
 
 읽는 사람이 한눈에 스캔할 수 있도록: `PRIVILEGED_ROLES` = P, `AUDIT_READ_ROLES` = A,
-리터럴 `"admin"` 전체조회 = ★, 그 외 모두 = 없음(계정 소유 데이터/ACL 통과분만).
+**D** = 부여된 뮤테이션을 위한 발견(§1-c, ACL은 그대로 적용), **B** = 일반 ACL 바이패스
+(리터럴 `"admin"` 전용), 그 외 모두 = 없음(계정 소유 데이터/ACL 통과분만).
 
 | 기능 | admin | platform-admin | knowledge-manager | security-auditor | 그 외(예: developer) |
 |---|:---:|:---:|:---:|:---:|:---:|
@@ -386,13 +441,20 @@ Work Order의 범위는 subject 쪽 등급 해석을 fail-closed로 바꾸는 �
 | 최초 색인(문서를 읽을 수 있는 principal만) | O | O | O | O(읽기ACL 통과 시) | O(읽기ACL 통과 시) |
 | Eval 결과 기록 | O (P) | O (P) | O (P) | X | X |
 | 감사 로그 조회(`GET /audit/events`) | O (A) | O (A) | X | O (A) | X |
-| 미공개 에이전트/전체 문서/타인 run 조회(★) | O | X | X | X | X |
+| 미공개 에이전트/버전 조회·열거 (**D**) | O | O | O | X | X |
+| 보관 문서 발견(`include_archived`) (**D**) | O (B로 전부) | O(**자기 ACL 내만**) | O(**자기 ACL 내만**) | X | X |
+| 전체 문서 메타데이터(ACL 무시) (**B**) | O | X | X | X | X |
+| 타인 run 조회 (**B**) | O | X | X | X | X |
+| 등급 초과 지식소스 조회 (**B**) | O | X | X | X | X |
 | 본인 소유 run 조회 | O | O | O | O | O |
 | 등급·그룹 조건을 만족하는 문서 검색/열람 | O | O | O | O | O(조건 만족 시) |
 
-읽는 법: `knowledge-manager`는 문서/에이전트를 바꿀 수 있지만 감사 로그는 못 보고, 미공개
-에이전트 목록이나 타인의 run도 못 본다(★ 칸이 `admin`에만 O). `security-auditor`는 그
-반대다. 이 넷 중 UI로 실제로 눌러볼 수 있는 것은 `admin`과 "그 외"뿐이다(§5).
+읽는 법: `knowledge-manager`/`platform-admin`은 이제 **자기가 바꿀 수 있는 것을 찾을 수는
+있다**(D 행) — 미공개 에이전트를 열거하고, 자기 ACL 안의 보관 문서를 찾아 복원할 수 있다.
+그러나 **권한과 무관하게 전부 보는 것**(B 행)은 여전히 `admin` 전용이다. `security-auditor`는
+감사 로그만 볼 수 있고 D도 B도 없다(뮤테이션 권한이 없으므로 발견시켜 줄 대상이 없다).
+이 넷 중 UI로 실제로 눌러볼 수 있는 것은 `admin`과 "그 외"뿐이다(§5) — 즉 **이번에 열린 D
+경로는 UI로는 시연할 수 없고 헤더를 직접 보내야 확인된다**.
 
 ---
 

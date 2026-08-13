@@ -60,6 +60,12 @@ class KnowledgeSourceCreate(BaseModel):
     description: str = ""
     owner_department: str = Field(min_length=1, max_length=120)
     default_confidentiality_level: str = "internal"
+    # Administrator-configured group default new documents inherit when they specify none
+    # (WO-2026-08-13-SOURCE-ACL-DEFAULTS). Empty = not configured, which reproduces the
+    # endpoints' pre-existing behaviour exactly. Each string is validated against the shape
+    # rule in domain/classification.py at write time; the VOCABULARY is not validated (SSO
+    # owns it -- a local group master is excluded scope).
+    default_access_groups: list[str] = Field(default_factory=list)
     status: str = "active"
 
 
@@ -69,6 +75,7 @@ class KnowledgeSourceRead(BaseModel):
     description: str
     owner_department: str
     default_confidentiality_level: str
+    default_access_groups: list[str]
     status: str
     created_at: datetime
     updated_at: datetime
@@ -82,8 +89,16 @@ class DocumentCreate(BaseModel):
     object_uri: str = Field(min_length=1, max_length=500)
     checksum: str = Field(min_length=1, max_length=128)
     mime_type: str = Field(min_length=1, max_length=120)
-    confidentiality_level: str = "internal"
-    access_groups: list[str] = Field(default_factory=list)
+    # None means THE REQUEST EXPRESSED NO VALUE, which is what makes source-default
+    # inheritance possible: with the previous literal defaults ("internal" / []) an omitted
+    # field was indistinguishable from a deliberate one, so the source's configured default
+    # could never be consulted. See domain/classification.py.
+    #
+    # An explicit `[]` for access_groups is a VALUE (deny-all) and is kept exactly, so the
+    # narrowest possible request stays available and behaves as it does today. Only an
+    # absent/null field inherits.
+    confidentiality_level: str | None = None
+    access_groups: list[str] | None = None
     status: str = "registered"
     effective_date: str | None = None
 
@@ -97,6 +112,11 @@ class DocumentRead(BaseModel):
     mime_type: str
     confidentiality_level: str
     access_groups: list[str]
+    # Classification provenance (SEC-011). Exposed on the read model so an operator can see
+    # WHY a document carries the ACL it carries without querying the database.
+    confidentiality_source: str
+    access_groups_source: str
+    classification_source_id: str | None
     status: str
     effective_date: str | None
     created_at: datetime

@@ -1,0 +1,203 @@
+schema_version: agentforge.work_order/v1
+work_order_id: WO-2026-08-13-ROLE-READ-COHERENCE-001
+title: Reconcile privileged-role mutation rights with read visibility
+status: accepted
+problem: >-
+  AgentForge has two independent authorization mechanisms that were never reconciled.
+  enforce_roles(PRIVILEGED_ROLES) gates mutations and accepts admin, platform-admin and
+  knowledge-manager. A separate literal check, "admin" in principal.roles, gates read-side
+  see-everything bypasses at three sites (apps/api/app/api/v1/knowledge.py list_documents,
+  apps/api/app/api/v1/agents.py list_agent_versions, apps/api/app/api/v1/runs.py run
+  ownership). platform-admin and knowledge-manager receive the first and never the second,
+  and no comment in the code explains the asymmetry. This produces capabilities that cannot
+  be exercised. A knowledge-manager may restore an archived document, because restore is
+  gated on PRIVILEGED_ROLES, but cannot list archived documents, because include_archived is
+  gated on the literal admin check - so it holds the permission and cannot discover the
+  target. The code comment on include_archived states the flag exists "so admins can discover
+  an archived document's id to restore it", which is precisely the workflow it denies to two
+  of the three roles that may restore. The same shape appears for agents: a knowledge-manager
+  may validate and publish an agent version but receives 404 listing versions of an
+  unpublished agent, so it can publish what it cannot see. This matters now because the
+  planned pilot is a whole-system pilot operated in system-administrator mode, and separating
+  administrator duties into platform-admin, knowledge-manager and security-auditor is the
+  first thing that will be attempted inside that mode.
+intended_outcome: >-
+  Every capability granted by a privileged role is exercisable by that role. Read visibility
+  is reconciled deliberately and per site, distinguishing discovery needed to complete a
+  granted mutation from a general ACL bypass, and the resulting rule is stated in code rather
+  than left implicit.
+parent_issue_refs:
+  - "#149"
+scope:
+  included:
+    - inventory every literal admin check and every enforce_roles site, and classify each
+    - separate discovery-for-a-granted-mutation from general ACL bypass at each read site
+    - align read visibility with mutation rights only where the mutation is already granted
+    - state the resulting rule in code comments at each site
+    - tests proving each privileged role can complete every workflow its mutations imply
+  excluded:
+    - adding, renaming, or removing any role
+    - changing group or clearance evaluation
+    - changing the demo role switcher in apps/web
+    - granting any role a general ACL bypass it does not already have
+    - changes to ingestion, parsing, or normalization
+  affected_components:
+    - backend-api
+  affected_trust_boundaries:
+    - retrieval-authorization
+  affected_data_classifications:
+    - internal
+    - restricted
+  runtime_behavior_change: true
+requirements:
+  - requirement_id: SEC-006
+    description: >-
+      A granted capability shall be exercisable; a permission that cannot be completed is a
+      defect.
+    authority_ref: docs/10-architecture/roles-and-permissions.md
+    adr_refs: []
+  - requirement_id: SEC-007
+    description: >-
+      Read visibility shall not be widened beyond what a role's existing mutation rights
+      already imply.
+    authority_ref: docs/20-security/trust-boundaries-and-data-flows.md
+    adr_refs: []
+  - requirement_id: DEL-003
+    description: Completion shall be supported by an Evidence Package.
+    authority_ref: docs/40-delivery/evidence-package-guide.md
+    adr_refs: []
+assigned_roles:
+  - agent_role_id: pm-orchestrator
+    responsibility: Accept scope, review, and merge.
+    accountable: true
+  - agent_role_id: security-trust-architect
+    responsibility: >-
+      Classify each site, choose the narrowest reconciliation, and prove nothing was widened
+      beyond it.
+    accountable: false
+inputs:
+  - name: role_model
+    reference: docs/10-architecture/roles-and-permissions.md
+    required: true
+  - name: authz_primitives
+    reference: apps/api/app/infra/authz.py
+    required: true
+  - name: acl_evaluation
+    reference: apps/api/app/domain/acl.py
+    required: true
+deliverables:
+  - name: reconciled_read_visibility
+    path_or_reference: apps/api/app/api/v1/knowledge.py, agents.py, runs.py
+    owner_role: security-trust-architect
+  - name: capability_tests
+    path_or_reference: apps/api/tests
+    owner_role: security-trust-architect
+  - name: updated_role_doc
+    path_or_reference: docs/10-architecture/roles-and-permissions.md
+    owner_role: security-trust-architect
+acceptance_criteria:
+  - criterion_id: AC-01
+    description: >-
+      Every literal admin check and every enforce_roles site is inventoried and classified as
+      discovery-for-a-granted-mutation or general ACL bypass, with the classification recorded.
+    verification: Grep-complete inventory in the PR body; each site reviewed individually.
+    blocker: true
+  - criterion_id: AC-02
+    description: >-
+      A knowledge-manager can complete the archive-then-restore workflow end to end, and can
+      list versions of an agent it may publish.
+    verification: Tests exercising the full workflow as knowledge-manager, not just the mutation.
+    blocker: true
+  - criterion_id: AC-03
+    description: >-
+      No role gains visibility of a document its ACL does not already permit. General ACL
+      bypass remains exactly where it is today.
+    verification: >-
+      Test asserting a knowledge-manager still cannot see documents outside its ACL scope;
+      before/after comparison of the visible document set per role.
+    blocker: true
+  - criterion_id: AC-04
+    description: >-
+      The rule chosen is stated in a comment at each changed site, so the next reader does not
+      have to re-derive the asymmetry.
+    verification: Diff review.
+    blocker: true
+  - criterion_id: AC-05
+    description: Full suite green at or above the 326 baseline, ruff clean, CI green.
+    verification: pytest with apps/api/.env moved aside; GitHub Actions on the candidate commit.
+    blocker: true
+verification_plan:
+  - check_id: CAPABILITY-WORKFLOW
+    type: security
+    command_or_workflow: >-
+      apps/api/.venv/Scripts/python.exe -m pytest tests -k "knowledge_manager or privileged" -v
+    expected_result: >-
+      Each privileged role completes every workflow its mutation rights imply.
+    evidence_destination: Evidence Package verification section.
+  - check_id: NO-WIDENING
+    type: security
+    command_or_workflow: >-
+      Per-role visible document set before and after, against the same fixture corpus.
+    expected_result: >-
+      Identical except for archived-document discovery where restore is already granted.
+    evidence_destination: Evidence Package verification section.
+  - check_id: SUITE-BASELINE
+    type: unit
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest -q
+    expected_result: At or above 326 passed, 0 failed.
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-ALL
+    type: integration
+    command_or_workflow: GitHub Actions Backend, Frontend and E2E jobs
+    expected_result: success on the exact candidate commit
+    evidence_destination: Evidence Package verification section.
+required_reviews:
+  - reviewer_role: security-trust-architect
+    focus:
+      - no general ACL bypass widened
+      - every changed site carries a stated rule
+      - the narrowest reconciliation was chosen
+    blocking: true
+  - reviewer_role: independent-release-governor
+    focus:
+      - scope adherence
+      - CI and evidence freshness
+    blocking: true
+prohibited_actions:
+  - edit main directly
+  - add, rename, or remove a role
+  - grant any role a general ACL bypass it does not already hold
+  - change the demo role switcher under this Work Order
+  - resolve the asymmetry by removing mutation rights instead of reconciling visibility,
+    without reporting that choice first
+  - merge before required CI and security review
+dependencies:
+  - description: >-
+      The role and permission model documented from code, including the two-mechanism finding.
+    type: decision
+    status: available
+    owner: pm-orchestrator
+    reference: docs/10-architecture/roles-and-permissions.md
+loop_budget:
+  self_review_passes: 2
+  formal_rework_passes: 1
+  same_failure_before_escalation: 2
+escalation:
+  - trigger: >-
+      Reconciling a site would require widening general ACL bypass.
+    target_role: pm-orchestrator
+    action: >-
+      Stop and report that site; do not widen it. It becomes a product decision, not a fix.
+  - trigger: >-
+      The narrowest fix is to remove a mutation right rather than widen visibility.
+    target_role: pm-orchestrator
+    action: Stop and report; removing a capability is a product decision.
+stop_conditions:
+  - all acceptance criteria pass and required reviews accept
+  - any role would gain visibility outside its ACL
+  - work exceeds the approved scope
+  - loop budget is exhausted
+created_by: pm-orchestrator
+created_at: "2026-08-13T07:00:00Z"
+accepted_by: product-owner
+accepted_at: "2026-08-13T07:00:00Z"

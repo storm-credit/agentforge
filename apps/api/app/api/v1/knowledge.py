@@ -92,6 +92,37 @@ def create_source(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> KnowledgeSource:
+    """Create a knowledge source. PRIVILEGED_ROLES only
+    (WO-2026-08-13-MUTATION-GATE-SWEEP).
+
+    A KnowledgeSource is the container every Document is registered into, and the caller
+    chooses its ``default_confidentiality_level`` — the classification label the source is
+    listed under (``list_sources`` filters non-admins by clearance rank against exactly this
+    value). Every sibling mutation in this file (register / upload / archive / restore / ACL
+    patch) is gated on PRIVILEGED_ROLES; this one had no ``enforce_roles`` call at all, so any
+    principal — including the header-stub DEFAULT ``developer`` identity, i.e. a caller that
+    sends no identity headers whatsoever — could create a source and pick its label.
+
+    Consequence, deliberately accepted: self-service source creation is now a
+    knowledge-manager action, matching ``register_document``. This removes no *usable*
+    capability for a non-privileged caller — registering or uploading a document into the
+    source it just created has been PRIVILEGED_ROLES-only since
+    WO-2026-08-12-UPLOAD-ROLE-GATE, so the only thing an unprivileged creator could do with
+    the source was leave an empty, mislabelled row in the catalog.
+
+    Not fixed here (out of this Work Order's scope): a source carries no per-source ACL, only
+    this default label, so ``GET /sources`` remains a clearance-rank filter and never a
+    group/department check. See ``list_sources``.
+    """
+    # AUTHORIZE FIRST -- before validation and before any write, matching
+    # register_document / upload_document_and_index. Nothing about this decision depends on
+    # the body being valid, and an unauthorized caller should not be able to distinguish a
+    # rejected classification label (422) from a rejected identity (403).
+    enforce_roles(
+        db, principal, PRIVILEGED_ROLES,
+        action="knowledge_source.create", target_type="knowledge_source",
+    )
+
     _validate_confidentiality(payload.default_confidentiality_level)
     source = KnowledgeSource(**payload.model_dump())
     db.add(source)
@@ -177,6 +208,13 @@ def archive_document(
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
+    # KNOWN UNCLOSED GAP (reported by WO-2026-08-13-MUTATION-GATE-SWEEP, deliberately not
+    # fixed there): the role check below is the ONLY check -- the target document's own ACL is
+    # not consulted, so a privileged role can archive a document outside its ACL scope if it
+    # obtains the id by other means (list_documents will not show it). Closing this SHRINKS
+    # what knowledge-manager/platform-admin can do, which is a product decision. See
+    # docs/10-architecture/roles-and-permissions.md section 10. Same for restore_document and
+    # update_document_acl.
     enforce_roles(
         db, principal, PRIVILEGED_ROLES,
         action="document.archive", target_type="document", target_id=document_id,
@@ -229,6 +267,8 @@ def restore_document(
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
+    # KNOWN UNCLOSED GAP: role-only check, target document's ACL not consulted -- see
+    # archive_document and docs/10-architecture/roles-and-permissions.md section 10.
     enforce_roles(
         db, principal, PRIVILEGED_ROLES,
         action="document.restore", target_type="document", target_id=document_id,
@@ -334,6 +374,9 @@ def update_document_acl(
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
+    # KNOWN UNCLOSED GAP: role-only check, target document's ACL not consulted -- see
+    # archive_document and docs/10-architecture/roles-and-permissions.md section 10. This is
+    # the sharpest of the three: it RELABELS a document the caller may have no access to.
     enforce_roles(
         db, principal, PRIVILEGED_ROLES,
         action="document.acl_update", target_type="document", target_id=document_id,
@@ -531,6 +574,14 @@ def create_index_job(
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
+    # AUTHZ-DECISION: acl-gated -- the baseline bar is the target document's read ACL (below),
+    # with a SECOND role bar for re-indexing (has_been_indexed). Recorded here so the mixed
+    # gate is not mistaken for an oversight.
+    # KNOWN UNCLOSED GAP: WO-2026-08-13-FIRST-INDEX-GATE (draft, awaiting a product decision).
+    # While has_been_indexed is False, a merely READ-authorized principal may supply
+    # source_text and have it embedded under this document's confidentiality/ACL tag. Closing
+    # it removes self-service first-index, so it is not decided here. See
+    # docs/10-architecture/roles-and-permissions.md section 10.
     # Authorize BEFORE any side effect. Indexing content into a document you cannot even
     # read is nonsensical and, with a caller-supplied source_text + force_reindex, purges
     # the document's real vectors and re-embeds attacker text under the document's UNCHANGED
@@ -636,6 +687,11 @@ def process_index_job(
     if document is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
 
+    # AUTHZ-DECISION: acl-gated -- same two-tier shape as create_index_job: the target
+    # document's read ACL is the baseline bar, plus a role bar for re-indexing.
+    # KNOWN UNCLOSED GAP: WO-2026-08-13-FIRST-INDEX-GATE (draft, awaiting a product decision)
+    # -- the first-index path accepts caller-supplied source_text with read access only. Not
+    # decided here. See docs/10-architecture/roles-and-permissions.md section 10.
     # Authorize BEFORE the document is touched: processing drives run_index_job, which can
     # purge + re-embed the document's vectors. Same read-ACL gate as create_index_job /
     # the sibling read endpoints; return 403 to stay consistent with get_index_job.
@@ -755,6 +811,16 @@ def preview_retrieval(
     db: Session = Depends(get_db),
     principal: Principal = Depends(get_principal),
 ) -> RetrievalPreviewResponse:
+    # AUTHZ-DECISION: deliberately-open -- this is a READ in POST clothing. It is POST only
+    # because the query text and the knowledge_source_ids list belong in a body, not a URL;
+    # it creates no domain state. Authorization is the caller's own ACL, applied by
+    # build_acl_filter(principal) and enforced inside the vector store exactly as a real run
+    # does, so a caller can only preview chunks it is already authorized to retrieve (the
+    # FakeVectorStore fallback enforces the same filter, so the degraded path is not a hole).
+    # Its only persistent effect is one retrieval.previewed audit event attributed to the
+    # caller, i.e. it makes the attempt MORE accountable, not less. Role-gating it would
+    # remove the ability of an ordinary user to see why an agent answered as it did, without
+    # protecting anything the caller cannot already retrieve through POST /runs.
     statement = (
         select(Document)
         .options(selectinload(Document.chunks))

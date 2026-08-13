@@ -7,6 +7,10 @@ As of: 2026-08-13 · 근거: `apps/api/app/infra/authz.py`, `apps/api/app/domain
 달라질 수 있다 — 내용(코드 동작)을 근거로 삼고, 줄 번호는 참고용으로만 취급할 것. §1-c와 §3, §8은
 `WO-2026-08-13-ROLE-READ-COHERENCE`로 2026-08-13에 갱신됐고(그 과정에서 줄 번호 참조는 함수명
 참조로 바꿨다), §7-a의 clearance fail-open 항목은 별도 Work Order 소관이므로 그대로 두었다.
+**§10은 `WO-2026-08-13-MUTATION-GATE-SWEEP`가 추가한 상태변경 엔드포인트 인가 인벤토리다** —
+§1-b(호출부 전수)와 §8(역할×기능 요약)도 그때 함께 정정됐다(§8의 "에이전트 생성" 행은 코드와
+달랐다, §10-b 참고). §10의 표는 **테스트로 강제된다**: 결정이 기록되지 않은 상태변경 라우트가
+있으면 `apps/api/tests/test_route_authorization_inventory.py`가 실패한다.
 
 > **이 문서와 `domain-model.md`의 관계.** `system-walkthrough.md`가 이미 밝힌 대로
 > `docs/10-architecture/domain-model.md`는 **의도된 목표 모델**이고 실제 코드에는 없는 엔티티
@@ -70,9 +74,10 @@ def enforce_roles(db, principal, allowed, *, action, target_type="endpoint", tar
 
 ### 1-b. `enforce_roles` 호출부 전수 — endpoint → 필요 역할 매트릭스
 
-`apps/api` 전체를 grep한 결과, `enforce_roles`를 실제로 **호출하는** 곳은 정확히 13곳이다
+`apps/api` 전체를 grep한 결과, `enforce_roles`를 실제로 **호출하는** 곳은 정확히 14곳이다
 (정의부 `authz.py:26`, 각 파일의 `import` 문 4곳, 테스트 파일의 주석 1건, `knowledge.py:120`의
-주석 1건은 호출이 아니므로 제외). 아래는 그 13곳 전부다.
+주석 1건은 호출이 아니므로 제외). 아래는 그 14곳 전부다. 초판 기준으로는 13곳이었고,
+`create_source`가 `WO-2026-08-13-MUTATION-GATE-SWEEP`에서 추가돼 14곳이 됐다.
 
 | 파일:라인 | 함수 / 라우트 | HTTP | action | 필요 역할 |
 |---|---|---|---|---|
@@ -82,6 +87,7 @@ def enforce_roles(db, principal, allowed, *, action, target_type="endpoint", tar
 | `app/api/v1/agents.py:224` | `publish_agent_version` — `POST /agents/versions/{id}/publish` | POST | `agent_version.publish` | `PRIVILEGED_ROLES` |
 | `app/api/v1/audit.py:31` | `list_audit_events` — `GET /audit/events` | GET | `audit_log.read` | `AUDIT_READ_ROLES` |
 | `app/api/v1/eval.py:62` | `create_eval_run` — `POST /eval/runs` | POST | `eval_run.create` | `PRIVILEGED_ROLES` |
+| `app/api/v1/knowledge.py` `create_source` | `create_source` — `POST /knowledge/sources` | POST | `knowledge_source.create` | `PRIVILEGED_ROLES` |
 | `app/api/v1/knowledge.py:151` | `archive_document` — `DELETE /documents/{id}` | DELETE | `document.archive` | `PRIVILEGED_ROLES` |
 | `app/api/v1/knowledge.py:203` | `restore_document` — `POST /documents/{id}/restore` | POST | `document.restore` | `PRIVILEGED_ROLES` |
 | `app/api/v1/knowledge.py:262` | `register_document` — `POST /documents` | POST | `document.register` | `PRIVILEGED_ROLES` |
@@ -436,7 +442,9 @@ Work Order의 범위는 subject 쪽 등급 해석을 fail-closed로 바꾸는 �
 
 | 기능 | admin | platform-admin | knowledge-manager | security-auditor | 그 외(예: developer) |
 |---|:---:|:---:|:---:|:---:|:---:|
-| 에이전트 생성/수정/버전관리/검증/발행 | O (P) | O (P) | O (P) | X | X |
+| 에이전트 **생성**(`POST /agents`) — **게이트 없음** | O | O | O | O | **O** (⚠ §10-b) |
+| 에이전트 수정/버전생성/검증/발행 | O (P) | O (P) | O (P) | X | X |
+| 지식소스 생성(`POST /knowledge/sources`) | O (P) | O (P) | O (P) | X | X |
 | 문서 등록/업로드/ACL수정/보관/복원/재색인 | O (P) | O (P) | O (P) | X | X |
 | 최초 색인(문서를 읽을 수 있는 principal만) | O | O | O | O(읽기ACL 통과 시) | O(읽기ACL 통과 시) |
 | Eval 결과 기록 | O (P) | O (P) | O (P) | X | X |
@@ -448,6 +456,11 @@ Work Order의 범위는 subject 쪽 등급 해석을 fail-closed로 바꾸는 �
 | 등급 초과 지식소스 조회 (**B**) | O | X | X | X | X |
 | 본인 소유 run 조회 | O | O | O | O | O |
 | 등급·그룹 조건을 만족하는 문서 검색/열람 | O | O | O | O | O(조건 만족 시) |
+
+첫 행의 경고: `POST /agents`(`create_agent`)에는 **인가 검사가 아예 없다**. 초판의 이 표는
+"에이전트 생성/수정/버전관리/검증/발행"을 한 행으로 묶어 전부 `PRIVILEGED_ROLES`라고 적었지만
+그것은 **코드와 다른 서술**이었다 — `WO-2026-08-13-MUTATION-GATE-SWEEP`의 전수조사가 이를
+발견해 행을 쪼개고 코드 쪽 사실로 정정했다(문서에 맞춰 코드를 바꾸지 않았다. 이유는 §10-b).
 
 읽는 법: `knowledge-manager`/`platform-admin`은 이제 **자기가 바꿀 수 있는 것을 찾을 수는
 있다**(D 행) — 미공개 에이전트를 열거하고, 자기 ACL 안의 보관 문서를 찾아 복원할 수 있다.
@@ -473,3 +486,121 @@ Work Order의 범위는 subject 쪽 등급 해석을 fail-closed로 바꾸는 �
   어디에도 "관리자 모드 파일럿"이 구체적으로 어떤 역할 조합, 어떤 데이터 범위, 어떤 운영
   통제를 뜻하는지 정의한 문서가 없다 — 지금 코드가 가진 것은 §1~8에 적은 개별 게이트뿐이고,
   그것들을 하나의 "운영 모드" 개념으로 묶는 상위 정의는 존재하지 않는다.
+
+---
+
+## 10. 상태변경 엔드포인트 인가 인벤토리 (`WO-2026-08-13-MUTATION-GATE-SWEEP`, 2026-08-13)
+
+**왜 이 절이 있나.** 뮤테이션 엔드포인트의 인가 누락이 서로 무관한 조사에서 **네 번** 따로
+발견됐다 — PR #66/#83(인덱스 잡), PR #92(재색인 신뢰경계), `WO-2026-08-12-UPLOAD-ROLE-GATE`
+(register/upload), 그리고 다른 작업 중 **우연히** 발견된 `create_source`. 매번 하나씩 고쳤다.
+**패턴이 결함이었다**: 게이트 없는 뮤테이션의 집합이 "불완전"한 게 아니라 **알 수 없는**
+상태였고, 코드만 봐서는 *실수로 안 막은 것*과 *일부러 열어둔 것*이 완전히 똑같이 보였다.
+
+**도출 방식(손목록 금지).** 아래 표는 **앱의 실제 라우트 테이블에서 기계적으로 추출**한다
+(`fastapi.routing.iter_route_contexts` — FastAPI 0.139부터 `include_router`가
+`app.routes`에 평탄화되지 않기 때문에 필요) + **OpenAPI 스키마로 교차검증**(워커가 조용히
+누락하는 경우를 잡는 두 번째 독립 도출). 손으로 유지하는 목록은 만들지 않는다 — 지금까지
+구멍이 살아남은 방식이 바로 손목록이었다.
+
+**강제 장치.** `apps/api/tests/test_route_authorization_inventory.py`. 결정이 기록되지 않은
+`POST`/`PUT`/`PATCH`/`DELETE` 라우트가 하나라도 있으면 **스위트가 빨개진다**. 추가로
+(a) `role-gated`로 기록된 라우트의 함수 본문에 `enforce_roles` 호출이 실제로 있는지,
+(b) 그 밖의 분류는 **코드 현장에 `AUTHZ-DECISION:` 주석으로 이유가 적혀 있는지**,
+(c) 이 §10 표에 그 경로가 실제로 적혀 있는지까지 검사한다(문서 드리프트 방지).
+
+**분류 4종**
+
+| 분류 | 뜻 |
+|---|---|
+| `role-gated` | `enforce_roles`로 역할 집합을 강제 |
+| `acl-gated` | 인가가 **대상 리소스의 ACL**에서 나온다 |
+| `deliberately-open` | 의도적으로 열어둠 — **이유를 현장에 적어야 한다** |
+| `unclosed-gap` | 알려진 미해결 구멍. 닫으면 **실효 권한이 줄어들어** 제품 결정이 필요하므로 여기서 닫지 않았고, **소관 Work Order/결정 기록을 명시**해야 한다 |
+
+### 10-a. 전수 인벤토리 (16개 라우트)
+
+| 메서드 · 경로 | 함수 | 분류 | 인가 근거 | 미해결 갭 |
+|---|---|---|---|---|
+| `POST /api/v1/agents` | `create_agent` | **unclosed-gap** | **없음** — 어떤 principal이든 생성 가능 | §10-c ①(보고만) |
+| `PATCH /api/v1/agents/{agent_id}` | `update_agent` | role-gated | `PRIVILEGED_ROLES` / `agent.update` | — |
+| `POST /api/v1/agents/versions` | `create_agent_version` | role-gated | `PRIVILEGED_ROLES` / `agent_version.create` | — |
+| `POST /api/v1/agents/versions/{version_id}/validate` | `validate_agent_version` | role-gated | `PRIVILEGED_ROLES` / `agent_version.validate` | — |
+| `POST /api/v1/agents/versions/{version_id}/publish` | `publish_agent_version` | role-gated | `PRIVILEGED_ROLES` / `agent_version.publish` | — |
+| `POST /api/v1/knowledge/sources` | `create_source` | role-gated | `PRIVILEGED_ROLES` / `knowledge_source.create` | — (§10-b에서 **이번에 닫음**) |
+| `POST /api/v1/knowledge/documents` | `register_document` | role-gated | `PRIVILEGED_ROLES` / `document.register` | — |
+| `POST /api/v1/knowledge/documents/upload` | `upload_document_and_index` | role-gated | `PRIVILEGED_ROLES` / `document.upload` | — |
+| `DELETE /api/v1/knowledge/documents/{document_id}` | `archive_document` | role-gated | `PRIVILEGED_ROLES` / `document.archive` | §10-c ③ 대상-ACL 미검사 |
+| `POST /api/v1/knowledge/documents/{document_id}/restore` | `restore_document` | role-gated | `PRIVILEGED_ROLES` / `document.restore` | §10-c ③ 대상-ACL 미검사 |
+| `PATCH /api/v1/knowledge/documents/{document_id}/acl` | `update_document_acl` | role-gated | `PRIVILEGED_ROLES` / `document.acl_update` | §10-c ③ 대상-ACL 미검사 |
+| `POST /api/v1/knowledge/documents/{document_id}/index-jobs` | `create_index_job` | acl-gated | 대상 문서 읽기-ACL + (`has_been_indexed`면) `PRIVILEGED_ROLES` | §10-c ② 최초색인 |
+| `POST /api/v1/knowledge/index-jobs/{job_id}/process` | `process_index_job` | acl-gated | 위와 동일(2단 게이트) | §10-c ② 최초색인 |
+| `POST /api/v1/knowledge/retrieval/preview` | `preview_retrieval` | deliberately-open | 호출자 자신의 ACL(`build_acl_filter`)만 적용, 도메인 상태 생성 없음 | — |
+| `POST /api/v1/runs` | `create_run` | deliberately-open | 발행된 버전만 실행 가능 + 호출자 ACL로 검색 + 생성 행은 호출자 소유 | — |
+| `POST /api/v1/eval/runs` | `create_eval_run` | role-gated | `PRIVILEGED_ROLES` / `eval_run.create` | — |
+
+### 10-b. 이번에 닫은 것 — `create_source` 하나
+
+`POST /knowledge/sources`에는 `enforce_roles` 호출이 **아예 없었다**. 실증 재현(2026-08-13,
+hermetic TestClient): `X-Agent-Forge-Roles: developer`로도, **인증 헤더를 하나도 안 보내도**
+(기본 스텁 = `developer`) `201`로 지식소스가 생성되고 `default_confidentiality_level`을
+`restricted`로 골라 붙일 수 있었다. 이제 `PRIVILEGED_ROLES`로 게이트되며(`403` +
+`policy.denied` 감사), 검증(`422`)보다 **인가를 먼저** 수행한다.
+
+**실효 권한이 줄어드는가**: 사실상 아니다. 문서 등록/업로드는 이미
+`WO-2026-08-12-UPLOAD-ROLE-GATE`로 `PRIVILEGED_ROLES` 전용이므로, 비권한 principal이 소스를
+만들어도 **그 안에 아무 문서도 넣을 수 없었다** — 남는 것은 카탈로그에 잘못된 등급 라벨이 붙은
+빈 행뿐이었다. 프런트엔드 `createSource`는 데모 역할 기본값이 `admin`이고, eval 하네스와
+스모크 스크립트도 admin 헤더를 쓰므로 영향 없음.
+
+### 10-c. 보고만 하고 닫지 않은 것 — 세 건 모두 **제품 결정**이 필요하다
+
+이 세 건은 닫는 즉시 **누군가의 실효 권한이 줄어든다**. Work Order가 그런 게이트를 보고 없이
+추가하는 것을 금지하므로, 여기서는 기록·보고만 한다.
+
+**① `POST /agents`(`create_agent`)에 인가 검사가 없다 — 이번 전수조사에서 새로 발견**
+
+실증 재현(2026-08-13, hermetic TestClient): `roles=developer`인 principal이
+`{"status": "published"}`로 `POST /agents`를 호출해 `201`을 받고, 그 다음 **아무 헤더도 없는**
+기본 스텁 principal의 `GET /agents`에 그 에이전트가 그대로 보였다. `AgentCreate.status`는
+호출자가 지정할 수 있고 검증되지 않는데, `list_agents`/`get_agent`는 비-빌더에게
+`status == "published"`만 보여주므로 — **발행 게이트(`publish_agent_version`,
+`PATCH /agents`는 둘 다 `PRIVILEGED_ROLES`)를 우회해 카탈로그에 행을 심을 수 있다.**
+영향의 정직한 상한: 실행은 안 된다(`POST /runs`는 발행된 `AgentVersion`을 요구하고
+`create_agent_version`은 게이트됨). 따라서 실질 위험은 "사칭 가능한 카탈로그 항목"(예: 사내
+사용자가 신뢰할 만한 이름의 가짜 에이전트)이고, 실행 가능한 에이전트 탈취는 아니다.
+**결정이 필요한 이유**: 게이트하면 셀프서비스 에이전트 생성이 사라진다 — "에이전트 빌더"
+제품에서 그것은 보안 결정이 아니라 제품 결정이다. 최소 두 개의 분리된 질문이다:
+(a) 비권한 principal이 draft 에이전트를 만들 수 있어야 하는가,
+(b) 만들 수 있다 해도 `status`를 호출자가 지정할 수 있어야 하는가(=발행 게이트 우회).
+(b)만 막는 것(생성 시 `status`를 서버가 `draft`로 고정)은 (a)를 유지하면서 우회를 없애는
+가장 좁은 선택지로 보이지만, 그 역시 실효 동작 변경이므로 이 Work Order에서 하지 않았다.
+
+**② 최초 색인 경로 — `WO-2026-08-13-FIRST-INDEX-GATE`(draft) 소관**
+
+`POST /documents/{id}/index-jobs`와 `/index-jobs/{id}/process`는 문서가
+`has_been_indexed == False`인 동안 **읽기 권한만 있는** principal이 넘긴 `source_text`를
+그 문서의 confidentiality/ACL 라벨 그대로 임베딩한다. `WO-2026-08-12-UPLOAD-ROLE-GATE`의
+AC-04가 이미 "최초 색인 경로는 열려 있다"고 기록했고, 별도 Work Order가 결정을 기다린다.
+이 Work Order는 그 결정을 **하지 않는다**(명시적 금지 항목).
+
+**③ `archive`/`restore`/`acl_update`가 대상 문서의 ACL을 보지 않는다**
+
+세 엔드포인트 모두 역할만 검사한다. 따라서 `knowledge-manager`는 자기 ACL 밖 문서라도 **id를
+알면** 보관/복원/재라벨할 수 있다(목록으로는 찾을 수 없다 — §1-c 참고). 가장 날카로운 것은
+`acl_update`다: 자기가 읽을 수 없는 문서의 접근 그룹·등급을 바꿀 수 있다. 닫으면 세 역할의
+권한이 **줄어들기** 때문에 제품 결정이며, `WO-2026-08-13-ROLE-READ-COHERENCE`도 같은 이유로
+남겼다. 세 곳 모두 코드 현장에 이 사실을 주석으로 명시했다.
+
+### 10-d. 이 장치가 증명하지 않는 것 (정직한 한계)
+
+- **결정이 기록됐음**을 증명하지, **결정이 옳음**을 증명하지 않는다. 잘못 분류해도 통과한다.
+  리뷰어가 다툴 대상은 분류이고, 이 장치가 불가능하게 만든 것은 **분류의 부재**다.
+- `role-gated` 검사는 함수 본문에 `enforce_roles(` 호출이 **있는지**만 본다 — 인자(역할 집합)나
+  **위치**(부작용 이전인지)는 보지 않는다. 그건 엔드포인트별 테스트의 몫이다
+  (`test_source_role_gate.py`, `test_ingestion_role_gate.py`, `test_metadata_contracts.py`).
+- **읽기(GET) 엔드포인트는 이 인벤토리 대상이 아니다.** 읽기 측 게이트는 §1-c에 있고, 이
+  Work Order는 읽기 엔드포인트를 건드리지 않았다. 읽기 쪽에도 같은 강제 장치가 필요한지는
+  별도 판단 사항이다.
+- 신원 자체는 여전히 검증되지 않은 헤더다(§7-b, ADR-103 `OPEN`). 인가 결정이 전수 기록됐다는
+  것이 "누가 그 역할을 주장했는지 믿을 수 있다"는 뜻은 아니다.

@@ -143,7 +143,8 @@ def test_agent_and_version_contract(client):
 _ADMIN = {"X-Agent-Forge-User": "ops", "X-Agent-Forge-Roles": "admin"}
 _DEVELOPER = {"X-Agent-Forge-User": "dev", "X-Agent-Forge-Roles": "developer"}
 # Document registration and upload are PRIVILEGED_ROLES-gated
-# (WO-2026-08-12-UPLOAD-ROLE-GATE), so corpus setup below acts as a knowledge manager.
+# (WO-2026-08-12-UPLOAD-ROLE-GATE), and knowledge-SOURCE creation joined them under
+# WO-2026-08-13-MUTATION-GATE-SWEEP, so corpus setup below acts as a knowledge manager.
 # Deliberately NOT _ADMIN: "knowledge-manager" is the least-privileged role that passes
 # the gate, so these fixtures do not silently depend on admin's ACL bypass elsewhere.
 _KNOWLEDGE_MANAGER = {"X-Agent-Forge-User": "km", "X-Agent-Forge-Roles": "knowledge-manager"}
@@ -279,6 +280,7 @@ def test_list_versions_exposes_only_published_and_superseded_to_non_admin(client
 def test_index_job_get_scoped_by_document_acl(client):
     source = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={"name": "IJ Src", "description": "x", "owner_department": "Security"},
     ).json()
     doc = client.post(
@@ -321,6 +323,7 @@ def test_audit_events_query_admin_only_and_self_audited(client):
     # generate an auditable event
     src = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={"name": "Audit Src", "description": "x", "owner_department": "Operations"},
     ).json()
 
@@ -551,6 +554,7 @@ def test_restore_does_not_resurrect_vectors(client, monkeypatch):
 def test_document_list_and_chunks_scoped_by_acl(client):
     source = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={"name": "Scoped Src", "description": "x", "owner_department": "Security"},
     ).json()
     doc = client.post(
@@ -602,6 +606,7 @@ def test_audit_events_pagination(client):
     for i in range(3):
         client.post(
             "/api/v1/knowledge/sources",
+            headers=_KNOWLEDGE_MANAGER,
             json={"name": f"Pg {i}", "description": "x", "owner_department": "Operations"},
         )
     page = client.get("/api/v1/audit/events", headers=_ADMIN, params={"limit": 2})
@@ -662,6 +667,7 @@ def test_list_documents_pagination_applies_after_acl_filter(client):
     # ACL-FILTERED set instead.
     source = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={"name": "Doc Pagination Src", "description": "x", "owner_department": "Security"},
     ).json()
 
@@ -740,6 +746,7 @@ def test_list_sources_pagination_applies_after_clearance_filter(client):
     def _make(name, level):
         return client.post(
             "/api/v1/knowledge/sources",
+            headers=_KNOWLEDGE_MANAGER,
             json={
                 "name": name,
                 "description": "x",
@@ -871,6 +878,7 @@ def test_list_agent_versions_pagination(client):
 def _seed_preview_document(client, *, marker: str):
     source = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={"name": f"Preview Store Src {marker}", "description": "x", "owner_department": "Operations"},
     ).json()
     document = client.post(
@@ -964,6 +972,7 @@ def test_privileged_mutations_require_admin_role(client):
     ).json()
     source = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={"name": "RBAC Src", "description": "x", "owner_department": "Operations"},
     ).json()
     doc = client.post(
@@ -1060,6 +1069,7 @@ def test_list_sources_scoped_by_clearance_rank(client):
     def _make(name, level):
         return client.post(
             "/api/v1/knowledge/sources",
+            headers=_KNOWLEDGE_MANAGER,
             json={
                 "name": name,
                 "description": "x",
@@ -1162,6 +1172,12 @@ def test_knowledge_source_and_document_contract(client):
         "/api/v1/knowledge/sources",
         headers={
             "X-Agent-Forge-User": "knowledge-manager",
+            # Roles header added with the create_source gate
+            # (WO-2026-08-13-MUTATION-GATE-SWEEP): the user_id string happened to read
+            # "knowledge-manager" while the ROLES claim was absent, so this principal
+            # resolved to the default "developer" and now correctly gets 403. It matches
+            # the sibling document call below, which already sent the role.
+            "X-Agent-Forge-Roles": "knowledge-manager",
             "X-Agent-Forge-Department": "Operations",
         },
         json={
@@ -1208,6 +1224,7 @@ def test_create_source_accepts_all_known_confidentiality_levels(client):
     for level in ("public", "internal", "restricted", "confidential"):
         response = client.post(
             "/api/v1/knowledge/sources",
+            headers=_KNOWLEDGE_MANAGER,
             json={
                 "name": f"Source {level}",
                 "description": "Confidentiality-level regression corpus.",
@@ -1224,6 +1241,7 @@ def test_create_source_accepts_mixed_case_confidentiality_level(client):
     # document endpoints -- case is not significant.
     response = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "name": "Mixed Case Source",
             "description": "Confidentiality-level regression corpus.",
@@ -1237,6 +1255,7 @@ def test_create_source_accepts_mixed_case_confidentiality_level(client):
 def test_create_source_rejects_invalid_confidentiality_level(client):
     response = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "name": "Typo Source",
             "description": "Confidentiality-level regression corpus.",
@@ -1252,6 +1271,7 @@ def test_create_source_rejects_confidentiality_level_with_whitespace(client):
     # trailing space is NOT recognized as a known level.
     response = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "name": "Whitespace Source",
             "description": "Confidentiality-level regression corpus.",
@@ -1265,6 +1285,7 @@ def test_create_source_rejects_confidentiality_level_with_whitespace(client):
 def test_retrieval_preview_applies_document_acl(client):
     source_response = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "name": "Sprint 1 ACL Corpus",
             "description": "Synthetic ACL corpus.",
@@ -1357,6 +1378,7 @@ def test_retrieval_preview_applies_document_acl(client):
 def test_index_job_creates_txt_md_chunks_and_preview_uses_chunk_citations(client):
     source_response = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "name": "Sprint 1 Parser Corpus",
             "description": "Synthetic parser corpus.",
@@ -1437,6 +1459,7 @@ def test_index_job_creates_txt_md_chunks_and_preview_uses_chunk_citations(client
 def test_pdf_upload_extracts_text_and_indexes_chunks(client):
     source = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "name": "Binary Upload Corpus",
             "description": "PDF and DOCX upload corpus.",
@@ -1485,6 +1508,7 @@ def test_pdf_upload_extracts_text_and_indexes_chunks(client):
 def test_docx_upload_extracts_text_and_indexes_chunks(client):
     source = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "name": "DOCX Upload Corpus",
             "description": "DOCX upload corpus.",
@@ -1529,6 +1553,7 @@ def test_docx_upload_extracts_text_and_indexes_chunks(client):
 def test_binary_upload_rejects_unsupported_mime_type(client):
     source = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "name": "Unsupported Upload Corpus",
             "description": "Unsupported upload corpus.",
@@ -1555,6 +1580,7 @@ def test_binary_upload_rejects_unsupported_mime_type(client):
 def test_index_job_fails_closed_for_missing_acl(client):
     source_response = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "name": "Missing ACL Corpus",
             "description": "Documents without ACL must not become searchable.",
@@ -1622,6 +1648,7 @@ def _create_restricted_document(client) -> dict:
     """An HR-restricted document that the default/Finance principal cannot read."""
     source = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={"name": "Restricted Index Corpus", "description": "x", "owner_department": "HR"},
     ).json()
     return client.post(
@@ -2185,6 +2212,7 @@ def test_admin_can_reindex_previously_indexed_after_restore(client):
 def _create_indexable_document(client) -> dict:
     source = client.post(
         "/api/v1/knowledge/sources",
+        headers=_KNOWLEDGE_MANAGER,
         json={
             "name": "Queued Worker Corpus",
             "description": "Documents indexed through the queued worker stub.",

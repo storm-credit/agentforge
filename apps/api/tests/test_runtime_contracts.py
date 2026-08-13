@@ -243,6 +243,7 @@ def test_runtime_run_fails_citation_validation_without_authorized_context(client
 def _create_source(client) -> dict:
     response = client.post(
         "/api/v1/knowledge/sources",
+        headers={"X-Agent-Forge-User": "runtime-indexer", "X-Agent-Forge-Roles": "knowledge-manager"},
         json={
             "name": "Runtime Corpus",
             "description": "Synthetic runtime corpus.",

@@ -1,0 +1,209 @@
+schema_version: agentforge.work_order/v1
+work_order_id: WO-2026-08-13-MUTATION-GATE-SWEEP-001
+title: Enumerate every state-changing endpoint and record an authorization decision for each
+status: accepted
+problem: >-
+  Authorization gaps on mutation endpoints have now been found three separate times, each by a
+  different investigation, each fixed in isolation. PR #66 and PR #83 closed index-job
+  authorization; PR #92 closed the reindex trust boundary via a durable flag;
+  WO-2026-08-12-UPLOAD-ROLE-GATE closed register_document and upload_document_and_index, and
+  its own AC-04 recorded that the first-index path remained open; and while implementing
+  WO-2026-08-13-ROLE-READ-COHERENCE a further gap was found by accident - POST
+  /knowledge/sources (create_source, apps/api/app/api/v1/knowledge.py) has no enforce_roles
+  call at all, so any principal including the default developer header stub can create a
+  knowledge source and choose its default_confidentiality_level. Separately,
+  archive/restore/acl_update apply no ACL check on the target document, so a privileged role
+  can act on a document outside its own ACL if it obtains the id by other means. The pattern
+  is the defect: gaps are being discovered one at a time by unrelated work, which means the
+  set of ungated mutations is unknown rather than merely incomplete. Fixing another single
+  endpoint would repeat that pattern. What is missing is an enumeration and a mechanism that
+  makes a newly added ungated mutation fail loudly instead of waiting to be stumbled upon.
+intended_outcome: >-
+  Every state-changing endpoint has an explicit, recorded authorization decision - gated,
+  or deliberately open with a stated reason. Gaps found during the sweep are closed. A new
+  state-changing endpoint added without a recorded decision fails a test rather than shipping
+  silently.
+parent_issue_refs:
+  - "#141"
+  - "#155"
+scope:
+  included:
+    - enumerate every state-changing route (POST, PUT, PATCH, DELETE) from the FastAPI app
+    - classify each as role-gated, ACL-gated, deliberately open, or an unclosed gap
+    - close the gaps that are in scope, starting with create_source
+    - add an executable route-inventory test that fails on an unrecorded state-changing route
+    - record the decision table in the role and permission document
+  excluded:
+    - changes to read endpoints
+    - changes to group, clearance, or ACL evaluation logic
+    - adding, renaming, or removing a role
+    - the first-index authorization decision, which is its own draft Work Order
+      (WO-2026-08-13-FIRST-INDEX-GATE) and needs a product decision
+    - adding an ACL check to archive/restore/acl_update, which removes an effective capability
+      and is therefore a product decision
+    - changes to ingestion, parsing, or normalization
+  affected_components:
+    - backend-api
+  affected_trust_boundaries:
+    - knowledge-ingestion
+    - retrieval-authorization
+  affected_data_classifications:
+    - internal
+    - restricted
+  runtime_behavior_change: true
+requirements:
+  - requirement_id: SEC-008
+    description: >-
+      Every state-changing endpoint shall have an explicit authorization decision, and the
+      absence of one shall be detectable automatically.
+    authority_ref: docs/20-security/trust-boundaries-and-data-flows.md
+    adr_refs: []
+  - requirement_id: SEC-009
+    description: >-
+      A deliberately open mutation shall record why it is open, not merely lack a gate.
+    authority_ref: docs/10-architecture/roles-and-permissions.md
+    adr_refs: []
+  - requirement_id: DEL-003
+    description: Completion shall be supported by an Evidence Package.
+    authority_ref: docs/40-delivery/evidence-package-guide.md
+    adr_refs: []
+assigned_roles:
+  - agent_role_id: pm-orchestrator
+    responsibility: Accept scope, review, decide on anything escalated, and merge.
+    accountable: true
+  - agent_role_id: security-trust-architect
+    responsibility: >-
+      Produce the enumeration, close in-scope gaps, and build the anti-recurrence test.
+    accountable: false
+inputs:
+  - name: role_model
+    reference: docs/10-architecture/roles-and-permissions.md
+    required: true
+  - name: authz_primitives
+    reference: apps/api/app/infra/authz.py
+    required: true
+  - name: prior_gate_work
+    reference: harness/work-orders/WO-2026-08-12-UPLOAD-ROLE-GATE.yaml
+    required: true
+deliverables:
+  - name: route_authorization_inventory
+    path_or_reference: docs/10-architecture/roles-and-permissions.md
+    owner_role: security-trust-architect
+  - name: closed_gaps
+    path_or_reference: apps/api/app/api/v1
+    owner_role: security-trust-architect
+  - name: anti_recurrence_test
+    path_or_reference: apps/api/tests
+    owner_role: security-trust-architect
+acceptance_criteria:
+  - criterion_id: AC-01
+    description: >-
+      Every state-changing route in the running app is enumerated from the app itself, not
+      from a hand-written list, and each carries a classification.
+    verification: The inventory is produced by iterating the FastAPI route table.
+    blocker: true
+  - criterion_id: AC-02
+    description: >-
+      A state-changing route with no recorded decision fails a test. Adding a new ungated
+      mutation endpoint makes the suite red.
+    verification: >-
+      Add a temporary ungated route locally, confirm the test fails, remove it. Report this.
+    blocker: true
+  - criterion_id: AC-03
+    description: >-
+      create_source is gated consistently with the other knowledge mutations, and a denial is
+      audited.
+    verification: Test asserting 403 for a non-privileged principal and that nothing is created.
+    blocker: true
+  - criterion_id: AC-04
+    description: >-
+      Every route classified as deliberately open states why, in code at the site.
+    verification: Diff review.
+    blocker: true
+  - criterion_id: AC-05
+    description: >-
+      No read endpoint changed behaviour, and no role gained any capability it did not hold.
+    verification: Diff review plus the full suite.
+    blocker: true
+  - criterion_id: AC-06
+    description: Full suite green at or above the 340 baseline, ruff clean, CI green.
+    verification: pytest with apps/api/.env moved aside; GitHub Actions on the candidate commit.
+    blocker: true
+verification_plan:
+  - check_id: ROUTE-INVENTORY
+    type: security
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest tests -k "route_authorization" -v
+    expected_result: Every state-changing route is accounted for; unrecorded routes fail.
+    evidence_destination: Evidence Package verification section.
+  - check_id: ANTI-RECURRENCE
+    type: security
+    command_or_workflow: >-
+      Temporarily add an ungated POST route, run the inventory test, confirm failure, remove it.
+    expected_result: The suite goes red on the unrecorded route.
+    evidence_destination: Evidence Package verification section.
+  - check_id: CREATE-SOURCE-DENIED
+    type: security
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest tests -k "create_source" -v
+    expected_result: Non-privileged principal receives 403 and no knowledge source is created.
+    evidence_destination: Evidence Package verification section.
+  - check_id: SUITE-BASELINE
+    type: unit
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest -q
+    expected_result: At or above 340 passed, 0 failed.
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-ALL
+    type: integration
+    command_or_workflow: GitHub Actions Backend, Frontend and E2E jobs
+    expected_result: success on the exact candidate commit
+    evidence_destination: Evidence Package verification section.
+required_reviews:
+  - reviewer_role: security-trust-architect
+    focus:
+      - the enumeration is derived from the app, not hand-maintained
+      - the anti-recurrence test genuinely fails on an unrecorded route
+      - no capability was widened
+    blocking: true
+  - reviewer_role: independent-release-governor
+    focus:
+      - scope adherence
+      - escalated items reported rather than silently decided
+      - CI and evidence freshness
+    blocking: true
+prohibited_actions:
+  - edit main directly
+  - gate an endpoint whose gating removes an effective capability, without reporting first
+  - change read endpoints under this Work Order
+  - decide the first-index question, which belongs to its own Work Order
+  - hand-maintain the route list instead of deriving it from the app
+  - merge before required CI and security review
+dependencies:
+  - description: >-
+      The role and permission model documented from code, including the mutation/read
+      asymmetry and its reconciliation.
+    type: decision
+    status: available
+    owner: pm-orchestrator
+    reference: docs/10-architecture/roles-and-permissions.md
+loop_budget:
+  self_review_passes: 2
+  formal_rework_passes: 1
+  same_failure_before_escalation: 2
+escalation:
+  - trigger: >-
+      Closing a gap would remove a capability someone legitimately relies on.
+    target_role: pm-orchestrator
+    action: Stop and report that endpoint; it becomes a product decision.
+  - trigger: >-
+      The sweep finds a gap materially larger than create_source.
+    target_role: pm-orchestrator
+    action: >-
+      Stop and report before fixing it; a large finding deserves its own Work Order and review.
+stop_conditions:
+  - all acceptance criteria pass and required reviews accept
+  - a gap cannot be closed without removing a capability
+  - work exceeds the approved scope
+  - loop budget is exhausted
+created_by: pm-orchestrator
+created_at: "2026-08-13T08:00:00Z"
+accepted_by: product-owner
+accepted_at: "2026-08-13T08:00:00Z"

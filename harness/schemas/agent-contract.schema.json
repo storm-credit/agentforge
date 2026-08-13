@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agentforge.local/schemas/agent-contract.schema.json",
+  "$comment": "ENFORCEMENT STATUS: nothing validates any instance against this schema -- it is not registered in harness/tools/validate_examples.py's PAIRS list. harness/agents/specialists.yaml, the file this schema was clearly written for, has never once been checked against it. What would make this real: adding a specialists.yaml/schema pair to validate_examples.py's PAIRS and fixing whatever that reveals. Re-check rather than trust this comment as it ages: apps/api/.venv/Scripts/python.exe harness/tools/project_status.py",
   "title": "Agent Forge Specialist Agent Contract",
   "type": "object",
   "additionalProperties": false,

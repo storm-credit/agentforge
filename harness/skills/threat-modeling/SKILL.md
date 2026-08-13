@@ -1,5 +1,11 @@
 # Threat Modeling Skill
 
+## Enforcement Status
+
+This is the one skill under `harness/skills/` that is actually reachable today: a matching `.claude/skills/threat-modeling/SKILL.md` wrapper references (not copies) this file, so Claude Code's Skill tool can discover and load it, and `security-reviewer` is briefed to invoke it on its trigger. That reference-not-copy pattern was a deliberate choice specifically to avoid drift, and it has held — this is the one part of this note worth trusting without re-checking. The other six files under `harness/skills/` have no such wrapper and are not reachable the same way; see each one's own Enforcement Status note.
+
+Confirm current state yourself rather than trusting this note as it ages: `apps/api/.venv/Scripts/python.exe harness/tools/project_status.py`
+
 ## Trigger
 
 Use for identity, ACL, data classification, new storage/model/network paths, logging/audit, Product Tool/MCP, external transfer, deployment zone, or security-control changes.

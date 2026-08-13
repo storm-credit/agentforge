@@ -1,6 +1,22 @@
 schema_version: agentforge.specialist_catalog/v1
 status: draft
 contract_schema: harness/schemas/agent-contract.schema.json
+
+# ENFORCEMENT STATUS -- read before trusting an agent_role_id below.
+# A subset of these roles can actually be dispatched as distinct Claude Code
+# subagents today, through .claude/agents/*.md wrapper files that deliberately
+# reference (not copy) this contract -- that indirection was a deliberate design
+# choice and it has held, so this file stays the single source of truth for the
+# roles it covers. The rest of the agent_role_id entries below are prose only:
+# no wrapper instantiates them, nothing stops a session from claiming to "act as"
+# one anyway, and none of their prohibited_actions/required_reviews/escalation
+# rules are checked by anything. This schema itself is also never validated (see
+# harness/schemas/agent-contract.schema.json's own status note).
+# What would close the gap for a remaining role: a .claude/agents/<role-id>.md
+# wrapper using the same reference-not-copy pattern already proven below.
+# Do not trust a headcount written into this comment -- it will rot the moment
+# someone wires one more role. Check for yourself:
+#   apps/api/.venv/Scripts/python.exe harness/tools/project_status.py
 defaults:
   product_runtime_access: false
   destructive_actions: human_approval

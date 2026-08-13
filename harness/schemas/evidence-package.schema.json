@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agentforge.local/schemas/evidence-package.schema.json",
+  "$comment": "ENFORCEMENT STATUS: harness/tools/validate_examples.py does load this schema and validate an instance against it -- but that instance is the single illustrative file under harness/examples/evidence-package.yaml. None of the real Work Orders under harness/work-orders/ has a matching Evidence Package instance filled out in this shape; the actual evidence trail for real delivered slices is PR bodies and CI check links, not this schema. Re-check rather than trust this comment as it ages: apps/api/.venv/Scripts/python.exe harness/tools/validate_examples.py",
   "title": "Agent Forge Evidence Package",
   "type": "object",
   "additionalProperties": false,

@@ -2,6 +2,18 @@ schema_version: agentforge.development_mcp_registry/v1
 status: draft
 owner: delivery-harness
 
+# ENFORCEMENT STATUS
+# Nothing in this repository reads this registry to decide whether a tool call
+# is allowed. The GitHub/local-tool access a session actually has today comes
+# from Claude Code's own permission system (.claude/settings.json, interactive
+# approval prompts) -- not from anything below. The capabilities, approvals,
+# and disable procedures described per server are a design target that no
+# PreToolUse check, hook, or gateway currently consults.
+# What would close the gap: a check that looks up the server_id/capability
+# actually being invoked against this registry and blocks on a mismatch.
+# Re-check rather than trust this comment as it ages:
+#   apps/api/.venv/Scripts/python.exe harness/tools/project_status.py
+
 principles:
   product_runtime_inheritance: prohibited
   credentials_shared_with_product_runtime: false

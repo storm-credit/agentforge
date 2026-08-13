@@ -3,6 +3,24 @@ status: foundation
 owner: pm-orchestrator
 related_epic: 108
 
+# ENFORCEMENT STATUS -- do not read this manifest as a live inventory.
+# It is an index of intent: most of what it lists below (schemas, hooks
+# rules, MCP registries, policies) has no executing consumer in this
+# repository today. A minority genuinely runs: a subset of the agents/
+# roles are dispatchable via .claude/agents/*.md wrappers that reference
+# (not copy) harness/agents/specialists.yaml; the threat-modeling entry
+# under skills/ has an equivalent .claude/skills/ wrapper; a couple of the
+# rules named in hooks/policy.yaml happen to overlap with what the real
+# scripts in .claude/hooks/ do (coincidentally, not traceably by rule ID);
+# and the work-order and evidence-package files under schemas/ are
+# actually validated by harness/tools/validate_examples.py. Everything
+# else below is a written design that nothing checks. Each affected file
+# under harness/ carries its own status note with specifics -- read those,
+# not a summary count here, since any count here rots the moment one more
+# piece gets wired.
+# Check the current state yourself:
+#   apps/api/.venv/Scripts/python.exe harness/tools/project_status.py
+
 purpose: >-
   Version-managed, vendor-neutral contracts for planning, designing,
   implementing, reviewing, evaluating, and releasing Agent Forge.

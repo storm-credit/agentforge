@@ -12,6 +12,12 @@ It exists so that critical delivery behavior is not hidden only inside a local C
 
 The harness governs **how Agent Forge is built**. It is separate from the **Agent Forge product runtime**, which governs how published end-user agents execute.
 
+## Enforcement Status
+
+Read this section before trusting anything else in this directory: describing a control here does not make it run. A minority of this layout genuinely executes today — a subset of `agents/` roles are dispatchable through `.claude/agents/*.md` wrappers that reference (not copy) `harness/agents/specialists.yaml`; the `threat-modeling` entry under `skills/` has an equivalent `.claude/skills/` wrapper; a couple of the rules named in `hooks/policy.yaml` (roughly: don't push straight to `main`, warn on secret-looking output) happen to overlap with what the real scripts in `.claude/hooks/` do (coincidentally, not traceably by rule ID); and the `work-order` and `evidence-package` files under `schemas/` are actually exercised by `harness/tools/validate_examples.py`. Everything else under this directory — most of `hooks/`, all of `mcp/`, all of `policies/`, the remaining `schemas/` files, and every Evidence Package that would document a real slice — is a written design with no executing consumer. Each affected file below carries its own status note with the specifics; treat a file without one as unverified rather than assuming it's fine.
+
+This is not a permanent classification, and it is not a headcount — it is a snapshot that goes stale the moment someone wires the next piece. Check the current state yourself: `apps/api/.venv/Scripts/python.exe harness/tools/project_status.py`
+
 ## Boundary
 
 | Harness concern | Product runtime concern |
@@ -39,6 +45,8 @@ harness/
 
 ### `agents/`
 
+*Enforcement: a subset of these roles are reachable via `.claude/agents/*.md` wrappers that reference (not copy) `harness/agents/specialists.yaml` — see that file's own status note for which and how to check. The rest are prose only.*
+
 Role contracts for the PM Orchestrator and specialists. Each contract will define:
 
 - mission and authority;
@@ -50,6 +58,8 @@ Role contracts for the PM Orchestrator and specialists. Each contract will defin
 - recommended model class where material.
 
 ### `skills/`
+
+*Enforcement: only `threat-modeling` has a `.claude/skills/` wrapper that makes it discoverable to the Skill tool — the rest cannot be loaded by Claude Code on their own today. See each `SKILL.md`'s own status note.*
 
 Reusable, reviewable procedures such as:
 
@@ -64,6 +74,8 @@ A skill is a repeatable procedure, not an unrestricted persona prompt.
 
 ### `hooks/`
 
+*Enforcement: `.claude/hooks/*.mjs` implements real, running checks today. Their overlap with the rule catalogue in `harness/hooks/policy.yaml` is coincidental, not rule-by-rule traceable — see that file's own status note and `harness/policies/hooks.md`'s Enforcement Status section.*
+
 Deterministic guardrails around supported agent-assisted development environments.
 
 The initial policy targets these lifecycle points:
@@ -77,6 +89,8 @@ The initial policy targets these lifecycle points:
 Provider-specific hook configuration may live outside this directory, but the policy source must remain versioned here.
 
 ### `mcp/`
+
+*Enforcement: the registries under `harness/registries/` describe this design; nothing in this repository consults them before a tool call executes. See each registry's own status note.*
 
 Contracts for MCP usage, separated into:
 
@@ -99,6 +113,8 @@ Every registered tool should eventually include:
 
 ### `policies/`
 
+*Enforcement: none of these have an executing consumer today. `harness/policies/model-routing.yaml` is the clearest case — its `model_id` values are unresolved placeholders that no code reads. See each policy file's own status note.*
+
 Cross-agent rules including:
 
 - model routing;
@@ -109,6 +125,8 @@ Cross-agent rules including:
 - protected resource policy.
 
 ### `schemas/`
+
+*Enforcement: only `work-order` and `evidence-package` are ever actually validated against an instance, by `harness/tools/validate_examples.py`. The rest have never validated anything. See each schema file's own `$comment` status note.*
 
 Machine-readable contracts for:
 
@@ -194,6 +212,8 @@ Human decision is required when:
 - a completion claim lacks reproducible evidence.
 
 ## Evidence Package
+
+*Enforcement: no real Work Order under `harness/work-orders/` has an Evidence Package instance filled out in this shape. The schema is exercised only by the single illustrative example under `harness/examples/` (via `harness/tools/validate_examples.py`). The actual evidence trail for real delivered slices is PR bodies and CI check links, not this structure.*
 
 Each implementation slice will eventually produce a structured package containing:
 

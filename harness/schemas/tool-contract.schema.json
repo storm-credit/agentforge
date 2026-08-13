@@ -1,6 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agentforge.local/schemas/tool-contract.schema.json",
+  "$comment": "ENFORCEMENT STATUS: no consumer validates any instance against this schema. Its natural instance source, harness/registries/product-tools.yaml, has empty servers: [] and tools: [] -- there has never been a Tool Contract to check, and no runtime code reads this schema before executing a tool. Re-check rather than trust this comment as it ages: apps/api/.venv/Scripts/python.exe harness/tools/project_status.py",
   "title": "Agent Forge Tool Contract",
   "type": "object",
   "additionalProperties": false,

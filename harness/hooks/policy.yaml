@@ -5,6 +5,24 @@ status: draft
 owner: delivery-harness
 normative_guide: harness/policies/hooks.md
 
+# ENFORCEMENT STATUS -- read before trusting a rule_id below.
+# .claude/settings.json wires real scripts today: a PreToolUse hook that blocks
+# a direct push to main/master, and a PostToolUse hook that warns (never
+# blocks) on suspected secrets in a command or its output. Both fail open on
+# their own error. That happens to overlap with the intent of a couple
+# of rules below (roughly PRE-001 and POST-002) -- but the overlap is
+# coincidental, not traceable: neither script reads a rule_id from this file,
+# so a change made here will not visibly change what either script does, and a
+# change to either script will not show up as a status change here. Every other
+# rule_id below (all of SESSION-*, most of PRE-*, all of POST-003/004, all of
+# SUBSTOP-*, all of STOP-*) has no hook, script, or CI step behind it at all --
+# it is a design intention a session can choose to honor, not something that runs.
+# What would close the gap: hooks (or a policy engine) that read specific
+# rule_id values from this file directly, so drift here becomes visible instead
+# of silent.
+# Don't trust a "how many are wired" claim written into this comment -- check:
+#   apps/api/.venv/Scripts/python.exe harness/tools/project_status.py
+
 principles:
   repository_policy_is_authoritative: true
   provider_adapter_is_subordinate: true

@@ -1,0 +1,198 @@
+schema_version: agentforge.work_order/v1
+work_order_id: WO-2026-08-14-EVAL-FORMAT-COVERAGE-001
+title: Stop measuring quality only on the format that behaves best
+status: accepted
+problem: >-
+  Every quality number this project has ever reported was measured on markdown.
+  eval/harness/agentforge_eval/live_runner.py registers each corpus document through
+  POST /knowledge/documents with mime_type text/markdown and a source_text body, so the
+  corpus never exercises the binary path that real departments actually upload. That matters
+  now that the difference is measured rather than suspected: the same policy text indexed as
+  markdown yields three chunks each carrying a clause path, and as DOCX yields one chunk with
+  none, because chunker_mime_type_for maps binary formats to text/plain and heading detection
+  never runs. So the citation rate of 100 percent recorded in the pilot PoC describes the best
+  case and does not transfer, and the harness cannot currently show that, because it has no
+  way to express a case in any other format. The ingestion lineage added by
+  WO-2026-08-14-INGESTION-INSTRUMENTATION makes the collapse visible per document, and its
+  own backfill made the bias visible in aggregate - of thirty-four existing documents exactly
+  one was not markdown. Leaving the harness as it is means every future before-and-after
+  comparison, including the in-house model migration, keeps being run on the easy case.
+intended_outcome: >-
+  A corpus case can declare the format its document is ingested as, the harness ingests it
+  that way for real, and quality metrics are reported broken down by format so a
+  markdown-only result can never again be read as a general one.
+parent_issue_refs:
+  - "#162"
+scope:
+  included:
+    - let a corpus document declare an ingestion format
+    - ingest declared binary formats through the real upload path, with generated fixtures
+    - report the existing metrics broken down by ingestion format
+    - report citation-structure quality per format, using the lineage the product now records
+    - extend the live corpus with binary-format cases covering the same questions as existing ones
+    - a harness test proving a markdown-only corpus is reported as markdown-only
+  excluded:
+    - any change to apps/api product code
+    - any change to conversion, chunking, or citation behaviour
+    - adding support for a new document format to the product
+    - changing existing corpus cases' expected behaviour or their measured baselines
+    - frontend changes
+  affected_components:
+    - eval-harness
+  affected_trust_boundaries: []
+  affected_data_classifications:
+    - internal
+  runtime_behavior_change: false
+requirements:
+  - requirement_id: OBS-003
+    description: >-
+      A quality measurement shall state the conditions it was obtained under, so a
+      best-case result cannot be read as a general one.
+    authority_ref: docs/10-architecture/ingestion-normalization-design.md
+    adr_refs: []
+  - requirement_id: DEL-003
+    description: Completion shall be supported by an Evidence Package.
+    authority_ref: docs/40-delivery/evidence-package-guide.md
+    adr_refs: []
+assigned_roles:
+  - agent_role_id: pm-orchestrator
+    responsibility: Accept scope, review, and merge.
+    accountable: true
+  - agent_role_id: qa-eval-specialist
+    responsibility: >-
+      Extend the harness and corpus without changing product behaviour or existing baselines.
+    accountable: false
+inputs:
+  - name: live_runner
+    reference: eval/harness/agentforge_eval/live_runner.py
+    required: true
+  - name: normalization_design
+    reference: docs/10-architecture/ingestion-normalization-design.md
+    required: true
+  - name: previous_results
+    reference: docs/40-delivery/poc-hr-pilot-2026-08-13.md
+    required: true
+deliverables:
+  - name: format_aware_runner
+    path_or_reference: eval/harness/agentforge_eval
+    owner_role: qa-eval-specialist
+  - name: per_format_reporting
+    path_or_reference: eval/harness/agentforge_eval/live_scorer.py
+    owner_role: qa-eval-specialist
+  - name: binary_format_cases
+    path_or_reference: eval/synthetic-corpus
+    owner_role: qa-eval-specialist
+  - name: harness_tests
+    path_or_reference: eval/harness/tests
+    owner_role: qa-eval-specialist
+acceptance_criteria:
+  - criterion_id: AC-01
+    description: >-
+      A corpus document can declare its ingestion format, and a declared binary document is
+      ingested through the real upload path rather than as markdown.
+    verification: >-
+      Test asserting the request the runner makes for each declared format; a live run
+      showing the resulting converted mime type in the product's lineage.
+    blocker: true
+  - criterion_id: AC-02
+    description: >-
+      Reported metrics are broken down by ingestion format, and a run whose corpus is
+      entirely markdown says so rather than presenting an unqualified number.
+    verification: Test over a markdown-only corpus asserting the qualification is present.
+    blocker: true
+  - criterion_id: AC-03
+    description: >-
+      Citation-structure quality is reported per format from the lineage the product records,
+      not recomputed independently by the harness.
+    verification: Test asserting the harness reads the product's recorded counts.
+    blocker: true
+  - criterion_id: AC-04
+    description: >-
+      Existing corpus cases and their expected behaviour are unchanged, so previously
+      recorded baselines remain comparable.
+    verification: Diff review of existing corpus files; existing harness tests pass unchanged.
+    blocker: true
+  - criterion_id: AC-05
+    description: >-
+      A live run on the running stack produces a report whose per-format breakdown matches
+      what the product's lineage rows say for the same documents.
+    verification: Live run output compared against a lineage query.
+    blocker: true
+  - criterion_id: AC-06
+    description: Harness tests green, backend suite unchanged at or above 443, ruff clean, CI green.
+    verification: pytest for both suites; GitHub Actions on the candidate commit.
+    blocker: true
+verification_plan:
+  - check_id: HARNESS-TESTS
+    type: eval
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest eval/harness/tests -q
+    expected_result: green, including the markdown-only qualification test
+    evidence_destination: Evidence Package verification section.
+  - check_id: LIVE-RUN
+    type: eval
+    command_or_workflow: >-
+      apps/api/.venv/Scripts/python.exe eval/harness/run_live_eval.py against the running stack
+    expected_result: >-
+      A per-format breakdown in which the binary-format cases show the structure loss the
+      product's lineage independently records.
+    evidence_destination: Evidence Package verification section.
+  - check_id: PRODUCT-UNTOUCHED
+    type: unit
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest -q
+    expected_result: At or above 443 passed, and no file under apps/api changed.
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-ALL
+    type: integration
+    command_or_workflow: GitHub Actions Backend, Frontend and E2E jobs
+    expected_result: success on the exact candidate commit
+    evidence_destination: Evidence Package verification section.
+required_reviews:
+  - reviewer_role: qa-eval-specialist
+    focus:
+      - the binary path is genuinely exercised, not simulated
+      - existing baselines remain comparable
+    blocking: true
+  - reviewer_role: independent-release-governor
+    focus:
+      - no product code changed
+      - measurement claims match what was actually measured
+    blocking: true
+prohibited_actions:
+  - edit main directly
+  - change any file under apps/api
+  - change conversion, chunking, or citation behaviour
+  - alter an existing corpus case's expected behaviour or its recorded baseline
+  - report a per-format number the run did not actually measure
+  - merge before required CI and review
+dependencies:
+  - description: >-
+      The ingestion lineage recorded per index attempt, which the harness reads rather than
+      recomputing.
+    type: decision
+    status: available
+    owner: pm-orchestrator
+    reference: harness/work-orders/WO-2026-08-14-INGESTION-INSTRUMENTATION.yaml
+loop_budget:
+  self_review_passes: 2
+  formal_rework_passes: 1
+  same_failure_before_escalation: 2
+escalation:
+  - trigger: >-
+      Exercising a declared format would require changing product code.
+    target_role: pm-orchestrator
+    action: Stop and report; product change is excluded from this Work Order.
+  - trigger: >-
+      A binary-format case cannot pass without relaxing an existing expected behaviour.
+    target_role: pm-orchestrator
+    action: >-
+      Stop and report the case and the reason. A failing binary case is a finding to record,
+      not an expectation to soften.
+stop_conditions:
+  - all acceptance criteria pass and required reviews accept
+  - any product file would change
+  - work exceeds the approved scope
+  - loop budget is exhausted
+created_by: pm-orchestrator
+created_at: "2026-08-14T02:00:00Z"
+accepted_by: product-owner
+accepted_at: "2026-08-14T02:00:00Z"

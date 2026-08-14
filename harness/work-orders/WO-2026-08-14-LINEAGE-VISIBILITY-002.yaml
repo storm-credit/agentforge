@@ -1,0 +1,210 @@
+schema_version: agentforge.work_order/v1
+work_order_id: WO-2026-08-14-LINEAGE-VISIBILITY-002
+title: Carry the ingestion signal on the documents read model, then render it
+status: accepted
+problem: >-
+  WO-2026-08-14-LINEAGE-VISIBILITY-001 was scoped to the frontend alone and could not be
+  implemented. The assigned specialist correctly stopped at its own escalation trigger and
+  reported why, rather than inventing a workaround. The reason is a read-model gap: GET
+  /knowledge/documents returns DocumentRead, which carries no lineage field at all, and
+  IndexJobRead - which does carry the ingestion record added by
+  WO-2026-08-14-INGESTION-INSTRUMENTATION - is only returned from three job-scoped routes that
+  require a job_id the caller already holds. There is no documents-list join, no single
+  document route, and no index-job list route, so a screen that is merely listing documents has
+  no reachable path to the signal. The two dishonest workarounds were both correctly refused:
+  deriving a verdict from raw chunk data would recompute in the frontend a judgement the
+  backend owns, and it cannot distinguish a genuinely collapsed document from one indexed
+  before the instrumentation existed, which is exactly the distinction AC-03 required. The
+  underlying mistake was mine - the ingestion normalization design listed the recording and the
+  administrator-facing signal as one step, and I split them across Work Orders in a way that
+  left the contract half-built.
+intended_outcome: >-
+  The documents list carries each document's most recent ingestion record, and the console
+  renders it, so an administrator can tell which documents lost their citation structure and
+  why without querying the database.
+parent_issue_refs:
+  - "#162"
+  - "#164"
+scope:
+  included:
+    - add the latest ingestion record to the documents read model, populated from the existing relationship
+    - render the signal on the knowledge documents view
+    - distinguish structured, collapsed, and no-recorded-lineage as three states
+    - show the recorded reason rather than a re-derived one
+    - Korean product copy consistent with the localized console
+    - backend and Playwright coverage for all three states
+  excluded:
+    - any new database migration
+    - any change to conversion, chunking, or citation behaviour
+    - recomputing structure quality in the frontend
+    - inventing a score, grade, or percentage the backend does not record
+    - blocking, hiding, or auto-retrying a document based on the signal
+    - changes to the eval harness
+    - changes to ACL, classification, or authorization
+  affected_components:
+    - backend-api
+    - frontend-web
+  affected_trust_boundaries: []
+  affected_data_classifications:
+    - internal
+  runtime_behavior_change: false
+requirements:
+  - requirement_id: UX-003
+    description: >-
+      A recorded quality signal shall be visible to the operator who can act on it.
+    authority_ref: harness/work-orders/WO-2026-08-14-INGESTION-INSTRUMENTATION.yaml
+    adr_refs: []
+  - requirement_id: UX-004
+    description: >-
+      The interface shall display what was recorded and shall not present a derived judgement
+      as a measurement.
+    authority_ref: docs/40-delivery/live-demo-evidence-2026-08-12.md
+    adr_refs: []
+  - requirement_id: DEL-003
+    description: Completion shall be supported by an Evidence Package.
+    authority_ref: docs/40-delivery/evidence-package-guide.md
+    adr_refs: []
+assigned_roles:
+  - agent_role_id: pm-orchestrator
+    responsibility: Accept scope, review copy, and merge.
+    accountable: true
+  - agent_role_id: backend-specialist
+    responsibility: >-
+      Add the read-model field additively, without a migration or a behaviour change, and
+      render it.
+    accountable: false
+inputs:
+  - name: failed_predecessor
+    reference: harness/work-orders/WO-2026-08-14-LINEAGE-VISIBILITY.yaml
+    required: true
+  - name: instrumentation_work_order
+    reference: harness/work-orders/WO-2026-08-14-INGESTION-INSTRUMENTATION.yaml
+    required: true
+  - name: knowledge_page
+    reference: apps/web/app/knowledge/page.tsx
+    required: true
+deliverables:
+  - name: read_model_field
+    path_or_reference: apps/api/app/domain/schemas.py, apps/api/app/api/v1/knowledge.py
+    owner_role: backend-specialist
+  - name: lineage_display
+    path_or_reference: apps/web/app/knowledge/page.tsx, apps/web/app/lib/api.ts
+    owner_role: backend-specialist
+  - name: coverage
+    path_or_reference: apps/api/tests, apps/web/tests
+    owner_role: backend-specialist
+acceptance_criteria:
+  - criterion_id: AC-01
+    description: >-
+      The documents list response carries each document's most recent ingestion record, or
+      null when there is none, without a new migration.
+    verification: Backend test over documents with one, several, and no ingestion rows.
+    blocker: true
+  - criterion_id: AC-02
+    description: >-
+      Listing documents does not issue one query per document.
+    verification: >-
+      Test asserting the query count does not grow with the number of documents returned.
+    blocker: true
+  - criterion_id: AC-03
+    description: >-
+      Structured, collapsed, and no-recorded-lineage render as three distinguishable states,
+      and a document with no lineage never renders as healthy.
+    verification: Playwright coverage over all three fixtures.
+    blocker: true
+  - criterion_id: AC-04
+    description: >-
+      The reason shown maps from the code the backend recorded; the frontend derives no
+      verdict of its own.
+    verification: Diff review plus a test asserting the mapping.
+    blocker: true
+  - criterion_id: AC-05
+    description: >-
+      The signal is informational only - nothing is hidden, blocked, or retried because of it.
+    verification: Diff review.
+    blocker: true
+  - criterion_id: AC-06
+    description: >-
+      No migration, no conversion change, existing test ids unchanged, and the ACL scoping of
+      the documents list is unchanged.
+    verification: >-
+      Diff review; test-id inventory before and after; existing ACL tests pass untouched.
+    blocker: true
+  - criterion_id: AC-07
+    description: Full backend suite at or above 443, ruff clean, tsc clean, CI green.
+    verification: pytest; node-direct tsc; GitHub Actions on the candidate commit.
+    blocker: true
+verification_plan:
+  - check_id: READ-MODEL
+    type: unit
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest tests -k "documents_list or lineage" -v
+    expected_result: The latest ingestion is present, null where absent, and no N+1.
+    evidence_destination: Evidence Package verification section.
+  - check_id: THREE-STATES
+    type: e2e
+    command_or_workflow: node node_modules/@playwright/test/cli.js test
+    expected_result: All three states render distinguishably.
+    evidence_destination: Evidence Package verification section.
+  - check_id: ACL-UNCHANGED
+    type: security
+    command_or_workflow: apps/api/.venv/Scripts/python.exe -m pytest tests -k "acl or scope" -v
+    expected_result: Documents-list scoping is unchanged.
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-ALL
+    type: integration
+    command_or_workflow: GitHub Actions Backend, Frontend and E2E jobs
+    expected_result: success on the exact candidate commit
+    evidence_destination: Evidence Package verification section.
+required_reviews:
+  - reviewer_role: product-architect
+    focus:
+      - the display states what was recorded and claims nothing more
+      - copy reads as product Korean
+    blocking: true
+  - reviewer_role: independent-release-governor
+    focus:
+      - additive read-model change only, no migration
+      - documents-list authorization unchanged
+      - CI freshness
+    blocking: true
+prohibited_actions:
+  - edit main directly
+  - add a database migration under this Work Order
+  - change conversion, chunking, or citation behaviour
+  - recompute structure quality in the frontend
+  - display a score, grade, or percentage the backend does not record
+  - present a document with no recorded lineage as healthy
+  - change the documents-list ACL scoping
+  - merge before required CI and review
+dependencies:
+  - description: >-
+      The ingestion lineage table and the Document.ingestions relationship, both already
+      present.
+    type: decision
+    status: available
+    owner: pm-orchestrator
+    reference: harness/work-orders/WO-2026-08-14-INGESTION-INSTRUMENTATION.yaml
+loop_budget:
+  self_review_passes: 2
+  formal_rework_passes: 1
+  same_failure_before_escalation: 2
+escalation:
+  - trigger: >-
+      Carrying the latest ingestion on the list would require a migration or a query per
+      document that cannot be avoided.
+    target_role: pm-orchestrator
+    action: Stop and report the constraint before implementing it.
+  - trigger: >-
+      Rendering the recorded reason honestly would require inventing a phrase for a condition
+      the backend does not distinguish.
+    target_role: pm-orchestrator
+    action: Stop and report rather than inventing the distinction in the frontend.
+stop_conditions:
+  - all acceptance criteria pass and required reviews accept
+  - a migration would be required
+  - work exceeds the approved scope
+  - loop budget is exhausted
+created_by: pm-orchestrator
+created_at: "2026-08-14T04:00:00Z"
+accepted_by: product-owner
+accepted_at: "2026-08-14T04:00:00Z"

@@ -26,6 +26,10 @@ def main() -> int:
     # Opt-in (AGENT_FORGE_EVAL_PERSIST=true) history recording; fail-soft — a broken
     # persistence call never fails the eval run itself.
     maybe_persist_report(report, base_url=base_url, corpus_filename=corpus_name)
+    # The condition the numbers were obtained under, on stderr as well as in the JSON, so a
+    # reader who only skims the terminal still sees it (OBS-003).
+    print(f"[eval] format coverage: {report['format_coverage']}", file=sys.stderr)
+    print(f"[eval] {report['format_qualification']}", file=sys.stderr)
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
 

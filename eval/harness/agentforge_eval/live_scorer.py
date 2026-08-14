@@ -4,6 +4,11 @@ import math
 import os
 from dataclasses import dataclass
 
+from agentforge_eval.ingest_formats import (
+    DEFAULT_INGESTION_FORMAT,
+    NO_DOCUMENT_FORMAT,
+)
+
 # Refusal is detected primarily by empty citations; these markers are a secondary signal.
 _REFUSAL_MARKERS = ("찾지 못", "cannot answer", "couldn't find")
 
@@ -127,6 +132,61 @@ def aggregate(
     trace_complete: list[bool] | None = None,
     grounding_scores: list[float | None] | None = None,
     grounding_min: float | None = None,
+    case_formats: dict[str, str] | None = None,
+    ingestion_lineage: dict[str, dict | None] | None = None,
+    document_formats: dict[str, str] | None = None,
+) -> dict:
+    """Corpus-wide metrics, the per-case rows, and the per-ingestion-format breakdown.
+
+    ``case_formats`` (case_id -> ingestion format), ``document_formats`` (doc_id -> format)
+    and ``ingestion_lineage`` (doc_id -> the product's recorded ``index_job.ingestion``
+    object, or None) are optional so every pre-existing caller keeps working; when they are
+    absent the format block says the coverage is UNKNOWN rather than assuming markdown.
+    """
+    if grounding_min is None:
+        grounding_min = grounding_min_from_env()
+    report = _metrics(
+        scores,
+        latencies_ms=latencies_ms,
+        trace_complete=trace_complete,
+        grounding_scores=grounding_scores,
+        grounding_min=grounding_min,
+    )
+    formats = format_report(
+        scores,
+        latencies_ms=latencies_ms,
+        trace_complete=trace_complete,
+        grounding_scores=grounding_scores,
+        grounding_min=grounding_min,
+        case_formats=case_formats,
+        ingestion_lineage=ingestion_lineage,
+        document_formats=document_formats,
+    )
+    # Duplicated at the top level on purpose: a reader (or a pasted excerpt) that sees only
+    # the headline metrics must still see the condition they were obtained under (OBS-003).
+    report["format_coverage"] = formats["coverage"]
+    report["format_qualification"] = formats["qualification"]
+    report["ingestion_formats"] = formats
+    report["cases"] = [
+        {
+            "case_id": s.case_id, "behavior": s.expected_behavior, "answered": s.answered,
+            "behavior_ok": s.behavior_ok, "citation_ok": s.citation_ok, "no_leak": s.no_leak,
+            "must_not_ok": s.must_not_ok, "points_ok": s.points_ok, "useful": s.useful,
+            "acl_ok": s.acl_ok,
+            "ingestion_format": (case_formats or {}).get(s.case_id),
+        }
+        for s in scores
+    ]
+    return report
+
+
+def _metrics(
+    scores: list[CaseScore],
+    *,
+    latencies_ms: list[int] | None,
+    trace_complete: list[bool] | None,
+    grounding_scores: list[float | None] | None,
+    grounding_min: float,
 ) -> dict:
     answer_cases = [s for s in scores if s.expected_behavior == "answer"]
     deny_cases = [s for s in scores if s.expected_behavior in ("policy_denied", "refuse")]
@@ -149,8 +209,6 @@ def aggregate(
     # tracks lexical overlap, which can and does read 100% on a fully hijacked run. See
     # apps/api/app/domain/grounding.py module docstring and
     # docs/40-delivery/live-demo-evidence-2026-08-12.md section 5.
-    if grounding_min is None:
-        grounding_min = grounding_min_from_env()
     measured_grounding = [g for g in (grounding_scores or []) if g is not None]
     lexical_overlap_pct = (
         _pct(sum(1 for g in measured_grounding if g >= grounding_min), len(measured_grounding))
@@ -175,12 +233,169 @@ def aggregate(
         # present, even when lexical_overlap_pct is None, so a reader can tell a 100%
         # reading apart from an untuned 0.0 default without going to read the source.
         "lexical_overlap_threshold": grounding_min,
-        "cases": [
-            {
-                "case_id": s.case_id, "behavior": s.expected_behavior, "answered": s.answered,
-                "behavior_ok": s.behavior_ok, "citation_ok": s.citation_ok, "no_leak": s.no_leak,
-                "must_not_ok": s.must_not_ok, "points_ok": s.points_ok, "useful": s.useful, "acl_ok": s.acl_ok,
-            }
-            for s in scores
-        ],
     }
+
+
+# --- Per-ingestion-format reporting (WO-2026-08-14-EVAL-FORMAT-COVERAGE-001) ----------------
+
+FORMAT_COVERAGE_MARKDOWN_ONLY = "markdown-only"
+FORMAT_COVERAGE_MIXED = "mixed"
+#: Nothing in this run declared how its documents were ingested. NOT the same as markdown-only:
+#: an undeclared corpus is almost certainly markdown, but "almost certainly" is not a
+#: measurement, and this whole Work Order exists because an unqualified number was read as a
+#: general one.
+FORMAT_COVERAGE_UNKNOWN = "unknown"
+
+MARKDOWN_ONLY_QUALIFICATION = (
+    "MARKDOWN-ONLY MEASUREMENT: every document measured in this run was ingested as "
+    "text/markdown, the only format whose heading detector runs (the product's "
+    "chunker_mime_type_for maps PDF and DOCX to text/plain). These numbers describe the BEST "
+    "CASE and do not transfer to the binary files departments actually upload, where the same "
+    "policy text collapses into fewer chunks that carry no clause path. Do not report them as "
+    "general quality."
+)
+
+UNKNOWN_COVERAGE_QUALIFICATION = (
+    "INGESTION FORMAT NOT DECLARED: this run recorded no ingestion format for its documents, "
+    "so no per-format claim can be made about these numbers -- in particular they must not be "
+    "read as covering PDF or DOCX uploads."
+)
+
+#: Where the citation-structure counts come from. The harness reads the product's own recorded
+#: lineage instead of re-deriving structure from citations, so the harness and the product
+#: cannot disagree about what ingestion produced (AC-03).
+CITATION_STRUCTURE_SOURCE = (
+    "product lineage: index_job.ingestion (one document_ingestions row per index attempt, "
+    "WO-2026-08-14-INGESTION-INSTRUMENTATION). The harness reports these recorded counts and "
+    "never recomputes chunk structure itself."
+)
+
+
+def format_coverage_of(formats) -> str:
+    measured = {f for f in formats if f and f != NO_DOCUMENT_FORMAT}
+    if not measured:
+        return FORMAT_COVERAGE_UNKNOWN
+    if measured == {DEFAULT_INGESTION_FORMAT}:
+        return FORMAT_COVERAGE_MARKDOWN_ONLY
+    return FORMAT_COVERAGE_MIXED
+
+
+def format_qualification_for(coverage: str, formats) -> str:
+    if coverage == FORMAT_COVERAGE_MARKDOWN_ONLY:
+        return MARKDOWN_ONLY_QUALIFICATION
+    if coverage == FORMAT_COVERAGE_UNKNOWN:
+        return UNKNOWN_COVERAGE_QUALIFICATION
+    listed = ", ".join(sorted(f for f in formats if f and f != NO_DOCUMENT_FORMAT))
+    return (
+        f"MIXED-FORMAT MEASUREMENT: documents in this run were ingested as {listed}. The "
+        "corpus-wide numbers above average across formats and are not a result for any one of "
+        "them; read ingestion_formats.by_format instead."
+    )
+
+
+def format_report(
+    scores: list[CaseScore],
+    *,
+    latencies_ms: list[int] | None = None,
+    trace_complete: list[bool] | None = None,
+    grounding_scores: list[float | None] | None = None,
+    grounding_min: float = 0.0,
+    case_formats: dict[str, str] | None = None,
+    ingestion_lineage: dict[str, dict | None] | None = None,
+    document_formats: dict[str, str] | None = None,
+) -> dict:
+    """The whole ingestion-format section of a report: coverage, metrics and structure."""
+    case_formats = case_formats or {}
+    document_formats = document_formats or {}
+    declared = set(case_formats.values()) | set(document_formats.values())
+    coverage = format_coverage_of(declared)
+    by_format: dict[str, dict] = {}
+    for fmt in sorted({case_formats[s.case_id] for s in scores if s.case_id in case_formats}):
+        keep = [i for i, s in enumerate(scores) if case_formats.get(s.case_id) == fmt]
+        by_format[fmt] = _metrics(
+            [scores[i] for i in keep],
+            latencies_ms=_subset(latencies_ms, keep),
+            trace_complete=_subset(trace_complete, keep),
+            grounding_scores=_subset(grounding_scores, keep),
+            grounding_min=grounding_min,
+        )
+    return {
+        "coverage": coverage,
+        "qualification": format_qualification_for(coverage, declared),
+        # NO_DOCUMENT_FORMAT is a bucket for cases about no document at all, not an ingestion
+        # format, so it is kept out of the format list while still appearing in by_format.
+        "formats_measured": sorted(f for f in declared if f and f != NO_DOCUMENT_FORMAT),
+        "case_counts": {fmt: metrics["total"] for fmt, metrics in by_format.items()},
+        "by_format": by_format,
+        "citation_structure": citation_structure_by_format(
+            document_formats=document_formats, ingestion_lineage=ingestion_lineage or {}
+        ),
+        "citation_structure_source": CITATION_STRUCTURE_SOURCE,
+    }
+
+
+def _subset(values: list | None, keep: list[int]) -> list | None:
+    if values is None:
+        return None
+    return [values[i] for i in keep if i < len(values)]
+
+
+def citation_structure_by_format(
+    *, document_formats: dict[str, str], ingestion_lineage: dict[str, dict | None]
+) -> dict:
+    """Per format, what the PRODUCT recorded about the documents this run ingested (AC-03).
+
+    Every count here is copied out of the product's lineage object; the harness adds only
+    sums and a percentage of them. ``structured_chunk_pct`` is the share of chunks that
+    carried a clause path -- 100% for markdown, and the number that collapses for a binary
+    format. Documents whose lineage the product did not return are counted separately and
+    excluded from the sums, so a backend without instrumentation reads as UNMEASURED rather
+    than as zero structure.
+    """
+    result: dict[str, dict] = {}
+    for doc_id, fmt in sorted(document_formats.items()):
+        bucket = result.setdefault(
+            fmt,
+            {
+                "documents": 0,
+                "documents_with_lineage": 0,
+                "chunk_count": 0,
+                "structured_chunk_count": 0,
+                "structured_chunk_pct": None,
+                "converted_mime_types": [],
+                "converter_chains": [],
+                "extraction_statuses": [],
+                "warning_counts": {},
+                "documents_missing_lineage": [],
+            },
+        )
+        bucket["documents"] += 1
+        lineage = ingestion_lineage.get(doc_id)
+        if not lineage:
+            bucket["documents_missing_lineage"].append(doc_id)
+            continue
+        bucket["documents_with_lineage"] += 1
+        bucket["chunk_count"] += lineage.get("chunk_count") or 0
+        bucket["structured_chunk_count"] += lineage.get("structured_chunk_count") or 0
+        for key, field in (
+            ("converted_mime_types", "converted_mime_type"),
+            ("converter_chains", "converter_chain"),
+            ("extraction_statuses", "extraction_status"),
+        ):
+            value = lineage.get(field)
+            if value and value not in bucket[key]:
+                bucket[key].append(value)
+        for warning in lineage.get("warnings") or []:
+            bucket["warning_counts"][warning] = bucket["warning_counts"].get(warning, 0) + 1
+    for bucket in result.values():
+        if not bucket["documents_with_lineage"]:
+            bucket["chunk_count"] = None
+            bucket["structured_chunk_count"] = None
+        elif bucket["chunk_count"]:
+            bucket["structured_chunk_pct"] = _pct(
+                bucket["structured_chunk_count"], bucket["chunk_count"]
+            )
+        bucket["converted_mime_types"].sort()
+        bucket["converter_chains"].sort()
+        bucket["extraction_statuses"].sort()
+    return result

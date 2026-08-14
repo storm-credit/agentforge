@@ -169,6 +169,33 @@ class IndexJobProcess(BaseModel):
     )
 
 
+class DocumentIngestionRead(BaseModel):
+    """Lineage for one index attempt (WO-2026-08-14-INGESTION-INSTRUMENTATION).
+
+    ``null`` means NOT OBSERVED and is deliberately distinct from ``0``: a client must not
+    render an unobserved count as "0 chunks". ``structured_chunk_count`` next to
+    ``chunk_count`` is what tells an operator whether this document's citations can be
+    verified against the original file at all.
+    """
+
+    id: str
+    document_id: str
+    index_job_id: str | None
+    extraction_status: str
+    source_mime_type: str
+    converted_mime_type: str | None
+    converter_chain: str | None
+    chunk_count: int | None
+    structured_chunk_count: int | None
+    extracted_char_count: int | None
+    source_unit_kind: str | None
+    source_unit_count: int | None
+    warnings: list[str]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class IndexJobRead(BaseModel):
     id: str
     document_id: str
@@ -180,6 +207,9 @@ class IndexJobRead(BaseModel):
     error_code: str | None
     error_message: str | None
     artifact_uri: str | None
+    #: What this attempt's conversion actually produced. ``null`` for jobs recorded before
+    #: this instrumentation existed, and for a queued job that has not run yet.
+    ingestion: DocumentIngestionRead | None = None
     started_at: datetime | None
     finished_at: datetime | None
     created_at: datetime

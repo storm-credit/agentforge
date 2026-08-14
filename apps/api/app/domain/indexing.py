@@ -4,6 +4,12 @@ Runs the deterministic parse -> chunk -> upsert pipeline for an index job and
 records the job state transitions (running -> succeeded/failed). The worker reads
 its parameters from ``job.config`` so it can drive both the synchronous create path
 and the queued/process path with the same logic.
+
+It also writes ONE append-only ``document_ingestions`` row per attempt -- success or failure
+-- recording what the conversion produced (WO-2026-08-14-INGESTION-INSTRUMENTATION). That
+recording is strictly an observation: this module hands the counts to
+``app.domain.ingestion_lineage`` and changes nothing about conversion, chunking or the
+citation locator.
 """
 
 from datetime import UTC, datetime
@@ -13,12 +19,21 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.principal import Principal
 from app.domain.acl import confidentiality_rank, document_can_be_indexed
-from app.domain.models import Document, DocumentChunk, IndexJob
+from app.domain.ingestion_lineage import (
+    EXTRACTION_FAILED,
+    EXTRACTION_OK,
+    IngestionLineage,
+    build_lineage,
+)
+from app.domain.models import Document, DocumentChunk, DocumentIngestion, IndexJob
 from app.domain.parsers import (
     SUPPORTED_BINARY_MIME_TYPES,
+    TEXT_IDENTITY_CONVERTER,
+    UNIT_LINE,
     DocumentExtractionError,
+    ExtractedDocument,
     chunker_mime_type_for,
-    extract_text_from_bytes,
+    extract_document,
     parse_txt_md_document,
 )
 from app.domain.vector import VectorUpsertInput, get_vector_store
@@ -54,82 +69,90 @@ def run_index_job(
     job.stage = "parse"
 
     if not document_can_be_indexed(document):
-        job.status = "failed"
-        job.error_code = "DOCUMENT_NOT_INDEXABLE"
-        job.error_message = (
-            "Document is missing ACL metadata, is not searchable, or is excluded by confidentiality."
-        )
-        job.finished_at = datetime.now(UTC)
-        document.status = "index_failed"
-        write_audit_event(
-            db,
+        _fail_attempt(
+            db=db,
+            document=document,
+            job=job,
             principal=principal,
-            event_type="document.index_failed",
-            target_type="document",
-            target_id=document.id,
-            payload={"index_job_id": job.id, "error_code": job.error_code},
+            error_code="DOCUMENT_NOT_INDEXABLE",
+            error_message=(
+                "Document is missing ACL metadata, is not searchable, or is excluded by "
+                "confidentiality."
+            ),
+            # Nothing was converted, so nothing but the declared MIME type is known. The row
+            # still exists: an attempt that never reached the converter is itself a fact.
+            lineage=build_lineage(
+                extraction_status=EXTRACTION_FAILED, source_mime_type=document.mime_type
+            ),
         )
         return
 
+    extraction: ExtractedDocument | None = None
+    converted_mime_type: str | None = None
     try:
-        text_for_chunking = _source_text_for_index(
+        extraction = _extraction_for_index(
             document=document,
             source_text=source_text,
             source_bytes=source_bytes,
         )
+        converted_mime_type = chunker_mime_type_for(document.mime_type)
         parsed_chunks = parse_txt_md_document(
             document_id=document.id,
             document_version=document.effective_date or "v0",
             title=document.title,
-            mime_type=chunker_mime_type_for(document.mime_type),
-            source_text=text_for_chunking,
+            mime_type=converted_mime_type,
+            source_text=extraction.text,
             target_tokens=target_tokens,
             overlap_tokens=overlap_tokens,
         )
     except DocumentExtractionError as exc:
-        job.status = "failed"
-        job.error_code = exc.code
-        job.error_message = str(exc)
-        job.finished_at = datetime.now(UTC)
-        document.status = "index_failed"
-        write_audit_event(
-            db,
+        _fail_attempt(
+            db=db,
+            document=document,
+            job=job,
             principal=principal,
-            event_type="document.index_failed",
-            target_type="document",
-            target_id=document.id,
-            payload={"index_job_id": job.id, "error_code": job.error_code},
+            error_code=exc.code,
+            error_message=str(exc),
+            lineage=build_lineage(
+                extraction_status=EXTRACTION_FAILED,
+                source_mime_type=document.mime_type,
+                converted_mime_type=converted_mime_type,
+                extraction=extraction,
+            ),
         )
         return
     except ValueError as exc:
-        job.status = "failed"
-        job.error_code = "UNSUPPORTED_MIME_TYPE"
-        job.error_message = str(exc)
-        job.finished_at = datetime.now(UTC)
-        document.status = "index_failed"
-        write_audit_event(
-            db,
+        _fail_attempt(
+            db=db,
+            document=document,
+            job=job,
             principal=principal,
-            event_type="document.index_failed",
-            target_type="document",
-            target_id=document.id,
-            payload={"index_job_id": job.id, "error_code": job.error_code},
+            error_code="UNSUPPORTED_MIME_TYPE",
+            error_message=str(exc),
+            lineage=build_lineage(
+                extraction_status=EXTRACTION_FAILED,
+                source_mime_type=document.mime_type,
+                converted_mime_type=converted_mime_type,
+                extraction=extraction,
+            ),
         )
         return
 
     if not parsed_chunks:
-        job.status = "failed"
-        job.error_code = "EMPTY_EXTRACTED_TEXT"
-        job.error_message = "Document content did not produce any indexable chunks."
-        job.finished_at = datetime.now(UTC)
-        document.status = "index_failed"
-        write_audit_event(
-            db,
+        _fail_attempt(
+            db=db,
+            document=document,
+            job=job,
             principal=principal,
-            event_type="document.index_failed",
-            target_type="document",
-            target_id=document.id,
-            payload={"index_job_id": job.id, "error_code": job.error_code},
+            error_code="EMPTY_EXTRACTED_TEXT",
+            error_message="Document content did not produce any indexable chunks.",
+            lineage=build_lineage(
+                extraction_status=EXTRACTION_FAILED,
+                source_mime_type=document.mime_type,
+                converted_mime_type=converted_mime_type,
+                extraction=extraction,
+                chunks=parsed_chunks,
+            ),
         )
         return
 
@@ -170,15 +193,23 @@ def run_index_job(
             )
         )
     except Exception as exc:  # noqa: BLE001 - fail the job, never store half-indexed chunks
-        job.status = "failed"
-        job.error_code = "VECTOR_UPSERT_FAILED"
-        job.error_message = str(exc)
-        job.finished_at = datetime.now(UTC)
-        document.status = "index_failed"
-        write_audit_event(
-            db, principal=principal, event_type="document.index_failed",
-            target_type="document", target_id=document.id,
-            payload={"index_job_id": job.id, "error_code": job.error_code},
+        _fail_attempt(
+            db=db,
+            document=document,
+            job=job,
+            principal=principal,
+            error_code="VECTOR_UPSERT_FAILED",
+            error_message=str(exc),
+            # Conversion and chunking DID complete here; only the vector store failed. The
+            # counts are real observations and are kept, which is what makes "the converter
+            # was fine, the store was not" distinguishable after the fact.
+            lineage=build_lineage(
+                extraction_status=EXTRACTION_FAILED,
+                source_mime_type=document.mime_type,
+                converted_mime_type=converted_mime_type,
+                extraction=extraction,
+                chunks=parsed_chunks,
+            ),
         )
         return
     vector_refs = {result.chunk_id: result.vector_ref for result in upsert_results}
@@ -220,6 +251,18 @@ def run_index_job(
     # requires PRIVILEGED_ROLES to reindex -- closing the index_failed side door that a
     # status-only gate leaves open.
     document.has_been_indexed = True
+    _record_ingestion(
+        db=db,
+        document=document,
+        job=job,
+        lineage=build_lineage(
+            extraction_status=EXTRACTION_OK,
+            source_mime_type=document.mime_type,
+            converted_mime_type=converted_mime_type,
+            extraction=extraction,
+            chunks=parsed_chunks,
+        ),
+    )
     write_audit_event(
         db,
         principal=principal,
@@ -230,15 +273,96 @@ def run_index_job(
     )
 
 
-def _source_text_for_index(
+def _extraction_for_index(
     *,
     document: Document,
     source_text: str | None,
     source_bytes: bytes | None,
-) -> str:
+) -> ExtractedDocument:
+    """The text this attempt will chunk, plus what produced it.
+
+    The binary branch is ``extract_document``, whose ``.text`` is the identical string
+    ``extract_text_from_bytes`` returned before this Work Order (it is now that function's
+    implementation).
+
+    The TXT/MD branch deliberately does NOT go through ``extract_document``: caller-supplied
+    ``source_text`` has never been stripped or rejected-when-empty on this path, and routing it
+    through the upload extractor would start raising ``EMPTY_EXTRACTED_TEXT`` where the code
+    previously produced an empty chunk list and failed with the same code by a different route.
+    Instrumentation must not change control flow, so the string is passed through untouched and
+    only DESCRIBED here.
+    """
     if document.mime_type in SUPPORTED_BINARY_MIME_TYPES:
-        return extract_text_from_bytes(
+        return extract_document(
             mime_type=document.mime_type,
             content=source_bytes or b"",
         )
-    return source_text or ""
+    text = source_text or ""
+    return ExtractedDocument(
+        text=text,
+        converter=TEXT_IDENTITY_CONVERTER,
+        source_unit_kind=UNIT_LINE,
+        source_unit_count=len(text.split("\n")),
+    )
+
+
+def _fail_attempt(
+    *,
+    db: Session,
+    document: Document,
+    job: IndexJob,
+    principal: Principal,
+    error_code: str,
+    error_message: str,
+    lineage: IngestionLineage,
+) -> None:
+    """Record a failed attempt exactly as before, plus its lineage row.
+
+    Every failure branch in this module previously repeated these six statements verbatim;
+    they are collected here so the lineage write cannot be forgotten in one branch. The
+    statements, their order, and the audit payload are unchanged.
+    """
+    job.status = "failed"
+    job.error_code = error_code
+    job.error_message = error_message
+    job.finished_at = datetime.now(UTC)
+    document.status = "index_failed"
+    _record_ingestion(db=db, document=document, job=job, lineage=lineage)
+    write_audit_event(
+        db,
+        principal=principal,
+        event_type="document.index_failed",
+        target_type="document",
+        target_id=document.id,
+        payload={"index_job_id": job.id, "error_code": job.error_code},
+    )
+
+
+def _record_ingestion(
+    *,
+    db: Session,
+    document: Document,
+    job: IndexJob,
+    lineage: IngestionLineage,
+) -> None:
+    """APPEND a lineage row. Never updates an existing one -- that is the whole point.
+
+    There is no lookup-then-update here and there must never be one: a re-index adds a row so
+    the population a converter defect touched stays identifiable.
+    """
+    db.add(
+        DocumentIngestion(
+            document_id=document.id,
+            index_job_id=job.id,
+            extraction_status=lineage.extraction_status,
+            source_mime_type=lineage.source_mime_type,
+            converted_mime_type=lineage.converted_mime_type,
+            converter_chain=lineage.converter_chain,
+            chunk_count=lineage.chunk_count,
+            structured_chunk_count=lineage.structured_chunk_count,
+            extracted_char_count=lineage.extracted_char_count,
+            source_unit_kind=lineage.source_unit_kind,
+            source_unit_count=lineage.source_unit_count,
+            warnings=list(lineage.warnings),
+        )
+    )

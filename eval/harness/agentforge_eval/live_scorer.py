@@ -322,7 +322,9 @@ def format_report(
     return {
         "coverage": coverage,
         "qualification": format_qualification_for(coverage, declared),
-        "formats_measured": sorted(f for f in declared if f),
+        # NO_DOCUMENT_FORMAT is a bucket for cases about no document at all, not an ingestion
+        # format, so it is kept out of the format list while still appearing in by_format.
+        "formats_measured": sorted(f for f in declared if f and f != NO_DOCUMENT_FORMAT),
         "case_counts": {fmt: metrics["total"] for fmt, metrics in by_format.items()},
         "by_format": by_format,
         "citation_structure": citation_structure_by_format(

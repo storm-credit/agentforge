@@ -16,6 +16,13 @@ import {
   uploadDocument,
 } from "../lib/api";
 import { useDemoRole } from "../lib/useDemoRole";
+import {
+  lineageBadgeClass,
+  lineageDetail,
+  lineageLabel,
+  lineageReason,
+  lineageState,
+} from "../lib/lineage";
 
 export default function KnowledgePage() {
   // UX only: the server enforces RBAC on these mutations regardless (403 for
@@ -313,6 +320,7 @@ export default function KnowledgePage() {
                       {d.status === "archived" && (
                         <span className="badge warn" data-testid="archived-badge">보관됨</span>
                       )}
+                      <LineageBadge doc={d} />
                       {isPrivileged && d.status !== "archived" && (
                         <>
                           <button className="button secondary sm" data-testid="acl-edit"
@@ -326,6 +334,7 @@ export default function KnowledgePage() {
                           onClick={() => startRestore(d)}>복원</button>
                       )}
                     </div>
+                    <LineageNote doc={d} />
                     {restoreEdit?.docId === d.id && (
                       <div className="card" data-testid="restore-form" style={{ marginTop: "6px", padding: "var(--space-3)" }}>
                         <p data-testid="restore-note" className="note warn" style={{ margin: "0 0 6px" }}>
@@ -393,4 +402,46 @@ export default function KnowledgePage() {
 
 function isBinaryUpload(name: string) {
   return /\.(pdf|docx)$/i.test(name);
+}
+
+// ---------------------------------------------------------------------------------------
+// Ingestion lineage (WO-2026-08-14-LINEAGE-VISIBILITY-002)
+//
+// PDF and DOCX are handed to the chunker as text/plain, so heading detection never runs:
+// the document collapses to one chunk and every citation degrades to "{제목} / body / lines
+// N-M" — line numbers into an extracted text stream, pointing at nothing a reader can open.
+// The backend records that per index attempt; these two components render what it recorded.
+//
+// INFORMATIONAL ONLY (AC-05). Nothing here hides a row, blocks an action, disables a control
+// or triggers a re-index. Every state is rendered; none is filtered out.
+//
+// No verdict is computed here — see lib/lineage.ts.
+// ---------------------------------------------------------------------------------------
+function LineageBadge({ doc }: { doc: DocumentSummary }) {
+  const state = lineageState(doc.ingestion);
+  return (
+    <span
+      className={lineageBadgeClass(state)}
+      data-testid="doc-lineage"
+      data-lineage-state={state}
+      title={lineageReason(doc.ingestion)}
+    >
+      {lineageLabel(state)}
+    </span>
+  );
+}
+
+function LineageNote({ doc }: { doc: DocumentSummary }) {
+  const detail = lineageDetail(doc.ingestion);
+  return (
+    <p className="meta" style={{ margin: "2px 0 0" }}>
+      <span data-testid="doc-lineage-reason">{lineageReason(doc.ingestion)}</span>
+      {detail && (
+        <>
+          {" "}
+          <span data-testid="doc-lineage-detail">{detail}</span>
+        </>
+      )}
+    </p>
+  );
 }

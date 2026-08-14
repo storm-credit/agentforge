@@ -1,4 +1,7 @@
 import { roleHeaders } from "./demoRole";
+import type { DocumentIngestion } from "./lineage";
+
+export type { DocumentIngestion };
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
@@ -166,6 +169,11 @@ export async function validateVersion(
 export type DocumentSummary = {
   id: string; knowledge_source_id: string; title: string; status: string;
   confidentiality_level: string; access_groups: string[];
+  // The MOST RECENT index attempt's lineage, or null when the backend recorded none
+  // (WO-2026-08-14-LINEAGE-VISIBILITY-002). Optional on the type so an older backend
+  // that omits the field is treated as "no recorded lineage" rather than crashing —
+  // and never as healthy. See lib/lineage.ts for the state mapping.
+  ingestion?: DocumentIngestion | null;
 };
 
 export async function listDocuments(includeArchived = false): Promise<DocumentSummary[]> {

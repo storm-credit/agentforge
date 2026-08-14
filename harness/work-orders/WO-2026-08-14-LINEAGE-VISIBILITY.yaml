@@ -1,0 +1,193 @@
+schema_version: agentforge.work_order/v1
+work_order_id: WO-2026-08-14-LINEAGE-VISIBILITY-001
+title: Show the administrator which documents lost their citation structure
+status: accepted
+problem: >-
+  WO-2026-08-14-INGESTION-INSTRUMENTATION states its intended outcome as "an administrator can
+  identify documents whose citations collapsed", and it delivered the recording half: every
+  index attempt now stores what the conversion produced, including how many chunks carried a
+  section path and warning codes such as HEADING_DETECTION_UNAVAILABLE. That Work Order
+  deliberately excluded frontend changes, so the signal exists in the database and in the
+  index-job read model and is visible to nobody. The Knowledge page still shows only a status
+  badge and a chunk count, which is exactly the display that made the collapse invisible in the
+  first place - a document whose citations degraded to "body / lines N-M" looks identical to
+  one that kept its clause structure. Until the console renders the signal, the stated outcome
+  is not met and an administrator ingesting for several departments has no way to tell a usable
+  document from one that indexed successfully and cannot be cited.
+intended_outcome: >-
+  An administrator looking at the knowledge documents list can tell which documents lost their
+  citation structure, and can see why, without querying the database.
+parent_issue_refs:
+  - "#162"
+scope:
+  included:
+    - surface the recorded lineage on the knowledge documents view
+    - distinguish a document that kept its structure from one that did not
+    - show the recorded reason, not a re-derived judgement
+    - Korean product copy consistent with the localized console
+    - Playwright coverage for both states
+  excluded:
+    - any change under apps/api
+    - any change to conversion, chunking, or citation behaviour
+    - recomputing structure quality in the frontend
+    - inventing a quality score, grade, or percentage the backend does not record
+    - blocking, hiding, or auto-retrying a document based on the signal
+    - changes to the eval harness
+  affected_components:
+    - frontend-web
+  affected_trust_boundaries: []
+  affected_data_classifications:
+    - internal
+  runtime_behavior_change: false
+requirements:
+  - requirement_id: UX-003
+    description: >-
+      A recorded quality signal shall be visible to the operator who can act on it.
+    authority_ref: harness/work-orders/WO-2026-08-14-INGESTION-INSTRUMENTATION.yaml
+    adr_refs: []
+  - requirement_id: UX-004
+    description: >-
+      The interface shall display what was recorded and shall not present a derived judgement
+      as a measurement.
+    authority_ref: docs/40-delivery/live-demo-evidence-2026-08-12.md
+    adr_refs: []
+  - requirement_id: DEL-003
+    description: Completion shall be supported by an Evidence Package.
+    authority_ref: docs/40-delivery/evidence-package-guide.md
+    adr_refs: []
+assigned_roles:
+  - agent_role_id: pm-orchestrator
+    responsibility: Accept scope, review copy, and merge.
+    accountable: true
+  - agent_role_id: frontend-specialist
+    responsibility: >-
+      Render the recorded signal without recomputing or embellishing it.
+    accountable: false
+inputs:
+  - name: instrumentation_work_order
+    reference: harness/work-orders/WO-2026-08-14-INGESTION-INSTRUMENTATION.yaml
+    required: true
+  - name: knowledge_page
+    reference: apps/web/app/knowledge/page.tsx
+    required: true
+  - name: normalization_design
+    reference: docs/10-architecture/ingestion-normalization-design.md
+    required: true
+deliverables:
+  - name: lineage_display
+    path_or_reference: apps/web/app/knowledge/page.tsx
+    owner_role: frontend-specialist
+  - name: api_types
+    path_or_reference: apps/web/app/lib/api.ts
+    owner_role: frontend-specialist
+  - name: e2e_coverage
+    path_or_reference: apps/web/tests
+    owner_role: frontend-specialist
+acceptance_criteria:
+  - criterion_id: AC-01
+    description: >-
+      A document whose chunks all lack a section path is visibly distinguishable from one
+      whose chunks carry it, on the documents list, without opening anything.
+    verification: Playwright test over both fixtures asserting the distinction is rendered.
+    blocker: true
+  - criterion_id: AC-02
+    description: >-
+      The reason shown is the code the backend recorded, not a phrase the frontend inferred.
+    verification: >-
+      Diff review; test asserting the rendered reason maps from the recorded warning value.
+    blocker: true
+  - criterion_id: AC-03
+    description: >-
+      A document with no recorded lineage - never indexed, or indexed before the
+      instrumentation existed - renders as unknown rather than as healthy or as collapsed.
+    verification: Test with a fixture carrying no lineage.
+    blocker: true
+  - criterion_id: AC-04
+    description: >-
+      The signal is informational only. Nothing is hidden, blocked, or retried because of it.
+    verification: Diff review.
+    blocker: true
+  - criterion_id: AC-05
+    description: >-
+      Copy is Korean and consistent with the rest of the console; no English chrome is
+      introduced.
+    verification: Manual review of every added string.
+    blocker: true
+  - criterion_id: AC-06
+    description: >-
+      No file under apps/api or eval changed; test ids for existing elements are unchanged;
+      tsc clean and CI green.
+    verification: Diff review; test-id inventory before and after; GitHub Actions.
+    blocker: true
+verification_plan:
+  - check_id: E2E-BOTH-STATES
+    type: e2e
+    command_or_workflow: node node_modules/@playwright/test/cli.js test
+    expected_result: Both the structured and the collapsed fixture render distinguishably.
+    evidence_destination: Evidence Package verification section.
+  - check_id: NO-BACKEND-CHANGE
+    type: manual_review
+    expected_result: No file under apps/api or eval is modified.
+    evidence_destination: Evidence Package verification section.
+  - check_id: TESTID-DIFF
+    type: manual_review
+    command_or_workflow: compare data-testid inventory before and after
+    expected_result: existing ids unchanged
+    evidence_destination: Evidence Package verification section.
+  - check_id: CI-ALL
+    type: integration
+    command_or_workflow: GitHub Actions Backend, Frontend and E2E jobs
+    expected_result: success on the exact candidate commit
+    evidence_destination: Evidence Package verification section.
+required_reviews:
+  - reviewer_role: product-architect
+    focus:
+      - the display states what was recorded and claims nothing more
+      - copy reads as product Korean
+    blocking: true
+  - reviewer_role: independent-release-governor
+    focus:
+      - scope adherence
+      - no backend or harness change
+      - CI freshness
+    blocking: true
+prohibited_actions:
+  - edit main directly
+  - change any file under apps/api or eval
+  - recompute structure quality in the frontend
+  - display a score, grade, or percentage the backend does not record
+  - hide, block, or auto-retry a document because of this signal
+  - present a document with no recorded lineage as healthy
+  - merge before required CI and review
+dependencies:
+  - description: >-
+      The ingestion lineage recorded per index attempt and exposed on the index-job read model.
+    type: decision
+    status: available
+    owner: pm-orchestrator
+    reference: harness/work-orders/WO-2026-08-14-INGESTION-INSTRUMENTATION.yaml
+loop_budget:
+  self_review_passes: 2
+  formal_rework_passes: 1
+  same_failure_before_escalation: 2
+escalation:
+  - trigger: >-
+      The documents list does not carry enough information to render the signal without a
+      backend change.
+    target_role: pm-orchestrator
+    action: >-
+      Stop and report what is missing; a backend change belongs to its own Work Order.
+  - trigger: >-
+      Rendering the recorded reason honestly would require inventing a user-facing phrase for a
+      condition the backend does not distinguish.
+    target_role: pm-orchestrator
+    action: Stop and report rather than inventing the distinction in the frontend.
+stop_conditions:
+  - all acceptance criteria pass and required reviews accept
+  - a backend change would be required
+  - work exceeds the approved scope
+  - loop budget is exhausted
+created_by: pm-orchestrator
+created_at: "2026-08-14T03:00:00Z"
+accepted_by: product-owner
+accepted_at: "2026-08-14T03:00:00Z"

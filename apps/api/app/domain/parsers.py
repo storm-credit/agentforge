@@ -1,6 +1,7 @@
 import hashlib
 import re
 from dataclasses import dataclass
+from importlib.metadata import PackageNotFoundError, version as _package_version
 from io import BytesIO
 
 
@@ -13,6 +14,18 @@ SUPPORTED_BINARY_MIME_TYPES = {PDF_MIME_TYPE, DOCX_MIME_TYPE}
 SUPPORTED_DOCUMENT_MIME_TYPES = SUPPORTED_TEXT_MIME_TYPES | SUPPORTED_BINARY_MIME_TYPES
 MAX_EXTRACT_BYTES = 10 * 1024 * 1024
 MAX_PDF_PAGES = 50
+
+
+#: What produced the text when no format conversion happened at all (TXT/MD upload bytes).
+TEXT_IDENTITY_CONVERTER = "identity/decode-utf8"
+
+#: The unit an extractor counts, so ``extracted_char_count / source_unit_count`` means
+#: something. Only ``page`` supports the low-density signal: a page is a fixed-size physical
+#: surface, so "too few characters per page" is evidence of an image-only (scanned) page. A
+#: paragraph or a line has no expected size, so the same ratio would be noise.
+UNIT_PAGE = "page"
+UNIT_PARAGRAPH = "paragraph"
+UNIT_LINE = "line"
 
 
 class DocumentExtractionError(ValueError):
@@ -140,14 +153,39 @@ def _emit_window_chunks(
         i += step
 
 
-def extract_text_from_bytes(
+@dataclass(frozen=True)
+class ExtractedDocument:
+    """What one extraction produced, alongside the text itself.
+
+    The extra fields exist so an index attempt can RECORD what the conversion produced
+    (WO-2026-08-14-INGESTION-INSTRUMENTATION). They are observations of the extractor's own
+    inputs -- which library ran, how many pages/paragraphs/lines it saw, how many characters
+    came out -- and nothing here is a judgement about quality.
+
+    ``text`` is the same string ``extract_text_from_bytes`` has always returned: that function
+    is now a wrapper around this one rather than a parallel implementation, so the two cannot
+    drift apart.
+    """
+
+    text: str
+    #: Extractor and its installed version, e.g. ``pypdf/6.14.2``.
+    converter: str
+    #: One of ``UNIT_PAGE`` / ``UNIT_PARAGRAPH`` / ``UNIT_LINE``.
+    source_unit_kind: str
+    #: How many of those units the extractor saw -- INCLUDING ones that yielded no text.
+    #: For PDF this is the page count from the document itself, which is exactly what makes
+    #: a partially scanned file detectable: the pages are there, the characters are not.
+    source_unit_count: int
+
+
+def extract_document(
     *,
     mime_type: str,
     content: bytes,
     max_bytes: int = MAX_EXTRACT_BYTES,
     max_pdf_pages: int = MAX_PDF_PAGES,
-) -> str:
-    """Extract plain text from trusted-size upload bytes.
+) -> ExtractedDocument:
+    """Extract plain text from trusted-size upload bytes, plus what the extractor saw.
 
     The result intentionally feeds the existing text/markdown chunker, so PDF/DOCX
     parsing does not alter the downstream embedding, ACL, or Qdrant payload path.
@@ -160,12 +198,19 @@ def extract_text_from_bytes(
             f"Uploaded file exceeds the {max_bytes} byte extraction limit.",
         )
 
+    unit_count: int | None = None
     if mime_type in SUPPORTED_TEXT_MIME_TYPES:
         text = _decode_text(content)
+        converter = TEXT_IDENTITY_CONVERTER
+        unit_kind = UNIT_LINE
     elif mime_type == PDF_MIME_TYPE:
-        text = _extract_pdf_text(content, max_pdf_pages=max_pdf_pages)
+        text, unit_count = _extract_pdf_text(content, max_pdf_pages=max_pdf_pages)
+        converter = f"pypdf/{_installed_version('pypdf')}"
+        unit_kind = UNIT_PAGE
     elif mime_type == DOCX_MIME_TYPE:
-        text = _extract_docx_text(content)
+        text, unit_count = _extract_docx_text(content)
+        converter = f"python-docx/{_installed_version('python-docx')}"
+        unit_kind = UNIT_PARAGRAPH
     else:
         raise DocumentExtractionError(
             "UNSUPPORTED_MIME_TYPE",
@@ -178,7 +223,29 @@ def extract_text_from_bytes(
             "EMPTY_EXTRACTED_TEXT",
             "Uploaded file did not contain extractable text.",
         )
-    return normalized_text
+    if unit_count is None:
+        unit_count = len(normalized_text.split("\n"))
+    return ExtractedDocument(
+        text=normalized_text,
+        converter=converter,
+        source_unit_kind=unit_kind,
+        source_unit_count=unit_count,
+    )
+
+
+def extract_text_from_bytes(
+    *,
+    mime_type: str,
+    content: bytes,
+    max_bytes: int = MAX_EXTRACT_BYTES,
+    max_pdf_pages: int = MAX_PDF_PAGES,
+) -> str:
+    return extract_document(
+        mime_type=mime_type,
+        content=content,
+        max_bytes=max_bytes,
+        max_pdf_pages=max_pdf_pages,
+    ).text
 
 
 def extract_text(
@@ -267,7 +334,19 @@ def _decode_text(content: bytes) -> str:
         return content.decode("utf-8", errors="replace")
 
 
-def _extract_pdf_text(content: bytes, *, max_pdf_pages: int) -> str:
+def _installed_version(distribution: str) -> str:
+    """The installed version of an extractor library, or ``unknown``.
+
+    Recorded so "which documents did the broken converter version touch" is answerable. It
+    must never be able to fail an index attempt, hence the fallback.
+    """
+    try:
+        return _package_version(distribution)
+    except PackageNotFoundError:  # pragma: no cover - dependency is declared
+        return "unknown"
+
+
+def _extract_pdf_text(content: bytes, *, max_pdf_pages: int) -> tuple[str, int]:
     try:
         from pypdf import PdfReader
     except ImportError as exc:  # pragma: no cover - dependency is declared
@@ -304,10 +383,12 @@ def _extract_pdf_text(content: bytes, *, max_pdf_pages: int) -> str:
             ) from exc
         if page_text.strip():
             page_texts.append(page_text.strip())
-    return "\n\n".join(page_texts)
+    # The page COUNT is the document's, not the count of pages that yielded text: a scanned
+    # page is a real page that contributed nothing, and that difference is the whole signal.
+    return "\n\n".join(page_texts), len(reader.pages)
 
 
-def _extract_docx_text(content: bytes) -> str:
+def _extract_docx_text(content: bytes) -> tuple[str, int]:
     try:
         from docx import Document as DocxDocument
     except ImportError as exc:  # pragma: no cover - dependency is declared
@@ -327,4 +408,4 @@ def _extract_docx_text(content: bytes) -> str:
             cells = [cell.text.strip() for cell in row.cells if cell.text.strip()]
             if cells:
                 parts.append(" | ".join(cells))
-    return "\n\n".join(parts)
+    return "\n\n".join(parts), len(parts)

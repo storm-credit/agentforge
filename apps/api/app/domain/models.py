@@ -151,6 +151,13 @@ class Document(Base):
         cascade="all, delete-orphan",
         order_by="DocumentChunk.chunk_index",
     )
+    #: Append-only ingestion lineage, oldest first. Cascade-deletes only when the DOCUMENT
+    #: itself is deleted (the product archives instead, which keeps the whole history).
+    ingestions: Mapped[list["DocumentIngestion"]] = relationship(
+        back_populates="document",
+        cascade="all, delete-orphan",
+        order_by="DocumentIngestion.created_at",
+    )
 
 
 class IndexJob(Base):
@@ -174,6 +181,78 @@ class IndexJob(Base):
     )
 
     document: Mapped[Document] = relationship(back_populates="index_jobs")
+    ingestions: Mapped[list["DocumentIngestion"]] = relationship(
+        back_populates="index_job",
+        cascade="all, delete-orphan",
+        order_by="DocumentIngestion.created_at",
+    )
+
+    @property
+    def ingestion(self) -> "DocumentIngestion | None":
+        """The lineage this job recorded, for the read model.
+
+        A list underneath a singular accessor on purpose: the table is append-only, so a job
+        that somehow ran twice keeps BOTH rows and this returns the latest rather than the
+        schema quietly forbidding the second one.
+        """
+        return self.ingestions[-1] if self.ingestions else None
+
+
+class DocumentIngestion(Base):
+    """APPEND-ONLY lineage: one row per index attempt, never updated, never overwritten.
+
+    WO-2026-08-14-INGESTION-INSTRUMENTATION-001. This is not a column on ``documents`` and
+    must not become one. A re-index would overwrite the previous attempt's values, and the
+    question a converter defect forces -- "which documents were indexed by the broken version,
+    and what did it produce for them?" -- is exactly the question last-write-wins destroys.
+    Same reasoning as ``documents.has_been_indexed`` (0005): the durable record and the
+    volatile current state are different facts and need different storage.
+
+    NULL means NOT OBSERVED and is distinct from 0. A row with ``chunk_count = 0`` says the
+    attempt produced no chunks; a row with ``chunk_count = NULL`` says nobody counted. The
+    backfill relies on that distinction (see 0007), and so does anyone aggregating these rows:
+    averaging NULLs as zeroes would invent data.
+
+    NOTHING HERE IS A QUALITY SCORE. Every column is a count, an identifier, or a warning code
+    derived from counts. See app/domain/ingestion_lineage.py for the derivation and for why
+    the low-density threshold is a flag for a human rather than a verdict.
+    """
+
+    __tablename__ = "document_ingestions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    document_id: Mapped[str] = mapped_column(
+        ForeignKey("documents.id"), nullable=False, index=True
+    )
+    #: The attempt this row describes. NULL only for backfilled rows, where the attempt that
+    #: produced the existing chunks genuinely cannot be identified: a non-force re-index leaves
+    #: earlier chunk rows in place, so the current chunk set can span several jobs.
+    index_job_id: Mapped[str | None] = mapped_column(
+        ForeignKey("index_jobs.id"), nullable=True, index=True
+    )
+    #: ``ok`` | ``failed`` | ``unknown`` -- see app/domain/ingestion_lineage.py. ``unknown`` is
+    #: reserved for rows nobody observed; live code never writes it.
+    extraction_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    #: The document's declared MIME type, i.e. what the uploader said it was.
+    source_mime_type: Mapped[str] = mapped_column(String(120), nullable=False)
+    #: WHAT THE CHUNKER ACTUALLY SAW. Today this is always ``text/plain`` for PDF and DOCX,
+    #: which is the point: this single column makes the citation collapse queryable.
+    converted_mime_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    #: Extractor and version plus the chunker's input type, e.g. ``pypdf/6.14.2>text/plain``.
+    converter_chain: Mapped[str | None] = mapped_column(String(240), nullable=True)
+    chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: How many chunks carried a NON-EMPTY section_path. The most important number here: its
+    #: ratio to chunk_count is how much of the document's structure reached the citation.
+    structured_chunk_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    extracted_char_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: ``page`` | ``paragraph`` | ``line`` -- the unit source_unit_count counts.
+    source_unit_kind: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    source_unit_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    warnings: Mapped[list[str]] = mapped_column(JSON, default=list, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+    document: Mapped[Document] = relationship(back_populates="ingestions")
+    index_job: Mapped[IndexJob | None] = relationship(back_populates="ingestions")
 
 
 class DocumentChunk(Base):

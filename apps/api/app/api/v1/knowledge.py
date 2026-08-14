@@ -201,7 +201,18 @@ def list_documents(
     # discovery is too -- see (a). Admin is a member of PRIVILEGED_ROLES, so this covers it.
     may_restore = bool(PRIVILEGED_ROLES.intersection(principal.roles))
     show_archived = include_archived and may_restore
-    statement = select(Document).order_by(Document.created_at.desc())
+    statement = (
+        select(Document)
+        # DocumentRead carries the latest ingestion lineage
+        # (WO-2026-08-14-LINEAGE-VISIBILITY-002). Without this option, serializing N documents
+        # would emit N lazy SELECTs against document_ingestions -- the classic N+1, and exactly
+        # what AC-02 forbids. selectinload issues ONE additional query for the whole page
+        # (a single `WHERE document_id IN (...)`), so the query count does not grow with the
+        # number of rows returned. Deliberately NOT joinedload: this is a collection, and a
+        # JOIN would multiply the Document rows the ACL filter below then has to walk.
+        .options(selectinload(Document.ingestions))
+        .order_by(Document.created_at.desc())
+    )
     # For callers without the restore right the flag is silently ignored (NOT 403),
     # matching this file's convention that GET list endpoints scope results quietly (ACL
     # filter below, list_sources' clearance filter) rather than reject the request; 403

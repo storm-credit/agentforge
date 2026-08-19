@@ -1,7 +1,7 @@
 ---
 name: backend-specialist
 description: Use for implementation slices in AgentForge's FastAPI backend (apps/api) — API endpoints, domain/persistence models, Alembic migrations, workers, retrieval/eval pipeline code, non-security-sensitive authorization plumbing. Not for authz/ACL/trust-boundary design decisions or security review of someone else's diff — dispatch security-reviewer for those.
-tools: Read, Grep, Glob, Bash, Edit, Write, WebSearch
+tools: Read, Grep, Bash, Edit, Write
 model: inherit
 ---
 

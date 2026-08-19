@@ -78,6 +78,35 @@
 
    **6-i. 실행 결과물 검증(Post-execution Result Verification):** 사용자가 프롬프트 작성과 대상 작업 실행을 함께 요청했거나, 대상 AI의 결과물이 제공된 경우에는 프롬프트 검토에서 끝내지 않고 실제 결과를 `수용 기준 / 실패조건 / 검증 방법`에 대조한다. 코딩 결과는 실제 테스트·빌드·동작·diff로, UI는 모바일/데스크톱 핵심 동선·CTA·버튼·폼·오류/빈 상태로, 이미지는 구도·피사체·스타일·조명·카메라·텍스트 오류로, 리서치는 범위·기준일·출처 품질·교차검증·인용 정확성·불확실성으로, Goal/Task 결과는 산출물·완료조건·중지조건 준수로 검증한다. 결과를 `PASS / FIX / RETRY / HOLD / UNVERIFIED`로 판정하고 근거를 남긴다. 검증할 수 없는 항목을 임의로 PASS 처리하지 않는다. 기본 수정 루프는 `프롬프트 수정 1회 + 재실행 1회`로 제한하며, 같은 실패가 반복되거나 필수 입력·권한·환경이 없으면 중단하고 사용자에게 원인과 필요한 결정을 보고한다. 가능하면 `프롬프트 버전 / 대상 도구·모델 / 입력 / 결과 / 검증 증거 / 계획 이탈`을 함께 기록한다.
 
+## Minimum Action Agent OS 채택 (작업 방법론)
+
+7. **작업 방법론은 `minimum-action-agent-os` 플러그인을 따른다. 이 파일에 OS 내용을 복사하지 않는다.**
+   비자명한 작업은 `minimum-action-agent-os:os-preflight`로 시작하고, 프로젝트 truth가 바뀌면
+   `minimum-action-agent-os:os-state`로 갱신한다. 독립 검증이 필요하면
+   `minimum-action-agent-os:independent-critic`을 쓴다.
+
+   **7-a. 도메인 정본은 항상 이 저장소다.** OS는 "어떻게 일할지"만 규정하며 제품 내용을 덮어쓰지
+   않는다. 권위 순서는 변함없이 [docs/40-delivery/current-state.md](docs/40-delivery/current-state.md)
+   (SSOT·피처 프리즈) → `docs/10-architecture|20-security|30-decisions` → `harness/work-orders/`
+   → 이 파일이다. OS 단계와 이 파일의 규칙이 충돌하면 **이 파일과 SSOT가 이긴다.**
+
+   **7-b. 이미 있는 것은 다시 만들지 않는다.** OS의 preflight 단계는 대부분 위 규칙으로 이미
+   존재하므로 그것을 쓴다 — 의도 확인 = 5-a · 맹점 훑기 = 5-c · 구현 전 함정 체크 = 5-b ·
+   4안 비교 = 5-d · 본보기 조사 = 5-e · 메타 프롬프팅 = 6-a~6-i · 계획 이탈 기록 = 5-f ·
+   실행 브리프 = 2-b 핸드오프 + `harness/work-orders/` Work Order · 정본 갱신 = current-state.md.
+   OS가 새로 더하는 것은 아래 7-c·7-d 두 개뿐이다.
+
+   **7-c. 가장 가벼운 메커니즘을 고른다.** 직접 작업 < 규칙 < Skill < Agent 순으로 올라가되,
+   올릴 이유가 있을 때만 올린다. Agent는 **컨텍스트·도구·권한·증거·실패 경계가 실제로 다르거나
+   독립 판단이 필요할 때만** 만든다. Agent 총 개수에는 상한이 없다 — 계층으로 늘리는 것은 괜찮다.
+
+   **7-d. Local Action Space는 노드당 5개 이하로 유지한다.** 하나의 reasoning node가 한 번에
+   직접 고를 수 있는 Agent·Tool·Skill·MCP·기타 callable의 합이다. 초과하면 이 순서로 **최소**
+   수정한다: 불필요한 Tool 제거 → Skill로 묶기 → 역할 분리 → Router 계층화. 이미 만족하는
+   노드는 건드리지 않는다. `Agent`·`Skill`·`ToolSearch`처럼 **다수를 뒤에 두고 하나로 노출되는
+   호출은 라우터로 세며**, 라우터를 없애서 선택지를 늘리는 방향의 "정리"는 하지 않는다.
+   현재 상태와 근거는 [docs/40-delivery/local-action-space-audit.md](docs/40-delivery/local-action-space-audit.md).
+
 ## 환경/겟차 (로컬, Windows)
 
 - **Python은 반드시 `apps/api/.venv/Scripts/python.exe`** (전역 python은 contract 테스트 silent skip).

@@ -1,7 +1,7 @@
 ---
 name: security-reviewer
 description: Use for any authz/ACL/RBAC change, identity or trust-boundary work, prompt-injection guarding, secret handling, or audit-integrity work in AgentForge — e.g. document ACL edits, run/audit read scoping, index-job authorization, mutation RBAC, or reviewing another agent's diff that touches any of these. Also use to run a security-review pass before merging a security-sensitive PR. Always run on the strongest available model (opus) per CLAUDE.md.
-tools: Read, Grep, Glob, Bash, Edit, Write, WebSearch, WebFetch, Skill
+tools: Read, Grep, Bash, Edit, Write, Skill
 model: opus
 ---
 

@@ -103,6 +103,36 @@ class DocumentCreate(BaseModel):
     effective_date: str | None = None
 
 
+class DocumentIngestionRead(BaseModel):
+    """Lineage for one index attempt (WO-2026-08-14-INGESTION-INSTRUMENTATION).
+
+    ``null`` means NOT OBSERVED and is deliberately distinct from ``0``: a client must not
+    render an unobserved count as "0 chunks". ``structured_chunk_count`` next to
+    ``chunk_count`` is what tells an operator whether this document's citations can be
+    verified against the original file at all.
+
+    Defined ABOVE ``DocumentRead`` because that model now embeds it (see
+    ``DocumentRead.ingestion``); the ordering is the only reason this class moved.
+    """
+
+    id: str
+    document_id: str
+    index_job_id: str | None
+    extraction_status: str
+    source_mime_type: str
+    converted_mime_type: str | None
+    converter_chain: str | None
+    chunk_count: int | None
+    structured_chunk_count: int | None
+    extracted_char_count: int | None
+    source_unit_kind: str | None
+    source_unit_count: int | None
+    warnings: list[str]
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class DocumentRead(BaseModel):
     id: str
     knowledge_source_id: str
@@ -119,6 +149,21 @@ class DocumentRead(BaseModel):
     classification_source_id: str | None
     status: str
     effective_date: str | None
+    #: The MOST RECENT ingestion attempt's lineage, or ``null`` when this document has none
+    #: (WO-2026-08-14-LINEAGE-VISIBILITY-002). Sourced from the existing
+    #: ``Document.ingestions`` relationship -- no new column, no new table, no migration.
+    #:
+    #: WHY THE LATEST AND NOT ALL OF THEM: the table is append-only precisely so the history
+    #: survives, and the history is still reachable per attempt through the index-job routes.
+    #: What a documents LIST answers is "what is this document's citation structure like
+    #: right now", and that is the newest attempt. Returning every attempt on every row would
+    #: also make the response grow with re-index count.
+    #:
+    #: ``null`` here means NO LINEAGE WAS RECORDED and must never be rendered as healthy: it
+    #: covers a document that was never indexed, and it is a different fact from a recorded
+    #: row whose ``extraction_status`` is ``"unknown"`` (0007's backfill, i.e. indexed before
+    #: this instrumentation existed, so the conversion genuinely was not observed).
+    ingestion: DocumentIngestionRead | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -167,33 +212,6 @@ class IndexJobProcess(BaseModel):
         default=None,
         description="Synthetic TXT/MD smoke content for a queued job. Real uploads will read from object storage.",
     )
-
-
-class DocumentIngestionRead(BaseModel):
-    """Lineage for one index attempt (WO-2026-08-14-INGESTION-INSTRUMENTATION).
-
-    ``null`` means NOT OBSERVED and is deliberately distinct from ``0``: a client must not
-    render an unobserved count as "0 chunks". ``structured_chunk_count`` next to
-    ``chunk_count`` is what tells an operator whether this document's citations can be
-    verified against the original file at all.
-    """
-
-    id: str
-    document_id: str
-    index_job_id: str | None
-    extraction_status: str
-    source_mime_type: str
-    converted_mime_type: str | None
-    converter_chain: str | None
-    chunk_count: int | None
-    structured_chunk_count: int | None
-    extracted_char_count: int | None
-    source_unit_kind: str | None
-    source_unit_count: int | None
-    warnings: list[str]
-    created_at: datetime
-
-    model_config = ConfigDict(from_attributes=True)
 
 
 class IndexJobRead(BaseModel):

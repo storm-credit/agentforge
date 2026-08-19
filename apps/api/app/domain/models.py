@@ -159,6 +159,22 @@ class Document(Base):
         order_by="DocumentIngestion.created_at",
     )
 
+    @property
+    def ingestion(self) -> "DocumentIngestion | None":
+        """The MOST RECENT index attempt's lineage, for the read model.
+
+        Mirrors ``IndexJob.ingestion``. The relationship is ordered oldest-first, so the last
+        element is the newest attempt; ``None`` means no attempt was ever recorded for this
+        document, which is a different fact from a recorded attempt whose
+        ``extraction_status`` is ``"unknown"``.
+
+        Reading this on a document loaded WITHOUT ``selectinload(Document.ingestions)`` emits
+        a lazy SELECT. That is fine for the single-document routes; ``list_documents`` eager
+        loads instead, because there it would be one query per row
+        (WO-2026-08-14-LINEAGE-VISIBILITY-002 AC-02).
+        """
+        return self.ingestions[-1] if self.ingestions else None
+
 
 class IndexJob(Base):
     __tablename__ = "index_jobs"

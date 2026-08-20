@@ -48,10 +48,20 @@ Status: 감사 기록 (CLAUDE.md 7-d의 근거)
   > 남긴다). 삭제·이동·정션 등 어떤 변경도 하지 않는 report-only 체크다.
   > `harness/tools/tests/test_project_status_drift.py`(신규, `harness/tools/`의 첫 테스트
   > 스위트)가 4가지 경우(등록+파일있음=PASS, 미등록+파일있음=FAIL, 미등록+비어있음=PASS,
-  > `.claude/worktrees/` 자체가 없음=PASS)를 `tmp_path`로 검증하고, CI가 그 테스트를 돌린다 — 단,
-  > `project_status.py` 자체는 CI에서 돌지 않는다(신선한 체크아웃에는
-  > `.claude/worktrees/`가 애초에 없어 무의미). CI가 지키는 것은 **체크의 로직**이고, 체크 자체는
-  > 로컬에서 사람/오케스트레이터가 돌리는 용도다.
+  > `.claude/worktrees/` 자체가 없음=PASS)를 `tmp_path`로 검증하고, CI가 그 테스트를 돌린다.
+  >
+  > **후속 정정 (2026-08-20 야간, 독립 critic이 잡음).** 위 "`project_status.py` 자체는 CI에서
+  > 돌지 않는다"는 서술은 **스테일 워크트리 체크에 한해서만** 맞았고 전체적으로는 틀렸다 —
+  > `tmp_path` 픽스처를 쓰는 테스트는 실제 `.claude/agents/`·`.claude/settings.json`을 전혀
+  > 읽지 않으므로, PR #169의 실제 결함(`security-reviewer.md` frontmatter의 따옴표 없는 `: `)을
+  > CI의 세 잡·9개 테스트·뮤테이션 테스트·독립 critic 전부가 놓쳤다. 이제 `Backend (ruff +
+  > pytest)` 잡이 저장소 루트에서 `python harness/tools/project_status.py --strict`를 직접
+  > 실행한다 — 신선한 체크아웃도 `.claude/agents/*.md`·`.claude/settings.json`은 버전관리
+  > 대상이라 실재하므로 에이전트/훅 체크는 그 안에서도 진짜다. 스테일 워크트리 체크만
+  > `.claude/worktrees/`가 애초에 없어 무의미하게 PASS한다(그 판단은 여전히 유효). 부수효과:
+  > TODO/FIXME 스윕도 5개 드리프트 체크 중 하나라 강제되므로, `apps/api/app`·`apps/web/app`·
+  > `eval/harness` 아래 새 `TODO`/`FIXME` 주석 하나가 CI를 레드로 만든다 — 의도적으로 그대로
+  > 두었다(끄거나 완화하지 않음, 제품 책임자의 판단으로 남김).
   >
   > **한계 (오케스트레이터가 직접 지적, 2026-08-20 저녁).** 이 체크는 등록 여부만으로 판정하는데,
   > 실제로 이 프로젝트를 문 적이 있는 사고 형태는 **등록됐지만 방치된**(에이전트가 죽은 뒤

@@ -52,15 +52,35 @@ jobs:
         run: python harness/tools/validate_examples.py
 
       # harness/tools/ has its own (small) test suite covering the
-      # project_status.py stale-worktree drift check. Note: project_status.py
-      # itself is NOT run here -- a fresh CI checkout never has a
-      # .claude/worktrees/ directory, so running it would be vacuous. What
-      # this protects is the CHECK's logic (via tmp_path fixtures), which a
-      # human/orchestrator relies on when running project_status.py locally.
-      # Runs from the repo root for the same reason as the step above.
+      # project_status.py stale-worktree drift check via tmp_path fixtures.
+      # Those fixtures deliberately do NOT read the real .claude/agents/ or
+      # .claude/settings.json, so they cannot catch a real broken definition
+      # (this is exactly how PR #169's unquoted ": " in
+      # security-reviewer.md's frontmatter -- which silently made the
+      # dispatcher drop the agent -- passed every check, including these
+      # tests). Runs from the repo root for the same reason as the step
+      # above.
       - name: Harness tools tests
         working-directory: ${{ github.workspace }}
         run: python -m pytest harness/tools/tests -q
+
+      # Actually run project_status.py --strict against the REAL repo state
+      # (not fixtures), so a broken .claude/agents/*.md definition or a
+      # missing .claude/settings.json hook wiring fails CI the way PR #169's
+      # defect should have. --strict exits 1 only if one of the 5 drift
+      # checks in section 5 (agents-dir frontmatter validity, hooks
+      # configured, harness examples validate, stale-worktree copies,
+      # TODO/FIXME sweep) fails -- it never fails on the section-6
+      # declared-vs-wired gap counts, so this cannot go red over already-known
+      # gaps. The stale-worktree check itself is vacuous here (a fresh CI
+      # clone has no .claude/worktrees/ directory at all, so it trivially
+      # passes) -- but .claude/agents/*.md and .claude/settings.json ARE
+      # version-controlled, so the agents/hooks checks are real in this
+      # checkout, unlike that one. Runs from the repo root for the same
+      # reason as the step above.
+      - name: Harness drift check (project_status.py --strict)
+        working-directory: ${{ github.workspace }}
+        run: python harness/tools/project_status.py --strict
 
       # Migrations are exercised against a real Postgres service container
       # (matching deploy/compose/docker-compose.dev.yaml's credentials) since

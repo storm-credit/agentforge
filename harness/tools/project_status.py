@@ -13,8 +13,9 @@ Usage:
     python harness/tools/project_status.py [--strict]
 
 Exit code is always 0, UNLESS --strict is passed AND at least one
-wiring/drift check fails, in which case it exits 1. --strict is not wired
-into CI by this change.
+wiring/drift check fails, in which case it exits 1. --strict IS wired into
+CI (the "Backend (ruff + pytest)" job runs it from the repo root), so a
+real broken .claude/agents/*.md definition or missing hook wiring fails CI.
 
 Read-only: this script must never mutate git state, move files, run tests,
 or perform network writes. Reading CI status via `gh` is a network read

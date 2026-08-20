@@ -164,6 +164,24 @@ def test_real_repo_worktrees_dir_currently_passes() -> None:
     assert "wf_f67d5ada-ed4-3" in message or "no" in message.lower()
 
 
+def _valid_agent_md(name: str, agent_role_id: str) -> str:
+    """A minimal but STRUCTURALLY VALID .claude/agents/*.md file: parseable
+    frontmatter with the required name/tools fields, plus a body line
+    carrying the agent_role_id reference that _collect_specialist_wiring's
+    AGENT_ROLE_ID_RE matches against (mirroring the real files' "Authoritative
+    contract: ... agent_role_id: <id>" line)."""
+    return (
+        "---\n"
+        f"name: {name}\n"
+        "description: test fixture agent\n"
+        "tools: Read, Grep, Bash\n"
+        "model: inherit\n"
+        "---\n"
+        "\n"
+        f"Authoritative contract: `agent_role_id: {agent_role_id}`.\n"
+    )
+
+
 def test_specialist_wiring_dedupes_one_role_carried_by_two_files(tmp_path: Path) -> None:
     """A single declared role id that is carried by TWO .claude/agents/*.md
     files (e.g. security-trust-architect <- security-reviewer.md +
@@ -180,8 +198,12 @@ def test_specialist_wiring_dedupes_one_role_carried_by_two_files(tmp_path: Path)
     )
     agents_dir = tmp_path / "agents"
     agents_dir.mkdir()
-    (agents_dir / "reviewer.md").write_text("agent_role_id: shared-role\n", encoding="utf-8")
-    (agents_dir / "implementer.md").write_text("agent_role_id: shared-role\n", encoding="utf-8")
+    (agents_dir / "reviewer.md").write_text(
+        _valid_agent_md("reviewer", "shared-role"), encoding="utf-8"
+    )
+    (agents_dir / "implementer.md").write_text(
+        _valid_agent_md("implementer", "shared-role"), encoding="utf-8"
+    )
 
     result = project_status._collect_specialist_wiring(
         specialists_yaml=yaml_path,
@@ -209,8 +231,8 @@ def test_specialist_wiring_counts_distinct_roles_separately(tmp_path: Path) -> N
     )
     agents_dir = tmp_path / "agents"
     agents_dir.mkdir()
-    (agents_dir / "a.md").write_text("agent_role_id: role-a\n", encoding="utf-8")
-    (agents_dir / "b.md").write_text("agent_role_id: role-b\n", encoding="utf-8")
+    (agents_dir / "a.md").write_text(_valid_agent_md("a", "role-a"), encoding="utf-8")
+    (agents_dir / "b.md").write_text(_valid_agent_md("b", "role-b"), encoding="utf-8")
 
     result = project_status._collect_specialist_wiring(
         specialists_yaml=yaml_path,
@@ -222,3 +244,154 @@ def test_specialist_wiring_counts_distinct_roles_separately(tmp_path: Path) -> N
     assert sorted(result["wired_ids"]) == ["role-a", "role-b"]
     assert result["wired_files"]["role-a"] == ["a.md"]
     assert result["wired_files"]["role-b"] == ["b.md"]
+
+
+def test_specialist_wiring_skips_role_whose_only_file_has_invalid_frontmatter(
+    tmp_path: Path,
+) -> None:
+    """A role whose ONLY carrying file has invalid frontmatter (e.g. an
+    unquoted ": " sequence, mirroring the real security-reviewer.md defect)
+    must show as NOT wired -- counting it would certify a role the
+    dispatcher actually rejects, which is the exact defect this test
+    guards against."""
+    yaml_path = tmp_path / "specialists.yaml"
+    yaml_path.write_text("agents:\n  - agent_role_id: broken-role\n", encoding="utf-8")
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+    # ": " inside an unquoted scalar -- invalid YAML, same shape as the real defect.
+    (agents_dir / "broken.md").write_text(
+        "---\n"
+        "name: broken\n"
+        "description: this role is read-only: it breaks the frontmatter\n"
+        "tools: Read, Grep, Bash\n"
+        "model: inherit\n"
+        "---\n"
+        "\n"
+        "Authoritative contract: `agent_role_id: broken-role`.\n",
+        encoding="utf-8",
+    )
+
+    result = project_status._collect_specialist_wiring(
+        specialists_yaml=yaml_path,
+        claude_agents_dir=agents_dir,
+    )
+
+    assert result["ok"] is True
+    assert result["declared_count"] == 1
+    assert result["wired_ids"] == []
+    assert "broken-role" not in result["wired_files"]
+
+
+def test_check_agents_dir_passes_on_valid_definitions(tmp_path: Path) -> None:
+    """A directory containing only structurally valid frontmatter must PASS."""
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+    (agents_dir / "one.md").write_text(_valid_agent_md("one", "role-one"), encoding="utf-8")
+    (agents_dir / "two.md").write_text(_valid_agent_md("two", "role-two"), encoding="utf-8")
+
+    ok, message = project_status._check_agents_dir(agents_dir=agents_dir)
+
+    assert ok is True
+    assert "2 agent definition file(s)" in message
+
+
+def test_check_agents_dir_fails_on_unquoted_colon_and_names_file(tmp_path: Path) -> None:
+    """A frontmatter description containing an unquoted ': ' sequence is
+    invalid YAML (mapping values are not allowed here) -- this is the exact
+    shape of the real security-reviewer.md defect that made the dispatcher
+    report 'Agent type not found' while this command still said PASS. The
+    check must FAIL and name the offending file."""
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+    (agents_dir / "good.md").write_text(_valid_agent_md("good", "role-good"), encoding="utf-8")
+    (agents_dir / "broken.md").write_text(
+        "---\n"
+        "name: broken\n"
+        "description: this role is read-only: it does not implement fixes\n"
+        "tools: Read, Grep, Bash\n"
+        "model: inherit\n"
+        "---\n"
+        "\n"
+        "body\n",
+        encoding="utf-8",
+    )
+
+    ok, message = project_status._check_agents_dir(agents_dir=agents_dir)
+
+    assert ok is False
+    assert "broken.md" in message
+    assert "1 invalid definition" in message
+
+
+def test_check_agents_dir_fails_when_tools_field_missing(tmp_path: Path) -> None:
+    """A frontmatter block that parses fine as YAML but is missing the
+    required `tools` field must still FAIL -- parsing is necessary but not
+    sufficient for "dispatchable"."""
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+    (agents_dir / "no_tools.md").write_text(
+        "---\n"
+        "name: no-tools\n"
+        "description: valid YAML, missing a required field\n"
+        "model: inherit\n"
+        "---\n"
+        "\n"
+        "body\n",
+        encoding="utf-8",
+    )
+
+    ok, message = project_status._check_agents_dir(agents_dir=agents_dir)
+
+    assert ok is False
+    assert "no_tools.md" in message
+    assert "tools" in message
+
+
+def test_check_agents_dir_fails_when_name_field_missing(tmp_path: Path) -> None:
+    """Same as above but for the `name` field -- this is the field the
+    dispatcher was confirmed to key registration failure on."""
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+    (agents_dir / "no_name.md").write_text(
+        "---\n"
+        "description: valid YAML, missing a required field\n"
+        "tools: Read, Grep, Bash\n"
+        "model: inherit\n"
+        "---\n"
+        "\n"
+        "body\n",
+        encoding="utf-8",
+    )
+
+    ok, message = project_status._check_agents_dir(agents_dir=agents_dir)
+
+    assert ok is False
+    assert "no_name.md" in message
+    assert "name" in message
+
+
+def test_check_agents_dir_removing_validation_would_be_caught_by_mutation(tmp_path: Path) -> None:
+    """Belt-and-braces: directly assert _parse_agent_frontmatter itself
+    rejects the real defect shape, independent of _check_agents_dir's
+    message wording, so a future refactor of the message string can't
+    accidentally make this suite pass while the gate is gone."""
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+    broken = agents_dir / "broken.md"
+    broken.write_text(
+        "---\n"
+        "name: broken\n"
+        "description: this role is read-only: it does not implement fixes\n"
+        "tools: Read, Grep, Bash\n"
+        "model: inherit\n"
+        "---\n"
+        "\n"
+        "body\n",
+        encoding="utf-8",
+    )
+
+    data, reason = project_status._parse_agent_frontmatter(broken)
+
+    assert data is None
+    assert reason is not None
+    assert "broken.md" in reason

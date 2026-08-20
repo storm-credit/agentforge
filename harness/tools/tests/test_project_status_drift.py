@@ -57,6 +57,49 @@ def test_registered_and_populated_is_pass(tmp_path: Path) -> None:
     assert "actively working" in message
 
 
+def test_registered_and_locked_is_still_pass_but_reports_lock(tmp_path: Path) -> None:
+    """A registered worktree that is also LOCKED is still reported PASS --
+    lock state alone is not proof of abandonment, and this check must never
+    false-positive on a worktree an agent could legitimately still be using.
+    But this project's own incident record shows a failed worktree dispatch
+    leaves a locked registration behind, so the lock state (and reason, if
+    git recorded one) must be surfaced in the message for a human to judge."""
+    worktrees_dir = tmp_path / "worktrees"
+    locked = worktrees_dir / "wf_locked"
+    locked.mkdir(parents=True)
+    (locked / "some_file.py").write_text("content", encoding="utf-8")
+
+    ok, message = project_status._check_stale_worktrees(
+        worktrees_dir=worktrees_dir,
+        registered_paths={locked.resolve()},
+        lock_reasons={locked.resolve(): "dispatch failed: agent process exited"},
+    )
+
+    assert ok is True
+    assert "wf_locked" in message
+    assert "LOCKED" in message
+    assert "dispatch failed: agent process exited" in message
+
+
+def test_registered_and_locked_with_no_reason_still_reports_locked(tmp_path: Path) -> None:
+    """`git worktree lock` without `--reason` still yields a `locked` line
+    with no reason text -- the message must say LOCKED without inventing a
+    reason that was never given."""
+    worktrees_dir = tmp_path / "worktrees"
+    locked = worktrees_dir / "wf_locked_no_reason"
+    locked.mkdir(parents=True)
+
+    ok, message = project_status._check_stale_worktrees(
+        worktrees_dir=worktrees_dir,
+        registered_paths={locked.resolve()},
+        lock_reasons={locked.resolve(): ""},
+    )
+
+    assert ok is True
+    assert "wf_locked_no_reason" in message
+    assert "LOCKED" in message
+
+
 def test_unregistered_and_populated_is_fail_and_names_dir(tmp_path: Path) -> None:
     """A directory that is NOT a registered worktree but contains files is a
     real hazard: name-based `find` returns it before the live file."""

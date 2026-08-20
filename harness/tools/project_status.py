@@ -458,8 +458,40 @@ def _registered_worktree_paths() -> set[Path] | None:
     return paths
 
 
+def _registered_worktree_lock_reasons() -> dict[Path, str] | None:
+    """Parse `git worktree list --porcelain` for lock state.
+
+    Maps each LOCKED worktree's resolved path to its lock reason string
+    (empty string if `git worktree lock` was used without `--reason`). A
+    path absent from the returned dict is not locked. Returns None if the
+    command could not be run at all.
+
+    This is evidence, not a heuristic: `git worktree list --porcelain`
+    reports `locked` as a fact with an optional reason, and this project's
+    own incident record shows a failed worktree dispatch leaves a LOCKED
+    registration behind (cleared via `git worktree unlock` + `remove
+    --force` + `prune`). Lock state does not by itself prove abandonment --
+    a worktree could plausibly be locked while legitimately in use -- so
+    this check never fails on it; it is surfaced for a human to judge.
+    """
+    rc, out, _err = _run(["git", "worktree", "list", "--porcelain"])
+    if rc != 0:
+        return None
+    reasons: dict[Path, str] = {}
+    current: Path | None = None
+    for line in out.splitlines():
+        if line.startswith("worktree "):
+            raw = line[len("worktree ") :].strip()
+            current = Path(raw).resolve() if raw else None
+        elif line.startswith("locked") and current is not None:
+            reasons[current] = line[len("locked") :].strip()
+    return reasons
+
+
 def _check_stale_worktrees(
-    worktrees_dir: Path | None = None, registered_paths: set[Path] | None = None
+    worktrees_dir: Path | None = None,
+    registered_paths: set[Path] | None = None,
+    lock_reasons: dict[Path, str] | None = None,
 ) -> tuple[bool, str]:
     """Flag `.claude/worktrees/` directories that are NOT a registered git
     worktree but still contain files.
@@ -476,7 +508,13 @@ def _check_stale_worktrees(
     `registered_paths`, when given, is used verbatim instead of shelling out
     to `git worktree list --porcelain` -- this is the seam tests use to
     exercise registered/unregistered scenarios against a `tmp_path` fixture
-    without creating a real git worktree.
+    without creating a real git worktree. `lock_reasons`, when given,
+    likewise overrides the lock-state lookup (see
+    `_registered_worktree_lock_reasons()`); a registered-but-locked
+    worktree is still reported PASS (locked is not proof of abandonment),
+    but its lock state and reason (if any) are named in the message so a
+    human can judge -- this project's own incident record shows a failed
+    worktree dispatch leaves a locked registration behind.
 
     Report-only: this never deletes, moves, prunes, or junctions anything.
     """
@@ -492,11 +530,20 @@ def _check_stale_worktrees(
     if registered is None:
         return False, f"could not run 'git worktree list --porcelain' to check {root} for stale copies"
 
+    locks = lock_reasons if lock_reasons is not None else (_registered_worktree_lock_reasons() or {})
+
     def _label(entry: Path) -> str:
         try:
             return str(entry.relative_to(REPO_ROOT))
         except ValueError:
             return str(entry)
+
+    def _registered_label(entry: Path) -> str:
+        reason = locks.get(entry.resolve())
+        if reason is None:
+            return _label(entry)
+        suffix = f": {reason}" if reason else ""
+        return f"{_label(entry)} [LOCKED{suffix}]"
 
     stale_populated: list[Path] = []
     stale_empty: list[Path] = []
@@ -522,7 +569,7 @@ def _check_stale_worktrees(
 
     parts = [f"{len(registered_entries)} registered worktree(s), 0 stale-populated director(ies) under {root}"]
     if registered_entries:
-        names = ", ".join(_label(p) for p in registered_entries)
+        names = ", ".join(_registered_label(p) for p in registered_entries)
         parts.append(f"registered (expected only while an agent is actively working in it): {names}")
     if stale_empty:
         names = ", ".join(_label(p) for p in stale_empty)

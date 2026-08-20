@@ -5,7 +5,7 @@ status: evidence_ready
 candidate:
   repository: storm-credit/agentforge
   commit_sha: cc1b26a58d2429c31e9dae01df68c02acdae216c
-  pull_request: 171
+  pull_request: [169, 170, 171]
   environment: github-actions-ci
 scope:
   problem: >-
@@ -44,7 +44,7 @@ scope:
     - "Verifying whether the dispatcher requires an agent definition's name: field to match its filename (deliberately not checked)"
   acceptance_criteria:
     - "CI green (3 required jobs: Backend, Frontend, E2E) on each PR head"
-    - "harness/tools/tests test count increases from 9 (pre-#169) to 15 (post-#170) and stays 15 through #171"
+    - "harness/tools/tests test count is 0 pre-#169 (the directory did not exist), rises to 9 at #169 (which creates the suite), rises to 15 at #170 (frontmatter-parsing tests), and stays 15 through #171"
     - "`project_status.py --strict` exits 0 on main after #171"
     - "Reintroducing the original ': '-in-description YAML defect causes the exact command CI runs to exit 1 and name the offending file, on both pre-#171 main and the #171 branch head"
     - "Dispatching the security-reviewer agent type actually succeeds after #170 (not merely: its frontmatter parses)"
@@ -108,7 +108,14 @@ verification:
     status: passed
     candidate_ref: cc1b26a58d2429c31e9dae01df68c02acdae216c
     command_or_workflow: "apps/api/.venv/Scripts/python.exe -m pytest harness/tools/tests -q"
-    summary: "15 passed on current main, up from 9 before #170 added the frontmatter-parsing tests and 5 before #169 added the stale-worktree tests."
+    summary: >-
+      15 passed on current main. harness/tools/tests did not exist before #169
+      (0 files, 0 tests): #169 created the suite with 9 tests, #170 added the
+      frontmatter-parsing tests to reach 15, and #171 leaves the count at 15.
+      Verified directly: `git ls-tree -r --name-only <sha> -- harness/tools/tests`
+      returns 0 entries at 8f83259 (pre-#169) and 1 entry (this file) at
+      83ab5b5/cbd8a43/cc1b26a; `grep -c '^def test_' <sha's copy of the file>`
+      returns 9/15/15 respectively.
     reference: local execution, no stored CI artifact for this specific invocation
     executed_by: platform-specialist
     executed_at: "2026-08-20T17:00:00Z"
@@ -141,9 +148,10 @@ verification:
       to 0, tree left clean.
     reference: reported by pm-orchestrator in this task's brief; not independently re-run by this package's author
     executed_by: pm-orchestrator
-    executed_at: "2026-08-20T00:00:00Z"
+    executed_at: "2026-08-20"
     limitations:
-      - "Exact time-of-day of this reinjection test was not recorded by the orchestrator, only the date."
+      - "executed_at carries only the date (2026-08-20); the orchestrator did not record a time-of-day, and \"T00:00:00Z\" is not asserted -- do not read this as midnight."
+      - "No retained artifact (saved command output or log) exists for this check; the narrative summary above, from the task brief that commissioned this package, is the only record."
       - "Not independently reproduced by this package's author; recorded on the orchestrator's report as instructed."
     redaction_reviewed: true
   - check_id: MUTATION-TESTING-PROJECT-STATUS
@@ -158,9 +166,11 @@ verification:
       tests. All three mutants were killed by the existing test suite.
     reference: reported by pm-orchestrator in this task's brief; not independently re-run by this package's author
     executed_by: pm-orchestrator
-    executed_at: "2026-08-20T00:00:00Z"
+    executed_at: "2026-08-20"
     limitations:
       - "A first attempt at the locked-label mutation hit a docstring instead of the output f-string and vacuously passed -- recorded here for honesty (a mutation test can itself be vacuous), not as one of the three counted results."
+      - "executed_at carries only the date (2026-08-20); the orchestrator did not record a time-of-day, and \"T00:00:00Z\" is not asserted -- do not read this as midnight."
+      - "No retained artifact (saved command output or log) exists for these three mutation trials; the narrative summary above, from the task brief that commissioned this package, is the only record."
     redaction_reviewed: true
   - check_id: CI-PR-169
     type: integration
@@ -210,20 +220,28 @@ verification:
       and performed.
     reference: reported by pm-orchestrator in this task's brief; not independently re-run by this package's author
     executed_by: pm-orchestrator
-    executed_at: "2026-08-20T00:00:00Z"
+    executed_at: "2026-08-20"
     limitations:
-      - "Exact dispatch timestamp and the dispatched report's contents were not preserved in this package."
+      - "executed_at carries only the date (2026-08-20); the exact dispatch time-of-day was not recorded, and \"T00:00:00Z\" is not asserted -- do not read this as midnight."
+      - "No retained artifact exists for this check: the dispatched security-reviewer report's contents were not preserved in this package, only the narrative claim that dispatch succeeded."
     redaction_reviewed: true
   - check_id: FRONTMATTER-PARSE-ALL-FIVE
     type: schema
     status: passed
     candidate_ref: e9e7a0896f2a8424a60b8f5229e7d9e93c6cdfc3
-    command_or_workflow: "YAML parse of every .claude/agents/*.md frontmatter block after #170"
-    summary: "All five agent definitions parse OK. Tool counts: 5, 5, 5, 5, 4 -- every Local Action Space node satisfies CLAUDE.md rule 7-d (<= 5)."
-    reference: reported by pm-orchestrator in this task's brief; not independently re-run by this package's author
-    executed_by: pm-orchestrator
-    executed_at: "2026-08-20T00:00:00Z"
-    limitations: []
+    command_or_workflow: "YAML parse of every .claude/agents/*.md frontmatter block after #170; independently re-run by this package's author on current main against the identical five files"
+    summary: >-
+      All five agent definitions parse OK. Tool counts: backend-specialist 5,
+      frontend-specialist 5, infra-ci-specialist 5, security-implementer 5,
+      security-reviewer 4 -- every Local Action Space node satisfies CLAUDE.md
+      rule 7-d (<= 5). Originally reported by pm-orchestrator after #170; this
+      package's author independently re-ran the identical parse on current
+      main and reproduced the same five counts.
+    reference: "originally reported by pm-orchestrator in this task's brief; independently reproduced by this package's author via yaml.safe_load on each .claude/agents/*.md frontmatter block, timestamped from `date -u`"
+    executed_by: platform-specialist
+    executed_at: "2026-08-20T17:42:29Z"
+    limitations:
+      - "The pm-orchestrator's original executed_at (2026-08-20) carried a fabricated T00:00:00Z time-of-day; this entry now records the independent re-run's own execution instead of that unrecorded original time."
     redaction_reviewed: true
   - check_id: BRANCH-PROTECTION-QUERY
     type: security
@@ -353,6 +371,28 @@ risks:
         not failed. Independent critic verdict on this check: MARGINAL.
       owner: platform-service-owner
       reference: "harness/tools/project_status.py::_check_stale_worktrees docstring"
+    - finding_id: FIND-06-ROLE-SPLIT-IS-TOOL-LIST-ONLY-NOT-CONTRACT-LEVEL
+      severity: major
+      status: open
+      description: >-
+        harness/agents/specialists.yaml declares 10 roles and has no
+        security-reviewer role. Both .claude/agents/security-reviewer.md and
+        .claude/agents/security-implementer.md bind to the same
+        agent_role_id: security-trust-architect, and that contract's own
+        required_reviews entry names reviewer_roles: [security-trust-architect]
+        for a trust_boundary_or_security_change -- at contract level, the same
+        role reviews itself. The separation of duties this package's scope
+        describes (a 4-tool review-only role plus a 5-tool implementer role)
+        is real and enforced, but only at the .claude/agents/*.md tools: list
+        level: security-reviewer.md has no Edit/Write tool, so a dispatched
+        security-reviewer genuinely cannot edit files. Nothing in
+        specialists.yaml itself distinguishes reviewer from implementer, so a
+        session could still claim to "act as" security-trust-architect and
+        both implement and review under the one contract. Closing this
+        would mean splitting agent_role_id in specialists.yaml, which #169,
+        #170, and #171 deliberately do not do (see scope.excluded above).
+      owner: platform-service-owner
+      reference: "harness/agents/specialists.yaml (10 roles, no security-reviewer entry, security-trust-architect required_reviews clause); .claude/agents/security-reviewer.md:8; .claude/agents/security-implementer.md:8"
   residual_risks:
     - risk_id: RISK-01-TODO-FIXME-COUPLING
       description: >-
@@ -454,6 +494,24 @@ limitations:
     owner: platform-service-owner
     blocker: false
     resolution_trigger: "Confirmed and documented as intended CI policy, or narrowed to exclude the TODO/FIXME sweep from --strict."
+  - limitation_id: LIMIT-07-SECURITY-ROLE-SPLIT-IS-TOOL-LIST-ONLY
+    classification: security
+    description: >-
+      The security-reviewer / security-implementer split enforces separation
+      of duties only through each .claude/agents/*.md file's tools: list.
+      harness/agents/specialists.yaml has no security-reviewer role -- both
+      dispatch aliases bind to the same agent_role_id: security-trust-architect,
+      and that contract's required_reviews clause names
+      security-trust-architect as its own reviewer for
+      trust_boundary_or_security_change.
+    impact: >-
+      A reader of specialists.yaml alone would not discover that review and
+      implementation are separated for security changes; the guarantee exists
+      only in the two wrapper files' tool lists, not in the authoritative
+      contract. See FIND-06-ROLE-SPLIT-IS-TOOL-LIST-ONLY-NOT-CONTRACT-LEVEL.
+    owner: platform-service-owner
+    blocker: false
+    resolution_trigger: "A future slice splits agent_role_id in harness/agents/specialists.yaml into distinct reviewer/implementer contract entries, or the product owner formally accepts tool-list-only enforcement as sufficient."
   - limitation_id: LIMIT-06-NO-INDEPENDENT-REVIEW-OF-THIS-PACKAGE
     classification: organization
     description: >-
@@ -482,11 +540,12 @@ reviews:
     conflict_of_interest: "Sole author and sole merger of all three PRs; no disclosed recusal or second approver."
   - role: independent-critic
     reviewer: "orchestrator-dispatched independent critic (automated review agent)"
-    outcome: accepted
+    outcome: changes_required
     reviewed_at: "2026-08-20T06:00:00Z"
     independent: true
     findings:
-      - "Returned a SHIP verdict on #169's diff without detecting that .claude/agents/security-reviewer.md's frontmatter failed YAML parsing -- like the three green CI jobs and the orchestrator's own mutation testing, this review treated the changed file as text and never attempted to load it as data, which is exactly the failure mode FIND-01 exploited."
+      - "At the time, this review returned a SHIP verdict (contemporaneous outcome: accepted) on #169's diff without detecting that .claude/agents/security-reviewer.md's frontmatter failed YAML parsing -- like the three green CI jobs and the orchestrator's own mutation testing, this review treated the changed file as text and never attempted to load it as data, which is exactly the failure mode FIND-01 exploited."
+      - "The outcome field above is recorded as changes_required, not the contemporaneous accepted/SHIP verdict, because this package now knows #169 needed a fix (the YAML defect #170 corrected) -- recording accepted here would tell a machine reader this review validated a candidate that this same package's FIND-01/FIND-02 document as defective at merge time. changes_required reflects what the correct verdict would have been, in hindsight, not a claim that the critic itself flagged it at the time."
     reference: "reported in the task brief that commissioned this package; not independently re-run by this package's author"
     conflict_of_interest: "none disclosed"
 final_decision:
@@ -494,7 +553,6 @@ final_decision:
   outcome: PENDING
   decided_by:
     - product-owner
-  decided_at: "2026-08-20T17:09:24Z"
   reason: >-
     Code is already merged to main (cc1b26a) via ordinary self-merge under
     existing branch protection (three required CI status checks only; no

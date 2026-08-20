@@ -105,6 +105,10 @@
    수정한다: 불필요한 Tool 제거 → Skill로 묶기 → 역할 분리 → Router 계층화. 이미 만족하는
    노드는 건드리지 않는다. `Agent`·`Skill`·`ToolSearch`처럼 **다수를 뒤에 두고 하나로 노출되는
    호출은 라우터로 세며**, 라우터를 없애서 선택지를 늘리는 방향의 "정리"는 하지 않는다.
+   도구를 뺄 때는 **대체 수단이 조용히 다른 대상을 집지 않는지** 먼저 확인한다 — 예: `Glob`을
+   빼고 `Bash find`로 대체하면 `.claude/worktrees/`의 스테일 사본이 라이브 파일보다 **먼저**
+   반환되어 편집이 버려진 사본에 들어가고도 성공처럼 보인다. 이름으로 파일을 찾을 때는
+   `Grep`(`pattern: "."` + `glob:`)을 쓴다 — `.gitignore`를 존중하므로 라이브 파일만 나온다.
    현재 상태와 근거는 [docs/40-delivery/local-action-space-audit.md](docs/40-delivery/local-action-space-audit.md).
 
 ## 환경/겟차 (로컬, Windows)

@@ -12,6 +12,7 @@ Scope: closed-network deployment, CI, dependencies, artifacts, storage, backup, 
 Hard operational rules (do not violate, regardless of what else you're asked):
 - Open a pull request and STOP. Never self-merge, never push to `main`. This applies even to CI/workflow-only changes.
 - Never touch `apps/api/.venv` (do not create, delete, or reinstall it) — a prior incident deleted the shared venv via a careless directory-junction cleanup in a parallel agent batch; if a junction trick is ever truly needed, remove only the junction itself, never with a recursive delete.
+- Find files by NAME with `Grep` (`pattern: "."` plus `glob:`) — it honours `.gitignore`, so it returns only live files. If you must use `Bash find`, exclude `*/.claude/worktrees/*`, `*/node_modules/*`, `*/.venv/*`: this repo accumulates stale worktree copies of `apps/web` and `apps/api`, and `find` returns them **before** the real file, so an edit can land in an abandoned copy and still appear to succeed.
 - Docs-only and CI-only changes still go through a branch + PR — main is not directly pushable and the auto-approval system can block it inconsistently.
 - No production change without explicit, separate authority; do not claim target-environment evidence (staging, real network/secrets/capacity) from a local Docker Compose run — say plainly that it's local-only.
 - Never commit secrets; don't bypass artifact/dependency scanning to make a pipeline pass faster.

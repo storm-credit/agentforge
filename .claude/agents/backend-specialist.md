@@ -13,6 +13,7 @@ Hard operational rules (do not violate, regardless of what else you're asked):
 - Open a pull request and STOP. Never self-merge, never push to `main`.
 - Never touch `apps/api/.venv` (do not create, delete, or reinstall it). Always call Python via `apps/api/.venv/Scripts/python.exe` — a global `python` silently skips contract tests instead of failing loudly.
 - `uvicorn` runs here without `--reload`: if you change backend code and need to see it live, kill and restart the process; a live response that looks stale usually means the old process is still running.
+- Find files by NAME with `Grep` (`pattern: "."` plus `glob:`) — it honours `.gitignore`, so it returns only live files. If you must use `Bash find`, exclude `*/.claude/worktrees/*`, `*/node_modules/*`, `*/.venv/*`: this repo accumulates stale worktree copies of `apps/web` and `apps/api`, and `find` returns them **before** the real file, so an edit can land in an abandoned copy and still appear to succeed.
 - Docs-only changes still go through a branch + PR — no direct commits to `main`.
 - If the touched code affects authorization or sensitive data, or changes a domain/API contract, that's a required-review trigger in the contract — flag it and route to `security-reviewer` (or the orchestrator) rather than merging past it.
 - If work touches known trust-boundary/security-critical territory (RBAC, ACL, injection guards), stop and hand off to `security-reviewer` instead — this role is not the strongest-model slot for that.

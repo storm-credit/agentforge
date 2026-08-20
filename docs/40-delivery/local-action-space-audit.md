@@ -23,8 +23,19 @@ Status: 감사 기록 (CLAUDE.md 7-d의 근거)
 
 ## 2. 제거 근거 (실제 사용 이력 기반, 추측 아님)
 
-- **`Glob` 제거 (4개 노드)** — `Grep`의 `files_with_matches`가 파일 발견을 덮고, `Bash`의 `find`도
-  있다. 이 저장소의 서브에이전트 작업 이력에서 `Glob` 고유의 필요가 관측되지 않았다.
+- **`Glob` 제거 (4개 노드)** — `Grep`(`pattern: "."` + `glob:`)이 대체한다. `.gitignore`를 존중하므로
+  라이브 파일만 반환한다. 역할 계약(`specialists.yaml`) 4개 어디에도 `Glob` 요구가 없다(각 0건).
+
+  > **독립 Critic이 잡은 정정 (2026-08-20).** 최초 근거는 *"`Bash find`도 있다"* 였고 **그것은
+  > 틀렸다.** 이 저장소는 `.claude/worktrees/`에 `apps/web`·`apps/api`의 스테일 사본을 쌓는데,
+  > `find`는 그 사본을 **라이브 파일보다 먼저** 반환한다. 즉 에이전트가 첫 결과를 편집하면
+  > 버려진 사본에 쓰고도 오류 없이 성공한다 — 조용한 오대상 쓰기다. 측정 당시
+  > `find . -name page.tsx -path "*audit*"`가 4건을 반환했고 라이브 파일은 **마지막**이었다.
+  >
+  > 두 가지로 조치했다: (1) 고아 워크트리 디렉토리 3개를 삭제해 원인을 제거했고(삭제 후 같은
+  > `find`가 1건만 반환), (2) 워크트리는 계속 새로 생기므로 4개 에이전트 정의와 CLAUDE.md 7-d에
+  > **이름으로 찾을 때는 `Grep`을 쓰고, `find`를 쓸 경우 `worktrees`·`node_modules`·`.venv`를
+  > 제외하라**는 지침을 넣었다.
 - **`WebSearch` 제거 (`backend-specialist`)** — 백엔드 구현 슬라이스에서 사용된 이력이 없다.
   OSS 선례 조사·라이브러리 서베이는 실제로 전용 리서치 노드에 배정되어 왔다.
 - **`WebSearch`·`WebFetch` 제거 (`security-reviewer`)** — CVE 조회 1회가 유일한 사용례였고,
@@ -65,7 +76,20 @@ main loop의 직접 도구는 16개이지만 그중 `Agent`·`Skill`·`ToolSearc
 - 훅 2개(`block-main-push`·`secret-scan-warn`), CI 3잡, 브랜치 보호 — 실행 가능한 게이트. 유지.
 - 제품 코드·마이그레이션·Work Order·SSOT — 일절 변경 없음.
 
-## 6. 재확인 방법
+## 6. 프리즈 근거 (§7-11)
+
+이 변경은 SSOT §7의 11번 항목 *"bounded harness enforcement ... **when separately accepted** and not
+used to disguise product feature work"*에 해당한다. 제품 코드 변경이 0이고, 사용자가 이 채택을
+직접 지시했다(2026-08-20). 별도 Work Order 산출물은 만들지 않았다 — 프리즈 기간 중 같은 성격의
+변경이 Work Order 없이 머지된 선례가 일관된다(`23394a4`·`d6bbb08`·`c8e195a`·`af7590d`·`5d66d77`).
+
+> **최초 근거를 정정한다.** 처음에는 *"§8은 Product Runtime 범위 목록이므로 하네스 편집은
+> 해당 없음"*이라고 적었다. **텍스트상 틀렸다** — §8에는 프로세스 범위 항목이 실제로 있다
+> (*"repeated expert-panel/nit work…"*, *"broad rewrite…"*, *"general platform breadth…"*).
+> 카테고리로 배제할 수 없으므로 그 논거는 폐기하고, 위의 §7-11 + §1(CLAUDE.md를 하위 실행규칙으로
+> 분류) + 선례로 근거를 교체한다.
+
+## 7. 재확인 방법
 
 ```
 for f in .claude/agents/*.md; do

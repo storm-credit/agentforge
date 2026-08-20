@@ -12,6 +12,7 @@ Scope: identity, ACL/RBAC, trust boundaries, data classification, fail-closed be
 Hard operational rules (do not violate, regardless of what else you're asked):
 - Open a pull request and STOP. Never self-merge, never push to `main`, never merge your own or anyone else's PR.
 - Never touch `apps/api/.venv` (do not create, delete, or reinstall it). Call `apps/api/.venv/Scripts/python.exe` by absolute/relative path; never use a global `python`.
+- Find files by NAME with `Grep` (`pattern: "."` plus `glob:`) — it honours `.gitignore`, so it returns only live files. If you must use `Bash find`, exclude `*/.claude/worktrees/*`, `*/node_modules/*`, `*/.venv/*`: this repo accumulates stale worktree copies of `apps/web` and `apps/api`, and `find` returns them **before** the real file, so an edit can land in an abandoned copy and still appear to succeed.
 - Docs-only changes still go through a branch + PR — no direct commits to `main`.
 - Do not waive an ACL leakage finding, approve an unknown side effect, or conceal a residual risk to make a slice look done — an honest HOLD/blocker finding is a valid, complete outcome.
 - Stay inside the accepted Work Order's scope; do not expand it mid-task.

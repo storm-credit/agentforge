@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agentforge.local/schemas/evidence-package.schema.json",
-  "$comment": "ENFORCEMENT STATUS: harness/tools/validate_examples.py does load this schema and validate an instance against it -- but that instance is the single illustrative file under harness/examples/evidence-package.yaml. None of the real Work Orders under harness/work-orders/ has a matching Evidence Package instance filled out in this shape; the actual evidence trail for real delivered slices is PR bodies and CI check links, not this schema. Re-check rather than trust this comment as it ages: apps/api/.venv/Scripts/python.exe harness/tools/validate_examples.py",
+  "$comment": "ENFORCEMENT STATUS: harness/tools/validate_examples.py loads this schema and validates it against two kinds of instances -- the single illustrative file under harness/examples/evidence-package.yaml, and, as of 2026-08-20, one real (non-example) instance registered individually in validate_examples.py's PAIRS list: harness/evidence/EP-2026-08-20-AGENT-DEFINITION-INTEGRITY.yaml (an incident_remediation package for the PR #169-171 chain, status evidence_ready / final_decision.outcome PENDING -- not yet accepted). Most other delivered slices still have no matching Evidence Package instance in this shape; their evidence trail remains PR bodies and CI check links, not this schema. Re-check rather than trust this comment as it ages: apps/api/.venv/Scripts/python.exe harness/tools/validate_examples.py",
   "title": "Agent Forge Evidence Package",
   "type": "object",
   "additionalProperties": false,
@@ -35,7 +35,12 @@
       "properties": {
         "repository": {"type": "string", "minLength": 1},
         "commit_sha": {"type": "string", "pattern": "^[a-fA-F0-9]{7,40}$"},
-        "pull_request": {"type": "integer", "minimum": 1},
+        "pull_request": {
+          "oneOf": [
+            {"type": "integer", "minimum": 1},
+            {"type": "array", "minItems": 1, "uniqueItems": true, "items": {"type": "integer", "minimum": 1}}
+          ]
+        },
         "release_id": {"type": "string"},
         "agent_id": {"type": "string"},
         "agent_version_id": {"type": "string"},
@@ -188,7 +193,7 @@
     "final_decision": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["stage", "outcome", "decided_by", "decided_at", "reason"],
+      "required": ["stage", "outcome", "decided_by", "reason"],
       "properties": {
         "stage": {"enum": ["merge", "build", "release", "pilot_entry", "pilot_exit", "incident_close"]},
         "outcome": {"enum": ["GO", "HOLD", "NO-GO", "PENDING"]},
@@ -218,6 +223,22 @@
       "if": {"properties": {"package_type": {"enum": ["pilot_entry", "pilot_exit", "release_candidate"]}}},
       "then": {
         "required": ["evaluation", "decisions"]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "final_decision": {
+            "properties": {"outcome": {"not": {"const": "PENDING"}}},
+            "required": ["outcome"]
+          }
+        },
+        "required": ["final_decision"]
+      },
+      "then": {
+        "properties": {
+          "final_decision": {"required": ["decided_at"]}
+        }
       }
     }
   ],

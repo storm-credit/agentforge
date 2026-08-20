@@ -87,6 +87,13 @@ PAIRS: list[tuple[Path, Path]] = [
         HARNESS_DIR / "work-orders" / "WO-2026-08-14-LINEAGE-VISIBILITY-002.yaml",
         HARNESS_DIR / "schemas" / "work-order.schema.json",
     ),
+    # Real (non-example) Evidence Package instances live under harness/evidence/
+    # and are registered here individually for the same reason: a glob would
+    # pass vacuously the moment a file is renamed or the directory is emptied.
+    (
+        HARNESS_DIR / "evidence" / "EP-2026-08-20-AGENT-DEFINITION-INTEGRITY.yaml",
+        HARNESS_DIR / "schemas" / "evidence-package.schema.json",
+    ),
 ]
 
 

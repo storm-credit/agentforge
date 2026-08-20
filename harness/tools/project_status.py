@@ -439,16 +439,106 @@ def _check_harness_examples() -> tuple[bool, str]:
     return rc == 0, last_line
 
 
+def _registered_worktree_paths() -> set[Path] | None:
+    """Parse `git worktree list --porcelain` into a set of resolved worktree paths.
+
+    Returns None if the command could not be run/parsed at all (e.g. not a
+    git checkout), so callers can tell "no worktrees registered" apart from
+    "could not determine registration".
+    """
+    rc, out, _err = _run(["git", "worktree", "list", "--porcelain"])
+    if rc != 0:
+        return None
+    paths: set[Path] = set()
+    for line in out.splitlines():
+        if line.startswith("worktree "):
+            raw = line[len("worktree ") :].strip()
+            if raw:
+                paths.add(Path(raw).resolve())
+    return paths
+
+
+def _check_stale_worktrees(
+    worktrees_dir: Path | None = None, registered_paths: set[Path] | None = None
+) -> tuple[bool, str]:
+    """Flag `.claude/worktrees/` directories that are NOT a registered git
+    worktree but still contain files.
+
+    Why this matters: this repo's agents are told to find files by NAME
+    (Grep with glob:, or `find` excluding worktrees/node_modules/.venv)
+    precisely because a stale, unregistered worktree directory shadows the
+    live tree -- a name-based `find` (without exclusions) returns files
+    under an abandoned worktree BEFORE the real path, so an edit can land
+    in the abandoned copy and still look like it succeeded. A directory
+    that IS a registered worktree is not stale -- an agent may legitimately
+    be working in it right now.
+
+    `registered_paths`, when given, is used verbatim instead of shelling out
+    to `git worktree list --porcelain` -- this is the seam tests use to
+    exercise registered/unregistered scenarios against a `tmp_path` fixture
+    without creating a real git worktree.
+
+    Report-only: this never deletes, moves, prunes, or junctions anything.
+    """
+    root = worktrees_dir if worktrees_dir is not None else (REPO_ROOT / ".claude" / "worktrees")
+    if not root.is_dir():
+        return True, f"no {root} directory: nothing to check"
+
+    entries = sorted(p for p in root.iterdir() if p.is_dir())
+    if not entries:
+        return True, f"{root} exists but is empty: no worktree copies present"
+
+    registered = registered_paths if registered_paths is not None else _registered_worktree_paths()
+    if registered is None:
+        return False, f"could not run 'git worktree list --porcelain' to check {root} for stale copies"
+
+    def _label(entry: Path) -> str:
+        try:
+            return str(entry.relative_to(REPO_ROOT))
+        except ValueError:
+            return str(entry)
+
+    stale_populated: list[Path] = []
+    stale_empty: list[Path] = []
+    registered_count = 0
+    for entry in entries:
+        if entry.resolve() in registered:
+            registered_count += 1
+            continue
+        has_files = any(p.is_file() for p in entry.rglob("*"))
+        if has_files:
+            stale_populated.append(entry)
+        else:
+            stale_empty.append(entry)
+
+    if stale_populated:
+        names = ", ".join(_label(p) for p in stale_populated)
+        return False, (
+            f"unregistered worktree director{'y' if len(stale_populated) == 1 else 'ies'} with files "
+            f"present: {names} -- this shadows live files (a name-based `find` returns them BEFORE the "
+            "real path, so an edit can silently land in the abandoned copy and still look successful); "
+            "not deleted by this check -- confirm no agent is using it before removing manually"
+        )
+
+    parts = [f"{registered_count} registered worktree(s), 0 stale-populated director(ies) under {root}"]
+    if stale_empty:
+        names = ", ".join(_label(p) for p in stale_empty)
+        parts.append(f"unregistered but empty (harmless, listed for visibility): {names}")
+    return True, "; ".join(parts)
+
+
 def collect_drift_facts() -> dict:
     agents_ok, agents_msg = _check_agents_dir()
     hooks_ok, hooks_msg = _check_hooks_configured()
     harness_ok, harness_msg = _check_harness_examples()
+    worktrees_ok, worktrees_msg = _check_stale_worktrees()
     todo_hits = _scan_todo_fixme()
 
     return {
         "agents_dir": {"ok": agents_ok, "message": agents_msg},
         "hooks": {"ok": hooks_ok, "message": hooks_msg},
         "harness_examples": {"ok": harness_ok, "message": harness_msg},
+        "stale_worktrees": {"ok": worktrees_ok, "message": worktrees_msg},
         "todo_fixme": {
             "ok": len(todo_hits) == 0,
             "message": f"{len(todo_hits)} TODO/FIXME marker(s) found" if todo_hits else "no TODO/FIXME markers found",
@@ -468,6 +558,9 @@ def render_drift(facts: dict) -> list[str]:
 
     he = facts["harness_examples"]
     lines.append(f"[{'PASS' if he['ok'] else 'FAIL'}] harness examples validate: {he['message']}")
+
+    w = facts["stale_worktrees"]
+    lines.append(f"[{'PASS' if w['ok'] else 'FAIL'}] .claude/worktrees/ stale-copy check: {w['message']}")
 
     t = facts["todo_fixme"]
     lines.append(f"[{'PASS' if t['ok'] else 'FAIL'}] TODO/FIXME sweep: {t['message']}")

@@ -51,6 +51,17 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: python harness/tools/validate_examples.py
 
+      # harness/tools/ has its own (small) test suite covering the
+      # project_status.py stale-worktree drift check. Note: project_status.py
+      # itself is NOT run here -- a fresh CI checkout never has a
+      # .claude/worktrees/ directory, so running it would be vacuous. What
+      # this protects is the CHECK's logic (via tmp_path fixtures), which a
+      # human/orchestrator relies on when running project_status.py locally.
+      # Runs from the repo root for the same reason as the step above.
+      - name: Harness tools tests
+        working-directory: ${{ github.workspace }}
+        run: python -m pytest harness/tools/tests -q
+
       # Migrations are exercised against a real Postgres service container
       # (matching deploy/compose/docker-compose.dev.yaml's credentials) since
       # the pytest suite below is hermetic/SQLite and never runs Alembic

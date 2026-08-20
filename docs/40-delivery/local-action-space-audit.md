@@ -15,11 +15,14 @@ Status: 감사 기록 (CLAUDE.md 7-d의 근거)
 | `backend-specialist` | 7 — Read, Grep, Glob, Bash, Edit, Write, WebSearch | **5** — Read, Grep, Bash, Edit, Write | **PASS** |
 | `frontend-specialist` | 6 — Read, Grep, Glob, Bash, Edit, Write | **5** — Read, Grep, Bash, Edit, Write | **PASS** |
 | `infra-ci-specialist` | 6 — Read, Grep, Glob, Bash, Edit, Write | **5** — Read, Grep, Bash, Edit, Write | **PASS** |
-| `security-reviewer` | 9 — Read, Grep, Glob, Bash, Edit, Write, WebSearch, WebFetch, Skill | **6** — Read, Grep, Bash, Edit, Write, Skill | **REVIEW** |
+| `security-reviewer` | 9 — Read, Grep, Glob, Bash, Edit, Write, WebSearch, WebFetch, Skill | **4** — Read, Grep, Bash, Skill (review-only, no Edit/Write) | **PASS** |
+| `security-implementer` (신규, 이번 패스에서 분리) | — | **5** — Read, Grep, Bash, Edit, Write | **PASS** |
 | 오케스트레이터(main loop) | 내장 도구 16 + 라우터 4 | 변경 불가 | **REVIEW (프로젝트 측 레버 없음)** |
 
 **`Read + Grep + Bash + Edit + Write = 5`가 "코드를 고치고 검증하는" 노드의 기약 최소 집합**이고,
-정확히 기준선에 닿는다. 구현 노드 3개는 이 집합으로 수렴했다.
+정확히 기준선에 닿는다. 구현 노드 4개(`backend-specialist`·`frontend-specialist`·
+`infra-ci-specialist`·`security-implementer`)가 이 집합으로 수렴했다. `security-reviewer`는
+편집 도구가 없는 리뷰 전용 노드로 남아 `Read, Grep, Bash, Skill = 4`로 그 아래 값을 가진다.
 
 ## 2. 제거 근거 (실제 사용 이력 기반, 추측 아님)
 
@@ -36,27 +39,69 @@ Status: 감사 기록 (CLAUDE.md 7-d의 근거)
   > `find`가 1건만 반환), (2) 워크트리는 계속 새로 생기므로 4개 에이전트 정의와 CLAUDE.md 7-d에
   > **이름으로 찾을 때는 `Grep`을 쓰고, `find`를 쓸 경우 `worktrees`·`node_modules`·`.venv`를
   > 제외하라**는 지침을 넣었다.
+  >
+  > **후속 (2026-08-20 오후): 프로즈만으로는 약하다는 지적에 따라 실행 가능한 체크를 추가했다.**
+  > `harness/tools/project_status.py`의 5번 섹션(드리프트 체크)에 `_check_stale_worktrees()`를
+  > 새로 넣어, `.claude/worktrees/*`를 `git worktree list --porcelain`과 대조한다.
+  > **등록되지 않았고 파일이 있는** 디렉토리만 FAIL(왜 위험한지 메시지에 명시) — 등록된
+  > 디렉토리(에이전트가 지금 쓰는 중일 수 있음)와 비어 있는 디렉토리는 PASS(단, 이름은 메시지에
+  > 남긴다). 삭제·이동·정션 등 어떤 변경도 하지 않는 report-only 체크다.
+  > `harness/tools/tests/test_project_status_drift.py`(신규, `harness/tools/`의 첫 테스트
+  > 스위트)가 4가지 경우(등록+파일있음=PASS, 미등록+파일있음=FAIL, 미등록+비어있음=PASS,
+  > `.claude/worktrees/` 자체가 없음=PASS)를 `tmp_path`로 검증하고, CI가 그 테스트를 돌린다 — 단,
+  > `project_status.py` 자체는 CI에서 돌지 않는다(신선한 체크아웃에는
+  > `.claude/worktrees/`가 애초에 없어 무의미). CI가 지키는 것은 **체크의 로직**이고, 체크 자체는
+  > 로컬에서 사람/오케스트레이터가 돌리는 용도다.
+  >
+  > **한계 (오케스트레이터가 직접 지적, 2026-08-20 저녁).** 이 체크는 등록 여부만으로 판정하는데,
+  > 실제로 이 프로젝트를 문 적이 있는 사고 형태는 **등록됐지만 방치된**(에이전트가 죽은 뒤
+  > lock이 남아 `git worktree unlock` → `git worktree remove --force` →
+  > `git worktree prune`가 필요했던) 워크트리였다. `find` 셰도잉 위험은 등록 여부와 무관하게
+  > 동일하게 발생한다. 이 체크는 **미등록+파일있음만 FAIL**하고, **등록된 것은 이름만 나열해
+  > PASS로 보고**한다 — 방치 여부는 스크립트 안에서 신뢰성 있게 판별할 신호가 없고(mtime·lock
+  > 상태 등 휴리스틱을 넣으면 정상 작동 중인 에이전트에도 오탐이 나 체크가 무시당하는 결과로
+  > 이어진다), 대신 사람이 이름을 보고 판단하도록 넘긴다. 알려진 한계로 기록한다.
+  >
+  > **정정 (오케스트레이터, 같은 날 저녁 재검토).** 위에서 "lock 상태를 휴리스틱에 넣지 않는다"고
+  > 적었는데, lock은 휴리스틱이 아니라 `git worktree list --porcelain`이 사실로 보고하는
+  > 필드(이유 문자열 포함)이고, 이 프로젝트의 인시던트 기록 자체가 "방치된 워크트리는 lock이
+  > 남는다"고 말한다 — 즉 lock은 바로 그 방치 사례의 증거다. 그렇다고 lock을 FAIL 조건으로
+  > 쓰지는 않는다(정상 작동 중에도 lock이 걸릴 수 있는지 이 환경에서 확인할 방법이 없고, 잘못
+  > FAIL시키면 매 정상 실행마다 오탐이 난다). 대신 등록된 워크트리 목록에 lock 여부와 이유를
+  > 그대로 병기해 사람이 보고 판단하도록만 한다(`_registered_worktree_lock_reasons()`).
 - **`WebSearch` 제거 (`backend-specialist`)** — 백엔드 구현 슬라이스에서 사용된 이력이 없다.
   OSS 선례 조사·라이브러리 서베이는 실제로 전용 리서치 노드에 배정되어 왔다.
 - **`WebSearch`·`WebFetch` 제거 (`security-reviewer`)** — CVE 조회 1회가 유일한 사용례였고,
   `Bash`(curl)로 대체 가능하다. 외부 증거 수집은 리서치 노드로 분리하는 것이 경계상 맞다.
 
-**제거하지 않은 것과 이유**: `Edit`·`Write`를 `security-reviewer`에서 빼지 않았다. 이 저장소에서
-보안 노드는 리뷰뿐 아니라 **인가 수정을 직접 구현**해 왔고(#141·#150·#155·#157), 그 이력이
-효과적이었다. 도구를 빼면 그 능력이 사라진다.
+**제거하지 않은 것과 이유 (당시 최초 감사 시점, 2026-08-20 오전)**: `Edit`·`Write`를
+`security-reviewer`에서 빼지 않았다. 이 저장소에서 보안 노드는 리뷰뿐 아니라 **인가 수정을 직접
+구현**해 왔고(#141·#150·#155·#157), 그 이력이 효과적이었다. 도구를 빼면 그 능력이 사라진다.
 
-## 3. `security-reviewer`가 6인 이유와 권고
+> **이후 조치로 대체됨.** 아래 3절의 "실행하지 않음" 권고는 같은 날 오후 세션에서 실행되어
+> `security-implementer`가 그 능력을 이어받았다 — 위 문단은 도구 제거만으로는 6을 줄일 수 없었던
+> 최초 판단의 기록으로 남긴다.
+
+## 3. `security-reviewer`가 6이었던 이유와 실행된 분리 (2026-08-20 갱신)
 
 6개 중 `Skill`은 **라우터**다 — `threat-modeling` 절차를 하나의 호출 뒤에 둔다. 즉 실효 분기는
-도구 5 + 라우터 1이다.
+도구 5 + 라우터 1이었다.
 
-그럼에도 **REVIEW로 남긴다**: 이 노드는 *리뷰*와 *구현*이라는 서로 다른 책임을 겸하고 있고,
-그것이 6이 된 근본 원인이다. OS §3의 "unrelated responsibilities mixed"에 해당한다.
+당초 REVIEW로 남긴 이유: 이 노드는 *리뷰*와 *구현*이라는 서로 다른 책임을 겸하고 있었고,
+그것이 6이 된 근본 원인이었다. OS §3의 "unrelated responsibilities mixed"에 해당했다.
 
-**권고(이번 패스에서 실행하지 않음)**: 역할을 분리해 read-only 리뷰 노드(Read, Grep, Bash, Skill = 4)와
-인가 구현 노드(Read, Grep, Bash, Edit, Write = 5)로 나누면 둘 다 PASS가 된다. 실행하지 않은 이유는
-모든 보안 슬라이스의 배정 방식이 바뀌는 변경이고, 이번 채택의 원칙이 **최소 수정**이기 때문이다.
-사용자 결정 사항으로 남긴다.
+**당초 권고(이번 패스에서 실행하지 않음, 이라고 처음 기록됨)**: 역할을 분리해 read-only 리뷰
+노드(Read, Grep, Bash, Skill = 4)와 인가 구현 노드(Read, Grep, Bash, Edit, Write = 5)로 나누면
+둘 다 PASS가 된다.
+
+**실행됨 (같은 날 오후, 사용자 지시로).** `.claude/agents/security-reviewer.md`를 review-only로
+재작성(`tools: Read, Grep, Bash, Skill`)하고, `.claude/agents/security-implementer.md`를
+신설(`tools: Read, Grep, Bash, Edit, Write`)했다. 근거는 개수 조건뿐 아니라 **직무 분리**다 — 같은
+노드가 진단(review)과 수정(implement)을 겸하면 자신의 수정을 자신이 승인할 수 있는 구조가
+된다. 두 파일 모두 `security-implementer`가 자신의 diff를 리뷰하지 않는다고 명시했고,
+`harness/agents/specialists.yaml`의 `security-trust-architect` 역할 계약은 **그대로** 두었다 —
+두 `.claude/agents/*.md`가 같은 계약 하나를 참조하는 구조로, 계약 자체를 나누지 않았다(계약은
+"보안 판단 권한"을 기술하고, 리뷰/구현은 그 권한을 쓰는 두 가지 실행 모드다).
 
 ## 4. 오케스트레이터 노드
 

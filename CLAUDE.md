@@ -122,7 +122,7 @@
 
 ## .claude 하네스 배선 (agents/skills/hooks)
 
-- `.claude/agents/`(security-reviewer·backend-specialist·frontend-specialist·infra-ci-specialist)와 `.claude/skills/threat-modeling/`이 실존한다 — 둘 다 `harness/agents/specialists.yaml`·`harness/skills/threat-modeling/SKILL.md`를 **참조**만 하고 프로즈를 복제하지 않는다(드리프트 방지). 열 개 전 역할이 아니라 실제로 디스패치되는 4개만 파일화했다.
+- `.claude/agents/`(security-reviewer·security-implementer·backend-specialist·frontend-specialist·infra-ci-specialist)와 `.claude/skills/threat-modeling/`이 실존한다 — 둘 다 `harness/agents/specialists.yaml`·`harness/skills/threat-modeling/SKILL.md`를 **참조**만 하고 프로즈를 복제하지 않는다(드리프트 방지). 열 개 전 역할이 아니라 실제로 디스패치되는 5개만 파일화했다.
 - `.claude/settings.json`(버전관리 대상, 나머지 `.claude/`는 여전히 gitignore)에 훅 2개 활성: **PreToolUse** `block-main-push.mjs`(`git push`가 `main`/`master`로 직행하면 차단, fail-open) · **PostToolUse** `secret-scan-warn.mjs`(명령/출력에 자격증명 패턴 감지 시 경고만, 차단 없음). 둘 다 자체 오류 시 무조건 통과(fail-open).
 
 ## 알려진 한계 (배포 전)

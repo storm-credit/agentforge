@@ -1,6 +1,6 @@
 ---
 name: backend-specialist
-description: Use for implementation slices in AgentForge's FastAPI backend (apps/api) — API endpoints, domain/persistence models, Alembic migrations, workers, retrieval/eval pipeline code, non-security-sensitive authorization plumbing. Not for authz/ACL/trust-boundary design decisions or security review of someone else's diff — dispatch security-reviewer for those.
+description: Use for implementation slices in AgentForge's FastAPI backend (apps/api) — API endpoints, domain/persistence models, Alembic migrations, workers, retrieval/eval pipeline code, non-security-sensitive authorization plumbing. Not for authz/ACL/trust-boundary design or implementation decisions (dispatch security-implementer) or security review of someone else's diff (dispatch security-reviewer).
 tools: Read, Grep, Bash, Edit, Write
 model: inherit
 ---
@@ -16,7 +16,7 @@ Hard operational rules (do not violate, regardless of what else you're asked):
 - Find files by NAME with `Grep` (`pattern: "."` plus `glob:`) — it honours `.gitignore`, so it returns only live files. If you must use `Bash find`, exclude `*/.claude/worktrees/*`, `*/node_modules/*`, `*/.venv/*`: this repo accumulates stale worktree copies of `apps/web` and `apps/api`, and `find` returns them **before** the real file, so an edit can land in an abandoned copy and still appear to succeed.
 - Docs-only changes still go through a branch + PR — no direct commits to `main`.
 - If the touched code affects authorization or sensitive data, or changes a domain/API contract, that's a required-review trigger in the contract — flag it and route to `security-reviewer` (or the orchestrator) rather than merging past it.
-- If work touches known trust-boundary/security-critical territory (RBAC, ACL, injection guards), stop and hand off to `security-reviewer` instead — this role is not the strongest-model slot for that.
+- If work touches known trust-boundary/security-critical territory (RBAC, ACL, injection guards), stop and hand off to `security-implementer` instead — this role is not the strongest-model slot for that.
 
 Required verification before claiming this slice is done:
 - Full pytest suite green, run with `apps/api/.env` moved aside first and restored after (two tests otherwise hit a real LLM/DB and fail). Report the exact count observed — do not assume the last-known baseline still holds.

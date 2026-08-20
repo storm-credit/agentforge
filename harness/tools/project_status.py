@@ -439,16 +439,156 @@ def _check_harness_examples() -> tuple[bool, str]:
     return rc == 0, last_line
 
 
+def _registered_worktree_paths() -> set[Path] | None:
+    """Parse `git worktree list --porcelain` into a set of resolved worktree paths.
+
+    Returns None if the command could not be run/parsed at all (e.g. not a
+    git checkout), so callers can tell "no worktrees registered" apart from
+    "could not determine registration".
+    """
+    rc, out, _err = _run(["git", "worktree", "list", "--porcelain"])
+    if rc != 0:
+        return None
+    paths: set[Path] = set()
+    for line in out.splitlines():
+        if line.startswith("worktree "):
+            raw = line[len("worktree ") :].strip()
+            if raw:
+                paths.add(Path(raw).resolve())
+    return paths
+
+
+def _registered_worktree_lock_reasons() -> dict[Path, str] | None:
+    """Parse `git worktree list --porcelain` for lock state.
+
+    Maps each LOCKED worktree's resolved path to its lock reason string
+    (empty string if `git worktree lock` was used without `--reason`). A
+    path absent from the returned dict is not locked. Returns None if the
+    command could not be run at all.
+
+    This is evidence, not a heuristic: `git worktree list --porcelain`
+    reports `locked` as a fact with an optional reason, and this project's
+    own incident record shows a failed worktree dispatch leaves a LOCKED
+    registration behind (cleared via `git worktree unlock` + `remove
+    --force` + `prune`). Lock state does not by itself prove abandonment --
+    a worktree could plausibly be locked while legitimately in use -- so
+    this check never fails on it; it is surfaced for a human to judge.
+    """
+    rc, out, _err = _run(["git", "worktree", "list", "--porcelain"])
+    if rc != 0:
+        return None
+    reasons: dict[Path, str] = {}
+    current: Path | None = None
+    for line in out.splitlines():
+        if line.startswith("worktree "):
+            raw = line[len("worktree ") :].strip()
+            current = Path(raw).resolve() if raw else None
+        elif line.startswith("locked") and current is not None:
+            reasons[current] = line[len("locked") :].strip()
+    return reasons
+
+
+def _check_stale_worktrees(
+    worktrees_dir: Path | None = None,
+    registered_paths: set[Path] | None = None,
+    lock_reasons: dict[Path, str] | None = None,
+) -> tuple[bool, str]:
+    """Flag `.claude/worktrees/` directories that are NOT a registered git
+    worktree but still contain files.
+
+    Why this matters: this repo's agents are told to find files by NAME
+    (Grep with glob:, or `find` excluding worktrees/node_modules/.venv)
+    precisely because a stale, unregistered worktree directory shadows the
+    live tree -- a name-based `find` (without exclusions) returns files
+    under an abandoned worktree BEFORE the real path, so an edit can land
+    in the abandoned copy and still look like it succeeded. A directory
+    that IS a registered worktree is not stale -- an agent may legitimately
+    be working in it right now.
+
+    `registered_paths`, when given, is used verbatim instead of shelling out
+    to `git worktree list --porcelain` -- this is the seam tests use to
+    exercise registered/unregistered scenarios against a `tmp_path` fixture
+    without creating a real git worktree. `lock_reasons`, when given,
+    likewise overrides the lock-state lookup (see
+    `_registered_worktree_lock_reasons()`); a registered-but-locked
+    worktree is still reported PASS (locked is not proof of abandonment),
+    but its lock state and reason (if any) are named in the message so a
+    human can judge -- this project's own incident record shows a failed
+    worktree dispatch leaves a locked registration behind.
+
+    Report-only: this never deletes, moves, prunes, or junctions anything.
+    """
+    root = worktrees_dir if worktrees_dir is not None else (REPO_ROOT / ".claude" / "worktrees")
+    if not root.is_dir():
+        return True, f"no {root} directory: nothing to check"
+
+    entries = sorted(p for p in root.iterdir() if p.is_dir())
+    if not entries:
+        return True, f"{root} exists but is empty: no worktree copies present"
+
+    registered = registered_paths if registered_paths is not None else _registered_worktree_paths()
+    if registered is None:
+        return False, f"could not run 'git worktree list --porcelain' to check {root} for stale copies"
+
+    locks = lock_reasons if lock_reasons is not None else (_registered_worktree_lock_reasons() or {})
+
+    def _label(entry: Path) -> str:
+        try:
+            return str(entry.relative_to(REPO_ROOT))
+        except ValueError:
+            return str(entry)
+
+    def _registered_label(entry: Path) -> str:
+        reason = locks.get(entry.resolve())
+        if reason is None:
+            return _label(entry)
+        suffix = f": {reason}" if reason else ""
+        return f"{_label(entry)} [LOCKED{suffix}]"
+
+    stale_populated: list[Path] = []
+    stale_empty: list[Path] = []
+    registered_entries: list[Path] = []
+    for entry in entries:
+        if entry.resolve() in registered:
+            registered_entries.append(entry)
+            continue
+        has_files = any(p.is_file() for p in entry.rglob("*"))
+        if has_files:
+            stale_populated.append(entry)
+        else:
+            stale_empty.append(entry)
+
+    if stale_populated:
+        names = ", ".join(_label(p) for p in stale_populated)
+        return False, (
+            f"unregistered worktree director{'y' if len(stale_populated) == 1 else 'ies'} with files "
+            f"present: {names} -- this shadows live files (a name-based `find` returns them BEFORE the "
+            "real path, so an edit can silently land in the abandoned copy and still look successful); "
+            "not deleted by this check -- confirm no agent is using it before removing manually"
+        )
+
+    parts = [f"{len(registered_entries)} registered worktree(s), 0 stale-populated director(ies) under {root}"]
+    if registered_entries:
+        names = ", ".join(_registered_label(p) for p in registered_entries)
+        parts.append(f"registered (expected only while an agent is actively working in it): {names}")
+    if stale_empty:
+        names = ", ".join(_label(p) for p in stale_empty)
+        parts.append(f"unregistered but empty (harmless, listed for visibility): {names}")
+    return True, "; ".join(parts)
+
+
 def collect_drift_facts() -> dict:
     agents_ok, agents_msg = _check_agents_dir()
     hooks_ok, hooks_msg = _check_hooks_configured()
     harness_ok, harness_msg = _check_harness_examples()
+    worktrees_ok, worktrees_msg = _check_stale_worktrees()
     todo_hits = _scan_todo_fixme()
 
     return {
         "agents_dir": {"ok": agents_ok, "message": agents_msg},
         "hooks": {"ok": hooks_ok, "message": hooks_msg},
         "harness_examples": {"ok": harness_ok, "message": harness_msg},
+        "stale_worktrees": {"ok": worktrees_ok, "message": worktrees_msg},
         "todo_fixme": {
             "ok": len(todo_hits) == 0,
             "message": f"{len(todo_hits)} TODO/FIXME marker(s) found" if todo_hits else "no TODO/FIXME markers found",
@@ -468,6 +608,9 @@ def render_drift(facts: dict) -> list[str]:
 
     he = facts["harness_examples"]
     lines.append(f"[{'PASS' if he['ok'] else 'FAIL'}] harness examples validate: {he['message']}")
+
+    w = facts["stale_worktrees"]
+    lines.append(f"[{'PASS' if w['ok'] else 'FAIL'}] .claude/worktrees/ stale-copy check: {w['message']}")
 
     t = facts["todo_fixme"]
     lines.append(f"[{'PASS' if t['ok'] else 'FAIL'}] TODO/FIXME sweep: {t['message']}")
@@ -524,29 +667,42 @@ def _load_yaml(path: Path) -> tuple[object | None, str | None]:
     return data, None
 
 
-def _collect_specialist_wiring() -> dict:
-    data, err = _load_yaml(SPECIALISTS_YAML)
+def _collect_specialist_wiring(
+    specialists_yaml: Path | None = None, claude_agents_dir: Path | None = None
+) -> dict:
+    """`specialists_yaml`/`claude_agents_dir` default to the real repo paths;
+    tests pass tmp_path fixtures instead so this doesn't depend on (or break
+    against) whatever agents happen to be declared in the real repo."""
+    yaml_path = specialists_yaml if specialists_yaml is not None else SPECIALISTS_YAML
+    agents_dir = claude_agents_dir if claude_agents_dir is not None else CLAUDE_AGENTS_DIR
+
+    data, err = _load_yaml(yaml_path)
     if err:
         return {"ok": False, "reason": err}
     roles = data.get("agents") if isinstance(data, dict) else None
     if not isinstance(roles, list) or not roles:
-        return {"ok": False, "reason": f"no 'agents' list found in {SPECIALISTS_YAML}"}
+        return {"ok": False, "reason": f"no 'agents' list found in {yaml_path}"}
     declared_ids = [r.get("agent_role_id") for r in roles if isinstance(r, dict) and r.get("agent_role_id")]
     if not declared_ids:
         return {"ok": False, "reason": "'agents' list present but no agent_role_id fields found"}
 
-    wired_ids: list[str] = []
-    wired_files: dict[str, str] = {}
-    if CLAUDE_AGENTS_DIR.is_dir():
-        for md_file in sorted(CLAUDE_AGENTS_DIR.glob("*.md")):
+    # wired_files maps role id -> list of .claude/agents/*.md filenames that
+    # declare it (a role can legitimately be carried by more than one file,
+    # e.g. security-trust-architect <- security-reviewer.md +
+    # security-implementer.md). wired_ids is the list of DISTINCT role ids
+    # with at least one file -- counting len(wired_files) or len(wired_ids)
+    # must not double-count a role that has two files.
+    wired_files: dict[str, list[str]] = {}
+    if agents_dir.is_dir():
+        for md_file in sorted(agents_dir.glob("*.md")):
             try:
-                text = md_file.read_text(encoding="utf-8", errors="ignore")
+                md_text = md_file.read_text(encoding="utf-8", errors="ignore")
             except OSError:
                 continue
-            m = AGENT_ROLE_ID_RE.search(text)
+            m = AGENT_ROLE_ID_RE.search(md_text)
             if m and m.group(1) in declared_ids:
-                wired_ids.append(m.group(1))
-                wired_files[m.group(1)] = md_file.name
+                wired_files.setdefault(m.group(1), []).append(md_file.name)
+    wired_ids: list[str] = sorted(wired_files.keys())
 
     return {
         "ok": True,
@@ -729,7 +885,9 @@ def render_harness_wiring(facts: dict) -> list[str]:
         if missing:
             lines.append(f"  not wired: {', '.join(missing)}")
         if s["wired_files"]:
-            mapping = ", ".join(f"{rid} <- {fname}" for rid, fname in sorted(s["wired_files"].items()))
+            mapping = ", ".join(
+                f"{rid} <- {', '.join(sorted(fnames))}" for rid, fnames in sorted(s["wired_files"].items())
+            )
             lines.append(f"  wired via: {mapping}")
 
     sk = facts["skills"]

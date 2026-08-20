@@ -395,13 +395,77 @@ def _scan_todo_fixme() -> list[str]:
     return hits
 
 
-def _check_agents_dir() -> tuple[bool, str]:
-    agents_dir = REPO_ROOT / ".claude" / "agents"
-    if not agents_dir.is_dir():
+# Required frontmatter fields for a .claude/agents/*.md definition to be
+# considered structurally valid. `name` and `tools` are required because a
+# real dispatcher failure was observed and traced to exactly these: an
+# unparseable frontmatter block made the dispatcher report
+# "Agent type 'security-reviewer' not found" (name never registered), and
+# `tools` is what the Local Action Space audit (CLAUDE.md 7-d) counts.
+# `description` and `model` are NOT required here: every real definition
+# happens to carry both today, but there is no observed failure showing
+# their absence breaks dispatch (only `name` was implicated in the
+# confirmed defect), so requiring them would be an unjustified guess.
+# Whether the dispatcher also requires `name:` to match the filename is
+# UNDETERMINED from available evidence -- not checked, rather than guessed.
+REQUIRED_AGENT_FRONTMATTER_FIELDS = ("name", "tools")
+
+
+def _parse_agent_frontmatter(md_path: Path) -> tuple[dict | None, str | None]:
+    """Parse a .claude/agents/*.md file's YAML frontmatter (the block between
+    the opening and closing '---' lines).
+
+    Returns (data, None) if the frontmatter parses to a mapping with all of
+    REQUIRED_AGENT_FRONTMATTER_FIELDS present and non-empty. Otherwise
+    returns (None, reason) -- never raises. This exists because a real
+    invalid-YAML definition (an unquoted description containing ": ") was
+    silently dropped by the dispatcher while this command still reported
+    the file as a fine, version-controlled definition -- counting an
+    unparseable file as valid was itself a defect.
+    """
+    try:
+        import yaml
+    except ImportError as exc:
+        return None, f"PyYAML not importable ({exc}); try apps/api/.venv/Scripts/python.exe"
+    try:
+        text = md_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError as exc:
+        return None, f"{md_path.name}: could not read file ({exc})"
+    m = re.match(r"^---\s*\n(.*?)\n---\s*\n", text, re.DOTALL)
+    if not m:
+        return None, f"{md_path.name}: no YAML frontmatter delimiters ('---' block) found"
+    try:
+        data = yaml.safe_load(m.group(1))
+    except yaml.YAMLError as exc:
+        first_line = str(exc).splitlines()[0] if str(exc) else "YAML error"
+        return None, f"{md_path.name}: frontmatter is not valid YAML ({first_line})"
+    if not isinstance(data, dict):
+        return None, f"{md_path.name}: frontmatter did not parse to a mapping"
+    missing = [k for k in REQUIRED_AGENT_FRONTMATTER_FIELDS if not data.get(k)]
+    if missing:
+        return None, f"{md_path.name}: frontmatter missing required field(s): {', '.join(missing)}"
+    return data, None
+
+
+def _check_agents_dir(agents_dir: Path | None = None) -> tuple[bool, str]:
+    root = agents_dir if agents_dir is not None else (REPO_ROOT / ".claude" / "agents")
+    if not root.is_dir():
         return False, "no .claude/agents/ directory: agent definitions are ad-hoc, not version-controlled"
-    entries = [p for p in agents_dir.iterdir() if p.is_file()]
+    entries = [p for p in root.iterdir() if p.is_file()]
     if not entries:
         return False, ".claude/agents/ exists but is empty: agent definitions are ad-hoc, not version-controlled"
+
+    invalid_reasons: list[str] = []
+    for md_file in sorted(root.glob("*.md")):
+        _data, reason = _parse_agent_frontmatter(md_file)
+        if reason is not None:
+            invalid_reasons.append(reason)
+    if invalid_reasons:
+        return False, (
+            f"{len(entries)} file(s) present under {root}, but "
+            f"{len(invalid_reasons)} invalid definition(s) -- dispatcher would drop these: "
+            + "; ".join(invalid_reasons)
+        )
+
     return True, f"{len(entries)} agent definition file(s) version-controlled under .claude/agents/"
 
 
@@ -692,9 +756,19 @@ def _collect_specialist_wiring(
     # security-implementer.md). wired_ids is the list of DISTINCT role ids
     # with at least one file -- counting len(wired_files) or len(wired_ids)
     # must not double-count a role that has two files.
+    #
+    # A file whose frontmatter does not parse (see _parse_agent_frontmatter)
+    # is skipped entirely here -- it is what the dispatcher would also drop,
+    # so counting it as wiring a role would certify a role as dispatchable
+    # when it silently is not. This mirrors the real defect: an unparseable
+    # security-reviewer.md was previously still counted as wiring
+    # security-trust-architect.
     wired_files: dict[str, list[str]] = {}
     if agents_dir.is_dir():
         for md_file in sorted(agents_dir.glob("*.md")):
+            _frontmatter, invalid_reason = _parse_agent_frontmatter(md_file)
+            if invalid_reason is not None:
+                continue
             try:
                 md_text = md_file.read_text(encoding="utf-8", errors="ignore")
             except OSError:

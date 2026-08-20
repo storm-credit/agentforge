@@ -500,10 +500,10 @@ def _check_stale_worktrees(
 
     stale_populated: list[Path] = []
     stale_empty: list[Path] = []
-    registered_count = 0
+    registered_entries: list[Path] = []
     for entry in entries:
         if entry.resolve() in registered:
-            registered_count += 1
+            registered_entries.append(entry)
             continue
         has_files = any(p.is_file() for p in entry.rglob("*"))
         if has_files:
@@ -520,7 +520,10 @@ def _check_stale_worktrees(
             "not deleted by this check -- confirm no agent is using it before removing manually"
         )
 
-    parts = [f"{registered_count} registered worktree(s), 0 stale-populated director(ies) under {root}"]
+    parts = [f"{len(registered_entries)} registered worktree(s), 0 stale-populated director(ies) under {root}"]
+    if registered_entries:
+        names = ", ".join(_label(p) for p in registered_entries)
+        parts.append(f"registered (expected only while an agent is actively working in it): {names}")
     if stale_empty:
         names = ", ".join(_label(p) for p in stale_empty)
         parts.append(f"unregistered but empty (harmless, listed for visibility): {names}")

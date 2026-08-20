@@ -33,7 +33,12 @@ project_status = _load_project_status()
 
 def test_registered_and_populated_is_pass(tmp_path: Path) -> None:
     """A directory that IS a registered git worktree is fine even with files
-    in it -- an agent may legitimately be working there right now."""
+    in it -- an agent may legitimately be working there right now. It must
+    still be named in the PASS message (not just counted) so a human running
+    the check can see it and judge -- registration alone doesn't prove the
+    worktree isn't an abandoned, still-registered leftover (the gap this
+    check cannot close: abandonment isn't detectable from the script without
+    false-positiving every live agent run)."""
     worktrees_dir = tmp_path / "worktrees"
     active = worktrees_dir / "wf_active"
     active.mkdir(parents=True)
@@ -47,6 +52,8 @@ def test_registered_and_populated_is_pass(tmp_path: Path) -> None:
     assert ok is True
     assert "1 registered worktree" in message
     assert "0 stale-populated" in message
+    assert "wf_active" in message
+    assert "actively working" in message
 
 
 def test_unregistered_and_populated_is_fail_and_names_dir(tmp_path: Path) -> None:

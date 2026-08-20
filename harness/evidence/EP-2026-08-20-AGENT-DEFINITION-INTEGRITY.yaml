@@ -1,0 +1,515 @@
+schema_version: agentforge.evidence_package/v1
+package_id: EP-2026-08-20-AGENT-DEFINITION-INTEGRITY
+package_type: incident_remediation
+status: evidence_ready
+candidate:
+  repository: storm-credit/agentforge
+  commit_sha: cc1b26a58d2429c31e9dae01df68c02acdae216c
+  pull_request: 171
+  environment: github-actions-ci
+scope:
+  problem: >-
+    CLAUDE.md rule 7-d (Local Action Space) required every reasoning node's
+    directly selectable Agent/Tool/Skill/MCP set to be <= 5, but the
+    security-reviewer agent role carried 6 tools while being the repository's
+    only mechanism to independently review authorization/ACL/RBAC/injection-
+    guard/secret-handling/audit-integrity changes. Separately, the
+    .claude/worktrees/ stale-copy hazard (a name-based-find trap that had
+    already caused a real incident) was documented in prose only, with no
+    executable check.
+  intended_outcome: >-
+    Split security-reviewer into a 4-tool review-only role plus a new 5-tool
+    security-implementer role (bringing every node to <= 5), and add an
+    executable, CI-wired check that flags unregistered-but-populated
+    .claude/worktrees/ directories -- without regressing the actual ability
+    to dispatch security review.
+  issue_refs:
+    - "PR #169"
+    - "PR #170"
+    - "PR #171"
+  requirement_ids:
+    - CLAUDE.md-7-d-local-action-space
+    - current-state.md-freeze-exception-item-11-bounded-harness-enforcement
+  adr_refs: []
+  included:
+    - "Split security-reviewer into review-only (4 tools) + security-implementer (5 tools) roles (#169)"
+    - "Add executable _check_stale_worktrees() drift check + tests (#169)"
+    - "Fix the invalid-YAML description line that made security-reviewer.md undispatchable, and add YAML frontmatter validation (_parse_agent_frontmatter) to project_status.py so an unparseable agent definition FAILs instead of counting as wired (#170)"
+    - "Wire `project_status.py --strict` into CI's Backend (ruff + pytest) job (#171)"
+  excluded:
+    - "Editing harness/agents/specialists.yaml (explicitly not touched across all three PRs)"
+    - "Any apps/api or apps/web product/runtime code change (none of the three PRs touch apps/)"
+    - "Enabling required_pull_request_reviews on main branch protection"
+    - "Making the registered-but-locked stale-worktree case a FAIL (independent critic verdict: MARGINAL; left as report-only)"
+    - "Verifying whether the dispatcher requires an agent definition's name: field to match its filename (deliberately not checked)"
+  acceptance_criteria:
+    - "CI green (3 required jobs: Backend, Frontend, E2E) on each PR head"
+    - "harness/tools/tests test count increases from 9 (pre-#169) to 15 (post-#170) and stays 15 through #171"
+    - "`project_status.py --strict` exits 0 on main after #171"
+    - "Reintroducing the original ': '-in-description YAML defect causes the exact command CI runs to exit 1 and name the offending file, on both pre-#171 main and the #171 branch head"
+    - "Dispatching the security-reviewer agent type actually succeeds after #170 (not merely: its frontmatter parses)"
+  prohibited_actions:
+    - production_change_without_explicit_authority
+    - commit_secrets
+    - bypass_artifact_or_dependency_scanning
+    - claim_target_environment_evidence_from_local_compose_or_mock
+  affected_trust_boundaries:
+    - "agent-dispatch capability for the security-reviewer role"
+    - "main-branch merge gate (what CI does and does not catch before merge)"
+  affected_data_classifications:
+    - internal
+changes:
+  summary: >-
+    Three chained commits on main -- 83ab5b5 (#169), cbd8a43 (#170), cc1b26a
+    (#171) -- split security-reviewer into review-only + security-implementer
+    roles and added an executable .claude/worktrees/ stale-copy drift check
+    (#169); in the process, #169 shipped a real defect (an unquoted ": " in a
+    YAML scalar broke security-reviewer.md's frontmatter, silently dropping
+    the role from the dispatcher) that was found only by attempting to
+    dispatch the agent; #170 fixed the description and closed the detection
+    gap by making project_status.py parse each agent definition with
+    yaml.safe_load and FAIL on an invalid one; #171 wired that check into CI
+    with --strict so the same defect class cannot merge silently again.
+  files:
+    - .claude/agents/backend-specialist.md
+    - .claude/agents/frontend-specialist.md
+    - .claude/agents/infra-ci-specialist.md
+    - .claude/agents/security-implementer.md
+    - .claude/agents/security-reviewer.md
+    - .github/workflows/ci.yml
+    - CLAUDE.md
+    - docs/40-delivery/local-action-space-audit.md
+    - harness/tools/project_status.py
+    - harness/tools/tests/test_project_status_drift.py
+  components:
+    - harness-agent-definitions
+    - harness-tooling
+    - ci-pipeline
+    - delivery-documentation
+  runtime_behavior_changed: false
+  migration_refs: []
+  configuration_changes:
+    - ".github/workflows/ci.yml: added a \"Harness tools tests\" step (#169), then wired `project_status.py --strict` into the Backend (ruff + pytest) job so a broken real agent definition fails CI (#171)"
+decisions:
+  - decision_id: DEC-01
+    status: superseded
+    summary: >-
+      #169's own PR description stated running project_status.py in CI would
+      be vacuous ("a fresh CI checkout never has .claude/worktrees/ ... CI
+      protects the test suite, not a live run of the check"). #171 shows this
+      claim was wrong in general and correct only for the stale-worktree
+      sub-check: the frontmatter-validity sub-check is NOT vacuous in CI, as
+      the defect-reinjection verification in this package demonstrates.
+    owner: platform-service-owner
+    reference: "PR #169 description; PR #171; this package's DEFECT-REINJECTION-MAIN verification"
+verification:
+  - check_id: PYTEST-HARNESS-TOOLS
+    type: unit
+    status: passed
+    candidate_ref: cc1b26a58d2429c31e9dae01df68c02acdae216c
+    command_or_workflow: "apps/api/.venv/Scripts/python.exe -m pytest harness/tools/tests -q"
+    summary: "15 passed on current main, up from 9 before #170 added the frontmatter-parsing tests and 5 before #169 added the stale-worktree tests."
+    reference: local execution, no stored CI artifact for this specific invocation
+    executed_by: platform-specialist
+    executed_at: "2026-08-20T17:00:00Z"
+    limitations: []
+    redaction_reviewed: true
+  - check_id: PROJECT-STATUS-STRICT-MAIN
+    type: schema
+    status: passed
+    candidate_ref: cc1b26a58d2429c31e9dae01df68c02acdae216c
+    command_or_workflow: "apps/api/.venv/Scripts/python.exe harness/tools/project_status.py --strict"
+    summary: "Exit 0 on current main; all five section-5 drift checks (agents_dir, hooks, harness_examples, stale_worktrees, todo_fixme) reported PASS."
+    reference: local execution
+    executed_by: platform-specialist
+    executed_at: "2026-08-20T17:00:00Z"
+    limitations: []
+    redaction_reviewed: true
+  - check_id: DEFECT-REINJECTION-MAIN-AND-BRANCH
+    type: security
+    status: passed
+    candidate_ref: "83ab5b5cd6fe849b0ccb809f0e0ef57b706bb536 (main pre-#171) and 2bf72d8086bd606dd1cc2c77112519e49f897fc3 (#171 branch head)"
+    command_or_workflow: "apps/api/.venv/Scripts/python.exe harness/tools/project_status.py --strict (the exact command CI runs)"
+    summary: >-
+      Orchestrator reintroduced the exact ': ' YAML defect into
+      .claude/agents/security-reviewer.md's description field on both
+      pre-#171 main and the #171 branch head. Both runs produced exit 1 with
+      "[FAIL] .claude/agents/ version-controlled: 5 file(s) present ... but 1
+      invalid definition(s) -- dispatcher would drop these:
+      security-reviewer.md: frontmatter is not valid YAML (mapping values
+      are not allowed here)". File restored afterward on both, exit returned
+      to 0, tree left clean.
+    reference: reported by pm-orchestrator in this task's brief; not independently re-run by this package's author
+    executed_by: pm-orchestrator
+    executed_at: "2026-08-20T00:00:00Z"
+    limitations:
+      - "Exact time-of-day of this reinjection test was not recorded by the orchestrator, only the date."
+      - "Not independently reproduced by this package's author; recorded on the orchestrator's report as instructed."
+    redaction_reviewed: true
+  - check_id: MUTATION-TESTING-PROJECT-STATUS
+    type: unit
+    status: passed
+    candidate_ref: "harness/tools/project_status.py on the #171 branch / main"
+    command_or_workflow: "Manual mutation of harness/tools/project_status.py followed by apps/api/.venv/Scripts/python.exe -m pytest harness/tools/tests -q, restoring the file after each trial"
+    summary: >-
+      Three mutation trials: (1) killing the stale-worktree FAIL path failed
+      1 test; (2) removing the locked-label output failed 2 tests; (3)
+      forcing _parse_agent_frontmatter to always return valid failed 5
+      tests. All three mutants were killed by the existing test suite.
+    reference: reported by pm-orchestrator in this task's brief; not independently re-run by this package's author
+    executed_by: pm-orchestrator
+    executed_at: "2026-08-20T00:00:00Z"
+    limitations:
+      - "A first attempt at the locked-label mutation hit a docstring instead of the output f-string and vacuously passed -- recorded here for honesty (a mutation test can itself be vacuous), not as one of the three counted results."
+    redaction_reviewed: true
+  - check_id: CI-PR-169
+    type: integration
+    status: passed
+    candidate_ref: aa77c620ab880c3785f699d8e5e0a1f78728ec3d
+    command_or_workflow: "GitHub Actions: Backend (ruff + pytest), Frontend (tsc --noEmit), E2E (Playwright, live backend + Postgres)"
+    summary: "All 3 required jobs passed on PR #169's head, polled to completion via gh pr checks."
+    reference: "https://github.com/storm-credit/agentforge/actions/runs/32340622967"
+    executed_by: github-actions
+    executed_at: "2026-08-20T06:46:21Z"
+    limitations:
+      - "executed_at approximated from the PR's merge timestamp, not queried per-job completion time"
+    redaction_reviewed: true
+  - check_id: CI-PR-170
+    type: integration
+    status: passed
+    candidate_ref: e9e7a0896f2a8424a60b8f5229e7d9e93c6cdfc3
+    command_or_workflow: "GitHub Actions: Backend (ruff + pytest), Frontend (tsc --noEmit), E2E (Playwright, live backend + Postgres)"
+    summary: "All 3 required jobs passed on PR #170's head, polled to completion via gh pr checks."
+    reference: "https://github.com/storm-credit/agentforge/actions/runs/32381052793"
+    executed_by: github-actions
+    executed_at: "2026-08-20T14:39:16Z"
+    limitations:
+      - "executed_at approximated from the PR's merge timestamp, not queried per-job completion time"
+    redaction_reviewed: true
+  - check_id: CI-PR-171
+    type: integration
+    status: passed
+    candidate_ref: 2bf72d8086bd606dd1cc2c77112519e49f897fc3
+    command_or_workflow: "GitHub Actions: Backend (ruff + pytest), Frontend (tsc --noEmit), E2E (Playwright, live backend + Postgres)"
+    summary: "All 3 required jobs passed on PR #171's head, polled to completion via gh pr checks."
+    reference: "https://github.com/storm-credit/agentforge/actions/runs/32382428689"
+    executed_by: github-actions
+    executed_at: "2026-08-20T14:54:04Z"
+    limitations:
+      - "executed_at approximated from the PR's merge timestamp, not queried per-job completion time"
+    redaction_reviewed: true
+  - check_id: LIVE-DISPATCH-RECOVERY
+    type: manual_review
+    status: passed
+    candidate_ref: cbd8a4339cfcc8593e8f7cd8265de09d7dfc2286
+    command_or_workflow: "Dispatch the security-reviewer agent type after #170 merged"
+    summary: >-
+      Dispatching security-reviewer succeeded (it ran and returned a report).
+      Parse success alone (YAML loads without error) was explicitly not
+      accepted as sufficient proof of recovery; actual dispatch was required
+      and performed.
+    reference: reported by pm-orchestrator in this task's brief; not independently re-run by this package's author
+    executed_by: pm-orchestrator
+    executed_at: "2026-08-20T00:00:00Z"
+    limitations:
+      - "Exact dispatch timestamp and the dispatched report's contents were not preserved in this package."
+    redaction_reviewed: true
+  - check_id: FRONTMATTER-PARSE-ALL-FIVE
+    type: schema
+    status: passed
+    candidate_ref: e9e7a0896f2a8424a60b8f5229e7d9e93c6cdfc3
+    command_or_workflow: "YAML parse of every .claude/agents/*.md frontmatter block after #170"
+    summary: "All five agent definitions parse OK. Tool counts: 5, 5, 5, 5, 4 -- every Local Action Space node satisfies CLAUDE.md rule 7-d (<= 5)."
+    reference: reported by pm-orchestrator in this task's brief; not independently re-run by this package's author
+    executed_by: pm-orchestrator
+    executed_at: "2026-08-20T00:00:00Z"
+    limitations: []
+    redaction_reviewed: true
+  - check_id: BRANCH-PROTECTION-QUERY
+    type: security
+    status: passed
+    candidate_ref: "main@cc1b26a58d2429c31e9dae01df68c02acdae216c"
+    command_or_workflow: "gh api repos/storm-credit/agentforge/branches/main/protection"
+    summary: >-
+      Confirmed: no required_pull_request_reviews key is present;
+      required_status_checks.contexts is exactly the three CI job names
+      (Backend, Frontend, E2E); enforce_admins.enabled is true. Merging to
+      main requires green CI and nothing else -- no independent human review
+      gate exists.
+    reference: "gh api output captured during this package's assembly"
+    executed_by: platform-specialist
+    executed_at: "2026-08-20T17:00:00Z"
+    limitations: []
+    redaction_reviewed: true
+  - check_id: PR-REVIEW-COUNT-QUERY
+    type: security
+    status: passed
+    candidate_ref: "PRs #141, #150, #155, #157, #166, #169, #170, #171"
+    command_or_workflow: "gh pr view <n> --json reviews for each PR"
+    summary: >-
+      Zero recorded reviews on all eight PRs checked, including #169 and
+      #170 themselves; author == mergedBy on #169/#170/#171 (all
+      storm-credit).
+    reference: "gh pr view output captured during this package's assembly"
+    executed_by: platform-specialist
+    executed_at: "2026-08-20T17:00:00Z"
+    limitations: []
+    redaction_reviewed: true
+  - check_id: REQUIRED-REVIEWS-CONSUMER-GREP
+    type: other
+    status: passed
+    candidate_ref: cc1b26a58d2429c31e9dae01df68c02acdae216c
+    command_or_workflow: "grep -rl \"required_reviews\" --include=*.py --include=*.yml --include=*.yaml --include=*.mjs . (excluding node_modules/.venv)"
+    summary: >-
+      required_reviews appears only as a declaration in
+      harness/agents/specialists.yaml (7 role entries) and 12
+      harness/work-orders/*.yaml files. Zero .py/.yml/.mjs files read or
+      enforce it -- it has no code consumer.
+    reference: "grep output captured during this package's assembly"
+    executed_by: platform-specialist
+    executed_at: "2026-08-20T17:00:00Z"
+    limitations: []
+    redaction_reviewed: true
+  - check_id: VALIDATE-EXAMPLES-SELF
+    type: schema
+    status: passed
+    candidate_ref: "this file, registered in harness/tools/validate_examples.py PAIRS"
+    command_or_workflow: "apps/api/.venv/Scripts/python.exe harness/tools/validate_examples.py"
+    summary: "This package validates against harness/schemas/evidence-package.schema.json; total registered example/schema pairs checked rose from 14 to 15."
+    reference: local execution
+    executed_by: platform-specialist
+    executed_at: "2026-08-20T17:00:00Z"
+    limitations: []
+    redaction_reviewed: true
+risks:
+  findings:
+    - finding_id: FIND-01-UNDISPATCHABLE-WINDOW
+      severity: critical
+      status: resolved
+      description: >-
+        #169 (merged 2026-08-20T06:46:21Z) shipped an unquoted ": " inside a
+        YAML scalar in .claude/agents/security-reviewer.md's description
+        field. This is a mapping separator in YAML, so the frontmatter
+        failed to parse, and the dispatcher silently dropped the
+        security-reviewer agent definition -- attempting to dispatch it
+        returned "Agent type 'security-reviewer' not found". Security review
+        was impossible on this project from #169's merge until #170's merge
+        (2026-08-20T14:39:16Z), roughly 8 hours. No other PR merged in that
+        window (verified: PR #168 merged before, at 04:53:43Z; PR #170 is
+        the next merge, at 14:39:16Z).
+      owner: platform-service-owner
+      reference: "PR #170"
+    - finding_id: FIND-02-THREE-LAYERS-MISSED-IT
+      severity: major
+      status: resolved
+      description: >-
+        Three green CI jobs, 9 passing tests, three rounds of orchestrator
+        mutation testing, and an independent critic returning SHIP all
+        missed the FIND-01 defect on #169. Each of these treated the changed
+        file as text (diff review, lint, test assertions written before the
+        defect existed) rather than loading it as YAML data -- none actually
+        parsed the frontmatter. The defect was found only by attempting to
+        dispatch the agent and observing the dispatcher's own error. #170
+        and #171 close this specific gap by making project_status.py parse
+        every agent definition with yaml.safe_load and FAIL loudly, then
+        wiring that into CI --strict.
+      owner: platform-service-owner
+      reference: "PR #170; PR #171"
+    - finding_id: FIND-03-ZERO-INDEPENDENT-REVIEW
+      severity: major
+      status: open
+      description: >-
+        Zero independent human review is recorded on PR #169, #170, or #171
+        (gh api pulls/<n>/reviews returns [] for each); author == mergedBy
+        on all three. The same holds for #141, #150, #155, #157, and #166,
+        checked as comparison points. Main's branch protection has no
+        required_pull_request_reviews key; required_status_checks.contexts
+        is exactly the three CI jobs, and enforce_admins is true -- merging
+        requires green CI and nothing else.
+      owner: platform-service-owner
+      reference: "gh api repos/storm-credit/agentforge/branches/main/protection; gh pr view reviews for the PRs named above"
+    - finding_id: FIND-04-REQUIRED-REVIEWS-UNENFORCED
+      severity: minor
+      status: open
+      description: >-
+        required_reviews is declared in harness/agents/specialists.yaml (7
+        role entries) and 12 harness/work-orders/*.yaml files, but has zero
+        consumers in any .py/.yml/.mjs file in the repository (grep
+        verified). Every specialist role's and accepted Work Order's
+        required_reviews clause is currently unenforceable prose.
+      owner: platform-service-owner
+      reference: "REQUIRED-REVIEWS-CONSUMER-GREP verification above"
+    - finding_id: FIND-05-STALE-WORKTREE-LOCKED-GAP
+      severity: minor
+      status: open
+      description: >-
+        The stale-worktree check added in #169
+        (_check_stale_worktrees) FAILs only for a directory under
+        .claude/worktrees/ that is unregistered AND non-empty. The
+        documented real failure mode in this project's own incident history
+        is a REGISTERED-but-LOCKED worktree left behind by a failed
+        dispatch, which shadows live files identically to an unregistered
+        one but is only reported (PASS with a note naming the lock state),
+        not failed. Independent critic verdict on this check: MARGINAL.
+      owner: platform-service-owner
+      reference: "harness/tools/project_status.py::_check_stale_worktrees docstring"
+  residual_risks:
+    - risk_id: RISK-01-TODO-FIXME-COUPLING
+      description: >-
+        Wiring `project_status.py --strict` into CI (#171) also makes the
+        pre-existing TODO/FIXME sweep (_scan_todo_fixme) a hard CI-failing
+        constraint over apps/api/app, apps/web/app, and eval/harness -- not
+        only the agent-definition-integrity check this package is about. A
+        future PR that merely adds a TODO/FIXME comment in those trees will
+        now fail CI's Backend job for a reason unrelated to agent-definition
+        integrity, unless the author already knows about this coupling.
+      severity: medium
+      owner: platform-service-owner
+      accepted: false
+      review_condition: "Confirm with platform-service-owner whether the TODO/FIXME hard-fail is intended CI policy or an unreviewed side effect of #171's --strict wiring; document explicitly if intended."
+    - risk_id: RISK-02-NAME-FILENAME-MATCH-UNDETERMINED
+      description: >-
+        Whether the Claude Code dispatcher requires an agent definition's
+        frontmatter name: field to match its filename is undetermined -- no
+        check was added for this across #169/#170/#171, deliberately. If a
+        mismatch is itself silently mishandled by the dispatcher in a way
+        this package's checks do not catch, that remains unverified.
+      severity: low
+      owner: platform-service-owner
+      accepted: false
+      review_condition: "Run a dedicated dispatch experiment (deliberately mismatched name:/filename pair) and record the result."
+  secret_redaction_review: >-
+    No secrets, tokens, or confidential source text are included in this
+    package; all references are public PR/commit metadata, public workflow
+    run URLs, and repository file paths.
+  rollback_or_disable_plan: >-
+    Each of #169 (83ab5b5), #170 (cbd8a43), #171 (cc1b26a) is an individually
+    revertable commit on main. Reverting #171 alone removes the CI --strict
+    gate but leaves the fixed frontmatter in place (safe). Reverting #170
+    without also reverting #169 would reintroduce the parse-breaking
+    description line while removing the new parser, restoring the
+    undetected-undispatchable state described in FIND-01/FIND-02 -- #169 and
+    #170 must only ever be reverted together, in that order (#170 first,
+    then #169), to avoid silently recreating the exact defect this package
+    documents.
+limitations:
+  - limitation_id: LIMIT-01-NO-REQUIRED-PR-REVIEW
+    classification: security
+    description: >-
+      Main branch protection has no required_pull_request_reviews gate;
+      merging requires only the three named CI status checks plus
+      enforce_admins=true. Any contributor, including the sole author, can
+      merge without another human ever reviewing the diff -- as literally
+      happened for #169, #170, and #171.
+    impact: >-
+      Real, reproducible: this exact chain (including the PR that introduced
+      a critical dispatch-breaking defect) merged with zero recorded human
+      reviews.
+    owner: platform-service-owner
+    blocker: false
+    resolution_trigger: "Repository owner decides to enable required_pull_request_reviews on main, or formally records acceptance of this as residual risk."
+  - limitation_id: LIMIT-02-REQUIRED-REVIEWS-FIELD-UNENFORCED
+    classification: operations
+    description: >-
+      required_reviews is declared as a contract field in
+      harness/agents/specialists.yaml and 12 accepted Work Order files, but
+      no code in the repository reads or enforces it.
+    impact: >-
+      A reviewer or the product owner could reasonably believe review is
+      gated by this field when it is currently unenforceable prose.
+    owner: platform-service-owner
+    blocker: false
+    resolution_trigger: "A future harness slice implements a required_reviews consumer, or the field is formally retired from the schema/contracts."
+  - limitation_id: LIMIT-03-LOCKED-WORKTREE-NOT-FAILED
+    classification: operations
+    description: >-
+      _check_stale_worktrees only FAILs for unregistered-and-populated
+      directories. A registered-but-locked worktree -- the documented real
+      failure mode in this project's incident history -- is reported
+      (PASS, with lock state named) but not failed.
+    impact: >-
+      An agent using name-based find without the documented exclusions could
+      still silently edit a shadowed copy inside a registered-but-locked
+      worktree without this check catching it.
+    owner: platform-service-owner
+    blocker: false
+    resolution_trigger: "A future slice decides whether locked-registered worktrees should FAIL, given the independent critic's MARGINAL verdict on the current design."
+  - limitation_id: LIMIT-04-NAME-FILENAME-MATCH-UNKNOWN
+    classification: evaluation
+    description: >-
+      Whether the dispatcher requires an agent definition's name: field to
+      match its filename is undetermined; no check exists for this.
+    impact: "This package's frontmatter-validity gate cannot claim to catch a name/filename mismatch defect, because whether the dispatcher itself even cares about the mismatch is unverified."
+    owner: platform-service-owner
+    blocker: false
+    resolution_trigger: "A dedicated dispatch experiment is run and recorded."
+  - limitation_id: LIMIT-05-TODO-FIXME-CI-COUPLING
+    classification: code
+    description: >-
+      #171's --strict wiring also makes the pre-existing TODO/FIXME sweep a
+      hard CI-failing constraint across apps/api/app, apps/web/app, and
+      eval/harness, coupled to the agent-definition-integrity fix this
+      package is about.
+    impact: "A future PR adding an unrelated TODO/FIXME in those trees will fail CI's Backend job for a reason this package does not otherwise cover."
+    owner: platform-service-owner
+    blocker: false
+    resolution_trigger: "Confirmed and documented as intended CI policy, or narrowed to exclude the TODO/FIXME sweep from --strict."
+  - limitation_id: LIMIT-06-NO-INDEPENDENT-REVIEW-OF-THIS-PACKAGE
+    classification: organization
+    description: >-
+      This Evidence Package itself has not been reviewed by an independent
+      reviewer (qa-eval-specialist / independent-release-governor) as the
+      guide's Independence quality rule requires; it was assembled by a
+      single agent from the PRs' own artifacts and the task brief that
+      commissioned it.
+    impact: >-
+      This package documents review absence on its underlying chain rather
+      than demonstrating independent acceptance of either the chain or
+      itself. Its own status is deliberately evidence_ready, not accepted,
+      for this reason.
+    owner: pm-orchestrator
+    blocker: true
+    resolution_trigger: "An independent-release-governor or the accountable human reviews this package and records an outcome with independent: true."
+reviews:
+  - role: author-self-merge
+    reviewer: storm-credit
+    outcome: accepted
+    reviewed_at: "2026-08-20T14:54:04Z"
+    independent: false
+    findings:
+      - "No independent human reviewer is recorded via GitHub PR review on #169, #170, or #171 -- author == mergedBy on all three (gh api pulls/<n>/reviews returns [] for each), matching the same pattern on #141/#150/#155/#157/#166 checked as comparison points."
+    reference: "gh pr view 169/170/171 --json reviews"
+    conflict_of_interest: "Sole author and sole merger of all three PRs; no disclosed recusal or second approver."
+  - role: independent-critic
+    reviewer: "orchestrator-dispatched independent critic (automated review agent)"
+    outcome: accepted
+    reviewed_at: "2026-08-20T06:00:00Z"
+    independent: true
+    findings:
+      - "Returned a SHIP verdict on #169's diff without detecting that .claude/agents/security-reviewer.md's frontmatter failed YAML parsing -- like the three green CI jobs and the orchestrator's own mutation testing, this review treated the changed file as text and never attempted to load it as data, which is exactly the failure mode FIND-01 exploited."
+    reference: "reported in the task brief that commissioned this package; not independently re-run by this package's author"
+    conflict_of_interest: "none disclosed"
+final_decision:
+  stage: incident_close
+  outcome: PENDING
+  decided_by:
+    - product-owner
+  decided_at: "2026-08-20T17:09:24Z"
+  reason: >-
+    Code is already merged to main (cc1b26a) via ordinary self-merge under
+    existing branch protection (three required CI status checks only; no
+    required_pull_request_reviews configured -- see BRANCH-PROTECTION-QUERY
+    above). This is the first real Evidence Package instance produced
+    against the schema; harness/tools/project_status.py's evidence-package
+    scan previously found zero real instances across roughly a dozen
+    accepted Work Orders carrying a DEL-003 requirement. Whether this
+    package (and the Evidence Package concept generally) is accepted as
+    sufficient, superseded, or the concept is retired is an explicit
+    product-owner decision this package exists to enable; it is not
+    self-declared here.
+  conditions:
+    - "Product owner (or a delegated independent-release-governor) reviews this package and records an explicit outcome."
+    - "If the concept is retained, consider FIND-03/FIND-04/LIMIT-01/LIMIT-02/LIMIT-06 as a follow-on slice: a required_reviews consumer and/or required_pull_request_reviews on main."
+created_at: "2026-08-20T17:09:24Z"
+updated_at: "2026-08-20T17:09:24Z"
+created_by: platform-specialist

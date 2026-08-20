@@ -620,29 +620,42 @@ def _load_yaml(path: Path) -> tuple[object | None, str | None]:
     return data, None
 
 
-def _collect_specialist_wiring() -> dict:
-    data, err = _load_yaml(SPECIALISTS_YAML)
+def _collect_specialist_wiring(
+    specialists_yaml: Path | None = None, claude_agents_dir: Path | None = None
+) -> dict:
+    """`specialists_yaml`/`claude_agents_dir` default to the real repo paths;
+    tests pass tmp_path fixtures instead so this doesn't depend on (or break
+    against) whatever agents happen to be declared in the real repo."""
+    yaml_path = specialists_yaml if specialists_yaml is not None else SPECIALISTS_YAML
+    agents_dir = claude_agents_dir if claude_agents_dir is not None else CLAUDE_AGENTS_DIR
+
+    data, err = _load_yaml(yaml_path)
     if err:
         return {"ok": False, "reason": err}
     roles = data.get("agents") if isinstance(data, dict) else None
     if not isinstance(roles, list) or not roles:
-        return {"ok": False, "reason": f"no 'agents' list found in {SPECIALISTS_YAML}"}
+        return {"ok": False, "reason": f"no 'agents' list found in {yaml_path}"}
     declared_ids = [r.get("agent_role_id") for r in roles if isinstance(r, dict) and r.get("agent_role_id")]
     if not declared_ids:
         return {"ok": False, "reason": "'agents' list present but no agent_role_id fields found"}
 
-    wired_ids: list[str] = []
-    wired_files: dict[str, str] = {}
-    if CLAUDE_AGENTS_DIR.is_dir():
-        for md_file in sorted(CLAUDE_AGENTS_DIR.glob("*.md")):
+    # wired_files maps role id -> list of .claude/agents/*.md filenames that
+    # declare it (a role can legitimately be carried by more than one file,
+    # e.g. security-trust-architect <- security-reviewer.md +
+    # security-implementer.md). wired_ids is the list of DISTINCT role ids
+    # with at least one file -- counting len(wired_files) or len(wired_ids)
+    # must not double-count a role that has two files.
+    wired_files: dict[str, list[str]] = {}
+    if agents_dir.is_dir():
+        for md_file in sorted(agents_dir.glob("*.md")):
             try:
-                text = md_file.read_text(encoding="utf-8", errors="ignore")
+                md_text = md_file.read_text(encoding="utf-8", errors="ignore")
             except OSError:
                 continue
-            m = AGENT_ROLE_ID_RE.search(text)
+            m = AGENT_ROLE_ID_RE.search(md_text)
             if m and m.group(1) in declared_ids:
-                wired_ids.append(m.group(1))
-                wired_files[m.group(1)] = md_file.name
+                wired_files.setdefault(m.group(1), []).append(md_file.name)
+    wired_ids: list[str] = sorted(wired_files.keys())
 
     return {
         "ok": True,
@@ -825,7 +838,9 @@ def render_harness_wiring(facts: dict) -> list[str]:
         if missing:
             lines.append(f"  not wired: {', '.join(missing)}")
         if s["wired_files"]:
-            mapping = ", ".join(f"{rid} <- {fname}" for rid, fname in sorted(s["wired_files"].items()))
+            mapping = ", ".join(
+                f"{rid} <- {', '.join(sorted(fnames))}" for rid, fnames in sorted(s["wired_files"].items())
+            )
             lines.append(f"  wired via: {mapping}")
 
     sk = facts["skills"]

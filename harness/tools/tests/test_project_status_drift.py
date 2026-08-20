@@ -1,4 +1,5 @@
-"""Tests for the `.claude/worktrees/` stale-copy check in project_status.py.
+"""Tests for project_status.py drift/wiring checks: the `.claude/worktrees/`
+stale-copy check and the specialist-role wiring dedupe.
 
 harness/tools/ has no package __init__.py and is not installed anywhere, so
 this test loads project_status.py directly by file path (importlib) rather
@@ -118,3 +119,63 @@ def test_real_repo_worktrees_dir_currently_passes() -> None:
 
     assert ok is True
     assert "wf_f67d5ada-ed4-3" in message or "no" in message.lower()
+
+
+def test_specialist_wiring_dedupes_one_role_carried_by_two_files(tmp_path: Path) -> None:
+    """A single declared role id that is carried by TWO .claude/agents/*.md
+    files (e.g. security-trust-architect <- security-reviewer.md +
+    security-implementer.md) must count as ONE wired role, not two -- and
+    both filenames must show up in the mapping. Regression test for a bug
+    where wired_ids was a list (so len() double-counted) and wired_files was
+    a dict[str, str] (so the second file silently overwrote the first)."""
+    yaml_path = tmp_path / "specialists.yaml"
+    yaml_path.write_text(
+        "agents:\n"
+        "  - agent_role_id: shared-role\n"
+        "  - agent_role_id: lonely-role\n",
+        encoding="utf-8",
+    )
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+    (agents_dir / "reviewer.md").write_text("agent_role_id: shared-role\n", encoding="utf-8")
+    (agents_dir / "implementer.md").write_text("agent_role_id: shared-role\n", encoding="utf-8")
+
+    result = project_status._collect_specialist_wiring(
+        specialists_yaml=yaml_path,
+        claude_agents_dir=agents_dir,
+    )
+
+    assert result["ok"] is True
+    assert result["declared_count"] == 2
+    assert result["wired_ids"] == ["shared-role"]
+    assert len(result["wired_ids"]) == 1
+    assert sorted(result["wired_files"]["shared-role"]) == ["implementer.md", "reviewer.md"]
+    assert "lonely-role" not in result["wired_ids"]
+
+
+def test_specialist_wiring_counts_distinct_roles_separately(tmp_path: Path) -> None:
+    """Two DIFFERENT declared role ids, each carried by its own file, must
+    both count as wired -- the dedupe fix must not collapse distinct roles
+    together."""
+    yaml_path = tmp_path / "specialists.yaml"
+    yaml_path.write_text(
+        "agents:\n"
+        "  - agent_role_id: role-a\n"
+        "  - agent_role_id: role-b\n",
+        encoding="utf-8",
+    )
+    agents_dir = tmp_path / "agents"
+    agents_dir.mkdir()
+    (agents_dir / "a.md").write_text("agent_role_id: role-a\n", encoding="utf-8")
+    (agents_dir / "b.md").write_text("agent_role_id: role-b\n", encoding="utf-8")
+
+    result = project_status._collect_specialist_wiring(
+        specialists_yaml=yaml_path,
+        claude_agents_dir=agents_dir,
+    )
+
+    assert result["ok"] is True
+    assert result["declared_count"] == 2
+    assert sorted(result["wired_ids"]) == ["role-a", "role-b"]
+    assert result["wired_files"]["role-a"] == ["a.md"]
+    assert result["wired_files"]["role-b"] == ["b.md"]

@@ -553,7 +553,6 @@ final_decision:
   outcome: PENDING
   decided_by:
     - product-owner
-  decided_at: "2026-08-20T17:09:24Z"
   reason: >-
     Code is already merged to main (cc1b26a) via ordinary self-merge under
     existing branch protection (three required CI status checks only; no

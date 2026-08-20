@@ -1,6 +1,6 @@
 ---
 name: frontend-specialist
-description: Use for implementation slices in AgentForge's Next.js frontend (apps/web) — pages, components, role-aware UI, chat/run/knowledge/audit views, Playwright e2e. Not for deciding backend API contracts or security/authorization design — dispatch backend-specialist or security-reviewer for those.
+description: Use for implementation slices in AgentForge's Next.js frontend (apps/web) — pages, components, role-aware UI, chat/run/knowledge/audit views, Playwright e2e. Not for deciding backend API contracts or security/authorization design or implementation — dispatch backend-specialist or security-implementer for those (security-reviewer for a review pass).
 tools: Read, Grep, Bash, Edit, Write
 model: inherit
 ---

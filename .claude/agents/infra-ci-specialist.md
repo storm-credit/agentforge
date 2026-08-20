@@ -1,6 +1,6 @@
 ---
 name: infra-ci-specialist
-description: Use for CI workflow changes, Docker/deploy artifacts, Alembic-vs-Postgres migration wiring, dependency/offline-packaging, and closed-network platform/operational concerns in AgentForge. Not for application feature code in apps/api or apps/web, and not for authz/trust-boundary design — dispatch backend-specialist/frontend-specialist or security-reviewer for those.
+description: Use for CI workflow changes, Docker/deploy artifacts, Alembic-vs-Postgres migration wiring, dependency/offline-packaging, and closed-network platform/operational concerns in AgentForge. Not for application feature code in apps/api or apps/web, and not for authz/trust-boundary design or implementation — dispatch backend-specialist/frontend-specialist or security-implementer for those (security-reviewer for a review pass).
 tools: Read, Grep, Bash, Edit, Write
 model: inherit
 ---

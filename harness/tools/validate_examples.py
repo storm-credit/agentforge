@@ -5,6 +5,10 @@ feature code. Discovers example/schema pairs from an explicit mapping below
 rather than guessing from filenames, loads each YAML example, and validates
 it against the corresponding schema with `jsonschema`.
 
+Two shapes of pair are supported: PAIRS (one file = one instance) and
+EMBEDDED_LIST_PAIRS (one file holds a list of instances under a top-level
+key, each item validated individually).
+
 Usage:
     python harness/tools/validate_examples.py
 
@@ -96,6 +100,40 @@ PAIRS: list[tuple[Path, Path]] = [
     ),
 ]
 
+# review-result.schema.json and tool-contract.schema.json are deliberately NOT
+# registered anywhere in this file: there is no instance of either anywhere in
+# the repository (no agentforge.review_result/ or agentforge.tool_contract/
+# document exists). Validating a schema with zero instances would pass
+# vacuously, which is the exact anti-pattern PAIRS/EMBEDDED_LIST_PAIRS exist to
+# prevent -- do not "fix" this gap by inventing a placeholder instance just to
+# have something to point a pair at. Register them here once a real instance
+# exists.
+
+# Some schemas describe one entry in a list embedded under a key inside a
+# single file, rather than a whole file being one instance (e.g.
+# harness/agents/specialists.yaml holds ten specialist contracts under its
+# top-level `agents:` key). Each (file, key, schema) triple here validates
+# every item in file[key] against schema individually. Explicit, not a glob
+# over every *.yaml file, for the same reason PAIRS above is explicit.
+EMBEDDED_LIST_PAIRS: list[tuple[Path, str, Path]] = [
+    (
+        HARNESS_DIR / "agents" / "specialists.yaml",
+        "agents",
+        HARNESS_DIR / "schemas" / "agent-contract.schema.json",
+    ),
+]
+
+# harness/policies/model-routing.yaml is NOT registered against
+# harness/schemas/model-routing-policy.schema.json here. Checked once
+# (2026-08-21): it fails with one substantive error -- the schema's top-level
+# additionalProperties: false rejects two fields the instance has carried
+# since it was authored in PR #119 (`schema_ref`, `activation_blockers`).
+# That's a real schema-vs-instance design gap (should the schema allow them?
+# should the instance drop them?), not a mechanical YAML-parsing artifact like
+# the comma-in-flow-mapping defects this file's other pairs guard against. Do
+# not silently widen the schema or strip the fields to make this pass --
+# resolve the design question first, then register the pair.
+
 
 def _format_path(abs_path) -> str:
     """Render a jsonschema deque path like $.limitations[0].classification."""
@@ -126,8 +164,39 @@ def validate_pair(example_path: Path, schema_path: Path) -> list[str]:
     return messages
 
 
+def validate_embedded_list_pair(file_path: Path, list_key: str, schema_path: Path) -> list[str]:
+    """Return error messages for each item under file_path[list_key] vs schema_path.
+
+    Fails loudly (returns a non-empty error list) if list_key is missing or
+    empty, rather than reporting success over zero contracts.
+    """
+    schema = yaml.safe_load(schema_path.read_text(encoding="utf-8"))
+    document = yaml.safe_load(file_path.read_text(encoding="utf-8"))
+    items = document.get(list_key) if isinstance(document, dict) else None
+
+    if not isinstance(items, list) or not items:
+        return [
+            f"{file_path}: '{list_key}' key is missing or empty -- "
+            "refusing to pass vacuously over zero embedded instances"
+        ]
+
+    validator = Draft202012Validator(schema)
+    messages: list[str] = []
+    for index, item in enumerate(items):
+        role_id = item.get("agent_role_id") if isinstance(item, dict) else None
+        label = role_id or f"{list_key}[{index}]"
+        errors = sorted(validator.iter_errors(item), key=lambda e: list(e.absolute_path))
+        for error in errors:
+            json_path = _format_path(error.absolute_path)
+            messages.append(
+                f"{file_path}: {list_key}[{index}] ({label}): at {json_path}: {error.message} "
+                f"(schema: {schema_path})"
+            )
+    return messages
+
+
 def main() -> int:
-    if not PAIRS:
+    if not PAIRS and not EMBEDDED_LIST_PAIRS:
         print("ERROR: no example/schema pairs registered -- refusing to pass vacuously.")
         return 1
 
@@ -143,17 +212,32 @@ def main() -> int:
         checked += 1
         all_errors.extend(validate_pair(example_path, schema_path))
 
-    if checked == 0:
+    embedded_checked = 0
+    for file_path, list_key, schema_path in EMBEDDED_LIST_PAIRS:
+        if not file_path.exists():
+            all_errors.append(f"{file_path}: example file not found")
+            continue
+        if not schema_path.exists():
+            all_errors.append(f"{schema_path}: schema file not found (for {file_path})")
+            continue
+        embedded_checked += 1
+        all_errors.extend(validate_embedded_list_pair(file_path, list_key, schema_path))
+
+    if checked == 0 and embedded_checked == 0:
         print("ERROR: zero example files were actually checked -- refusing to pass vacuously.")
         return 1
 
+    total_checked = checked + embedded_checked
     if all_errors:
-        print(f"FAILED: {len(all_errors)} violation(s) across {checked} example file(s):")
+        print(f"FAILED: {len(all_errors)} violation(s) across {total_checked} example file(s):")
         for message in all_errors:
             print(f"  - {message}")
         return 1
 
-    print(f"OK: {checked} harness example file(s) validated against their schemas.")
+    print(
+        f"OK: {checked} harness example file(s) and {embedded_checked} embedded-list "
+        f"file(s) validated against their schemas ({total_checked} file(s) total)."
+    )
     return 0
 
 

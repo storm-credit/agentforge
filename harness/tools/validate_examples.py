@@ -115,7 +115,7 @@ PAIRS: list[tuple[Path, Path]] = [
 
 # Some schemas describe one entry in a list embedded under a key inside a
 # single file, rather than a whole file being one instance (e.g.
-# harness/agents/specialists.yaml holds ten specialist contracts under its
+# harness/agents/specialists.yaml holds one contract per specialist role under its
 # top-level `agents:` key). Each (file, key, schema) triple here validates
 # every item in file[key] against schema individually. Explicit, not a glob
 # over every *.yaml file, for the same reason PAIRS above is explicit.

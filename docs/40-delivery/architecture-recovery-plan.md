@@ -35,7 +35,7 @@ Completion of this plan does not mean a real pilot or production deployment is a
 | Phase 2A — Architecture baseline | COMPLETE | C4, Domain Model, State Machines, ADR Register | #113 |
 | Phase 2B — Trust and MCP | COMPLETE | Trust/data flows, Tool/MCP Governance, Tool Contract, registries | #115 |
 | Phase 3 — Traceability and delivery control | COMPLETE | Requirement matrix, Release Gates, Evidence Package guide/schema | #117 |
-| Phase 4 — Harness contracts and specialists | COMPLETE | Agent/Work/Review/Routing schemas, ten roles, model policy | #119 |
+| Phase 4 — Harness contracts and specialists | COMPLETE | Agent/Work/Review/Routing schemas, specialist roles, model policy | #119 |
 | Phase 5 — Skills, Hooks, engineering loops | COMPLETE | seven Skills, Hook policy/manifest, Design/Build/Eval/Ops loops, algorithm guidance | #121 |
 | Phase 6A — Recovery convergence | IN FINAL REVIEW | Pilot Decision Pack, accepted Current State, completion report | Convergence PR |
 | Phase 6B — Real pilot decisions and implementation | HOLD | ADR-101 through ADR-114 decisions and target evidence | Not activated |
@@ -81,7 +81,7 @@ Completion of this plan does not mean a real pilot or production deployment is a
 - [x] Tool Contract schema.
 - [x] Evidence Package schema.
 - [x] Model Routing Policy schema and provider-neutral policy.
-- [x] ten Specialist Agent definitions.
+- [x] Specialist Agent definitions for every declared role.
 - [x] Development MCP Registry.
 - [x] deny-by-default Product Tool Registry.
 - [x] Loop budgets and escalation policy.

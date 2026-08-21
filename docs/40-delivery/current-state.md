@@ -107,7 +107,7 @@ This describes repository technical capability. It does not prove real SSO, real
 
 - Harness Manifest and README;
 - Agent Contract, Work Order, Review Result, Tool Contract, Evidence Package, and Model Routing schemas;
-- ten Specialist Agent contracts;
+- Specialist Agent contracts for every declared role;
 - Development MCP and Product Tool registries;
 - provider-neutral Hook policy and machine-readable rule manifest;
 - bounded Design, Build, Eval, Operations, and Review loops;

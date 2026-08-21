@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agentforge.local/schemas/agent-contract.schema.json",
-  "$comment": "ENFORCEMENT STATUS: as of PR #174, harness/agents/specialists.yaml's ten agent_role_id entries (its top-level `agents:` list) are validated against this schema individually, via harness/tools/validate_examples.py's EMBEDDED_LIST_PAIRS. This checks file shape only -- that each entry parses as valid YAML and matches this schema's structure -- not product behaviour (e.g. it does not check whether a dispatchable .claude/agents/*.md wrapper actually exists for a given role, or whether required_reviews is enforced anywhere). Re-check rather than trust this comment as it ages: apps/api/.venv/Scripts/python.exe harness/tools/validate_examples.py",
+  "$comment": "ENFORCEMENT STATUS: as of PR #174, every agent_role_id entry in harness/agents/specialists.yaml (its top-level `agents:` list) is validated against this schema individually, via harness/tools/validate_examples.py's EMBEDDED_LIST_PAIRS. This checks file shape only -- that each entry parses as valid YAML and matches this schema's structure -- not product behaviour (e.g. it does not check whether a dispatchable .claude/agents/*.md wrapper actually exists for a given role, or whether required_reviews is enforced anywhere). Re-check rather than trust this comment as it ages: apps/api/.venv/Scripts/python.exe harness/tools/validate_examples.py",
   "title": "Agent Forge Specialist Agent Contract",
   "type": "object",
   "additionalProperties": false,

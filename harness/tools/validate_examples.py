@@ -98,6 +98,10 @@ PAIRS: list[tuple[Path, Path]] = [
         HARNESS_DIR / "evidence" / "EP-2026-08-20-AGENT-DEFINITION-INTEGRITY.yaml",
         HARNESS_DIR / "schemas" / "evidence-package.schema.json",
     ),
+    (
+        HARNESS_DIR / "policies" / "model-routing.yaml",
+        HARNESS_DIR / "schemas" / "model-routing-policy.schema.json",
+    ),
 ]
 
 # review-result.schema.json and tool-contract.schema.json are deliberately NOT
@@ -123,16 +127,14 @@ EMBEDDED_LIST_PAIRS: list[tuple[Path, str, Path]] = [
     ),
 ]
 
-# harness/policies/model-routing.yaml is NOT registered against
-# harness/schemas/model-routing-policy.schema.json here. Checked once
-# (2026-08-21): it fails with one substantive error -- the schema's top-level
-# additionalProperties: false rejects two fields the instance has carried
-# since it was authored in PR #119 (`schema_ref`, `activation_blockers`).
-# That's a real schema-vs-instance design gap (should the schema allow them?
-# should the instance drop them?), not a mechanical YAML-parsing artifact like
-# the comma-in-flow-mapping defects this file's other pairs guard against. Do
-# not silently widen the schema or strip the fields to make this pass --
-# resolve the design question first, then register the pair.
+# harness/policies/model-routing.yaml -> model-routing-policy.schema.json is
+# registered above (as of 2026-08-21). It was previously left out: the
+# schema's top-level additionalProperties: false rejected two fields the
+# instance has carried since PR #119 (`schema_ref`, `activation_blockers`).
+# The product owner resolved that design gap by adding both as optional,
+# typed properties on the schema (self-pointer + open activation blockers
+# tied to ADR-104, which current-state.md still lists OPEN) rather than
+# stripping the fields from the instance.
 
 
 def _format_path(abs_path) -> str:

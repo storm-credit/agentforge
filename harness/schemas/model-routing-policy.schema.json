@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agentforge.local/schemas/model-routing-policy.schema.json",
-  "$comment": "ENFORCEMENT STATUS: no consumer validates any instance against this schema, and its obvious instance, harness/policies/model-routing.yaml, has never been checked against it. No routing code in this repository reads that file either -- the product's actual model selection lives in apps/api environment configuration (base_url/model env vars), entirely independent of this schema and the file it describes. Re-check rather than trust this comment as it ages: apps/api/.venv/Scripts/python.exe harness/tools/project_status.py",
+  "$comment": "ENFORCEMENT STATUS: harness/tools/validate_examples.py validates harness/policies/model-routing.yaml against this schema (PAIRS entry, registered 2026-08-21). That only checks the file's shape, not product behavior -- no routing code in this repository reads that file; the product's actual model selection lives in apps/api environment configuration (base_url/model env vars), entirely independent of this schema and the file it describes. Re-check rather than trust this comment as it ages: apps/api/.venv/Scripts/python.exe harness/tools/project_status.py",
   "title": "Agent Forge Model Routing Policy",
   "type": "object",
   "additionalProperties": false,
@@ -123,7 +123,9 @@
         "audit_on_policy_change": {"const": true}
       }
     },
-    "approval_refs": {"type": "array", "items": {"type": "string"}}
+    "approval_refs": {"type": "array", "items": {"type": "string"}},
+    "schema_ref": {"type": "string"},
+    "activation_blockers": {"type": "array", "items": {"type": "string"}}
   },
   "$defs": {
     "task": {"enum": ["planning", "generation", "critique", "embedding", "reranking", "classification", "extraction", "evaluation"]},

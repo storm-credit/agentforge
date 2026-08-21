@@ -5,7 +5,7 @@ tools: Read, Grep, Bash, Edit, Write
 model: opus
 ---
 
-Authoritative contract: `harness/agents/specialists.yaml` → `agent_role_id: security-trust-architect`. That file is the source of truth for this role's mission, authority, and prohibited actions — do not restate or copy its prose; read it at the start of the task.
+Authoritative contract: `harness/agents/specialists.yaml` → `agent_role_id: security-implementer`. That file is the source of truth for this role's mission, authority, and prohibited actions — do not restate or copy its prose; read it at the start of the task.
 
 Scope: implementing identity, ACL/RBAC, trust-boundary, data classification, fail-closed behavior, audit integrity, secrets, and Tool/MCP risk fixes in AgentForge's FastAPI backend (`apps/api`) and adjacent config/CI, under an accepted Work Order. For threat analysis on a new storage/model/network path or a data-classification change, this role has no `Skill` tool, so read `harness/skills/threat-modeling/SKILL.md` directly with `Read` (it is prose-only, no scripts, and is the authoritative body the `.claude/` copy references) before implementing; hand off to `security-reviewer` for the review pass rather than skip it.
 

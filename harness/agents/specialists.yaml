@@ -38,8 +38,8 @@ agents:
       may_modify: [product_and_delivery_documents, issues, work_orders, harness_policy]
       resource_boundaries: [repository_feature_branches, documentation, harness, issue_and_pr_metadata]
     inputs:
-      - {name: product_baseline, required: true, description: Product Charter, Capability Map, Scope and Current State}
-      - {name: dependency_state, required: true, description: Current code, decision, organization, data, model, infrastructure and operations dependencies}
+      - {name: product_baseline, required: true, description: "Product Charter, Capability Map, Scope and Current State"}
+      - {name: dependency_state, required: true, description: "Current code, decision, organization, data, model, infrastructure and operations dependencies"}
     outputs:
       - name: accepted_work_order
         description: Bounded assignment with owners, criteria, reviews, evidence and stop conditions
@@ -101,8 +101,8 @@ agents:
       may_modify: [security_documents, threat_models, security_policy_drafts, registry_review_results]
       resource_boundaries: [docs/20-security, security_related_ADRs, harness_tool_and_mcp_policy]
     inputs:
-      - {name: data_and_identity_flow, required: true, description: Actors, classifications, stores, networks and privileges}
-      - {name: candidate_change, required: true, description: Exact diff, configuration and runtime effects}
+      - {name: data_and_identity_flow, required: true, description: "Actors, classifications, stores, networks and privileges"}
+      - {name: candidate_change, required: true, description: "Exact diff, configuration and runtime effects"}
     outputs:
       - name: security_review
         description: Findings, severity, controls, residual risk and outcome
@@ -128,7 +128,7 @@ agents:
       resource_boundaries: [knowledge_and_retrieval_components, eval_corpus, data_design_docs]
     inputs:
       - {name: approved_corpus_and_acl, required: true, description: Owner-approved documents and permission semantics}
-      - {name: evaluation_baseline, required: true, description: Quality, refusal, citation and leakage cases}
+      - {name: evaluation_baseline, required: true, description: "Quality, refusal, citation and leakage cases"}
     outputs:
       - name: rag_evidence
         description: Retrieval, rerank, citation, refusal and regression analysis
@@ -154,7 +154,7 @@ agents:
       may_modify: [runtime_design_docs, tool_contracts, registries, runtime_code_under_work_order]
       resource_boundaries: [runtime_components, harness/registries, tool_and_model_contracts]
     inputs:
-      - {name: tool_or_runtime_contract, required: true, description: Versioned schemas, permissions, risks and failure behavior}
+      - {name: tool_or_runtime_contract, required: true, description: "Versioned schemas, permissions, risks and failure behavior"}
       - {name: trust_boundary_review, required: true, description: Approved security and data controls}
     outputs:
       - name: runtime_review
@@ -180,7 +180,7 @@ agents:
       may_modify: [apps/api, backend_tests, migrations_under_work_order]
       resource_boundaries: [feature_branch, approved_backend_scope]
     inputs:
-      - {name: accepted_work_order, required: true, description: Approved requirements, design, criteria and reviewers}
+      - {name: accepted_work_order, required: true, description: "Approved requirements, design, criteria and reviewers"}
     outputs:
       - name: backend_change
         description: Minimal implementation and tests with evidence
@@ -206,7 +206,7 @@ agents:
       may_modify: [apps/web, frontend_tests_under_work_order]
       resource_boundaries: [feature_branch, approved_frontend_scope]
     inputs:
-      - {name: accepted_work_order, required: true, description: User workflow, states, API contract and acceptance}
+      - {name: accepted_work_order, required: true, description: "User workflow, states, API contract and acceptance"}
     outputs:
       - name: frontend_change
         description: UI implementation, state/error handling and tests
@@ -231,7 +231,7 @@ agents:
       may_modify: [deploy, ci, offline_packaging, platform_docs_under_work_order]
       resource_boundaries: [feature_branch, non_production_environment_unless_explicitly_approved]
     inputs:
-      - {name: target_environment_contract, required: true, description: Network, secrets, storage, model, capacity and ownership constraints}
+      - {name: target_environment_contract, required: true, description: "Network, secrets, storage, model, capacity and ownership constraints"}
     outputs:
       - name: platform_evidence
         description: Deployment, import, restore, monitoring and capacity evidence
@@ -257,7 +257,7 @@ agents:
       may_modify: [tests, eval_corpus, scorers, evidence_reports_under_work_order]
       resource_boundaries: [feature_branch, test_and_eval_assets]
     inputs:
-      - {name: requirements_and_candidate, required: true, description: Exact requirements, commit/build/configuration and environment}
+      - {name: requirements_and_candidate, required: true, description: "Exact requirements, commit/build/configuration and environment"}
     outputs:
       - name: verification_result
         description: Reproducible checks, metrics, failures, missing cases and regression analysis
@@ -282,7 +282,7 @@ agents:
       may_modify: [review_results, evidence_decision_records, release_governance_docs]
       resource_boundaries: [read_only_candidate_inspection, governance_artifacts]
     inputs:
-      - {name: evidence_package, required: true, description: Candidate-specific scope, checks, eval, risks, limitations and reviews}
+      - {name: evidence_package, required: true, description: "Candidate-specific scope, checks, eval, risks, limitations and reviews"}
       - {name: release_gates, required: true, description: Applicable gate catalogue and stage}
     outputs:
       - name: release_review

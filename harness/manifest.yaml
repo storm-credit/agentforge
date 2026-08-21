@@ -12,12 +12,14 @@ related_epic: 108
 # under skills/ has an equivalent .claude/skills/ wrapper; a couple of the
 # rules named in hooks/policy.yaml happen to overlap with what the real
 # scripts in .claude/hooks/ do (coincidentally, not traceably by rule ID);
-# and the work-order and evidence-package files under schemas/ are
-# actually validated by harness/tools/validate_examples.py. Everything
-# else below is a written design that nothing checks. Each affected file
-# under harness/ carries its own status note with specifics -- read those,
-# not a summary count here, since any count here rots the moment one more
-# piece gets wired.
+# and the work-order, evidence-package, agent-contract, and
+# model-routing-policy schemas under schemas/ are actually validated by
+# harness/tools/validate_examples.py (as of PRs #174/#175) -- file shape
+# only, not product behaviour. review-result and tool-contract still have
+# no instance and validate nothing. Everything else below is a written
+# design that nothing checks. Each affected file under harness/ carries its
+# own status note with specifics -- read those, not a summary count here,
+# since any count here rots the moment one more piece gets wired.
 # Check the current state yourself:
 #   apps/api/.venv/Scripts/python.exe harness/tools/project_status.py
 

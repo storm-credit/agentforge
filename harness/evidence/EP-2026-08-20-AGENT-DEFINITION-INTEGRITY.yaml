@@ -102,6 +102,31 @@ decisions:
       the defect-reinjection verification in this package demonstrates.
     owner: platform-service-owner
     reference: "PR #169 description; PR #171; this package's DEFECT-REINJECTION-MAIN verification"
+  - decision_id: DEC-02
+    status: superseded
+    summary: >-
+      An earlier version of this package's FIND-06 and LIMIT-07 asserted that
+      harness/agents/specialists.yaml's security-trust-architect contract
+      names itself as its own reviewer (required_reviews.reviewer_roles
+      including security-trust-architect under trust_boundary_or_security_change).
+      An external-engine review on 2026-08-22 disproved this: parsed with
+      yaml.safe_load, security-trust-architect's required_reviews.reviewer_roles
+      are runtime-mcp-specialist, independent-release-governor, and
+      accountable-domain-owner -- no role in specialists.yaml self-references.
+      The error came from reading the file with
+      `grep -n 'security-trust-architect' | head -1` and printing lines from
+      there, which landed inside pm-orchestrator's block (line 58,
+      `reviewer_roles: [security-trust-architect]` under
+      trust_boundary_or_security_change) and misreading it as
+      security-trust-architect's own contract. FIND-06 and LIMIT-07's other
+      claims -- that specialists.yaml has no security-reviewer role, that
+      both .claude/agents/security-reviewer.md and security-implementer.md
+      bind to agent_role_id: security-trust-architect, and that separation of
+      duties is enforced only by the two files' tools: lists and not at
+      contract level -- remain true and verified; only the self-review clause
+      is retracted.
+    owner: platform-service-owner
+    reference: "External-engine review, 2026-08-22; harness/agents/specialists.yaml parsed via yaml.safe_load (security-trust-architect required_reviews.reviewer_roles = runtime-mcp-specialist, independent-release-governor, accountable-domain-owner)"
 verification:
   - check_id: PYTEST-HARNESS-TOOLS
     type: unit
@@ -125,18 +150,19 @@ verification:
     type: schema
     status: passed
     candidate_ref: cc1b26a58d2429c31e9dae01df68c02acdae216c
-    command_or_workflow: "apps/api/.venv/Scripts/python.exe harness/tools/project_status.py --strict"
+    command_or_workflow: "apps/api/.venv/Scripts/python.exe harness/tools/project_status.py --strict (local reproduction; CI itself invokes the same script via the plain 'python' interpreter from the repo root -- see .github/workflows/ci.yml's Backend job -- not this venv path)"
     summary: "Exit 0 on current main; all five section-5 drift checks (agents_dir, hooks, harness_examples, stale_worktrees, todo_fixme) reported PASS."
     reference: local execution
     executed_by: platform-specialist
     executed_at: "2026-08-20T17:00:00Z"
-    limitations: []
+    limitations:
+      - "This is a local venv-python run, not a captured CI artifact for this exact invocation -- see CI-PR-171 below for the actual CI job result."
     redaction_reviewed: true
   - check_id: DEFECT-REINJECTION-MAIN-AND-BRANCH
     type: security
     status: passed
     candidate_ref: "83ab5b5cd6fe849b0ccb809f0e0ef57b706bb536 (main pre-#171) and 2bf72d8086bd606dd1cc2c77112519e49f897fc3 (#171 branch head)"
-    command_or_workflow: "apps/api/.venv/Scripts/python.exe harness/tools/project_status.py --strict (the exact command CI runs)"
+    command_or_workflow: "apps/api/.venv/Scripts/python.exe harness/tools/project_status.py --strict (local reproduction of the same script CI runs; CI itself invokes it via the plain 'python' interpreter from the repo root, not this venv path -- see .github/workflows/ci.yml's Backend job)"
     summary: >-
       Orchestrator reintroduced the exact ': ' YAML defect into
       .claude/agents/security-reviewer.md's description field on both
@@ -153,6 +179,7 @@ verification:
       - "executed_at carries only the date (2026-08-20); the orchestrator did not record a time-of-day, and \"T00:00:00Z\" is not asserted -- do not read this as midnight."
       - "No retained artifact (saved command output or log) exists for this check; the narrative summary above, from the task brief that commissioned this package, is the only record."
       - "Not independently reproduced by this package's author; recorded on the orchestrator's report as instructed."
+      - "2026-08-22 correction: this entry's command_or_workflow originally called the venv-python invocation '(the exact command CI runs)'. It is not -- CI runs the same script via the plain 'python' interpreter (.github/workflows/ci.yml:83), not apps/api/.venv/Scripts/python.exe. The local and CI invocations are equivalent in effect (same script, same flag) but are not the same command, and this package should not have described one as the other."
     redaction_reviewed: true
   - check_id: MUTATION-TESTING-PROJECT-STATUS
     type: unit
@@ -280,13 +307,17 @@ verification:
     command_or_workflow: "grep -rl \"required_reviews\" --include=*.py --include=*.yml --include=*.yaml --include=*.mjs . (excluding node_modules/.venv)"
     summary: >-
       required_reviews appears only as a declaration in
-      harness/agents/specialists.yaml (7 role entries) and 12
-      harness/work-orders/*.yaml files. Zero .py/.yml/.mjs files read or
-      enforce it -- it has no code consumer.
-    reference: "grep output captured during this package's assembly"
+      harness/agents/specialists.yaml (all 10 of 10 roles carry it, 15
+      required_reviews entries in total), 12 harness/work-orders/*.yaml
+      files, and harness/examples/work-order.yaml (the illustrative
+      instance, previously omitted from this enumeration -- corrected
+      2026-08-22). Zero .py/.yml/.mjs files read or enforce it -- it has no
+      code consumer.
+    reference: "grep output captured during this package's assembly; role/entry count re-verified 2026-08-22 by parsing harness/agents/specialists.yaml with yaml.safe_load rather than grep"
     executed_by: platform-specialist
     executed_at: "2026-08-20T17:00:00Z"
-    limitations: []
+    limitations:
+      - "2026-08-22 correction: the original summary said '(7 role entries)', found by grep -c-style line counting rather than parsing the YAML. Parsing shows all 10 roles carry required_reviews (15 entries total). The 'zero code consumers' conclusion is unaffected."
     redaction_reviewed: true
   - check_id: VALIDATE-EXAMPLES-SELF
     type: schema
@@ -350,11 +381,15 @@ risks:
       severity: minor
       status: open
       description: >-
-        required_reviews is declared in harness/agents/specialists.yaml (7
-        role entries) and 12 harness/work-orders/*.yaml files, but has zero
-        consumers in any .py/.yml/.mjs file in the repository (grep
-        verified). Every specialist role's and accepted Work Order's
-        required_reviews clause is currently unenforceable prose.
+        required_reviews is declared in harness/agents/specialists.yaml (all
+        10 of 10 roles, 15 required_reviews entries in total), 12
+        harness/work-orders/*.yaml files, and harness/examples/work-order.yaml,
+        but has zero consumers in any .py/.yml/.mjs file in the repository
+        (grep verified). Every specialist role's and accepted Work Order's
+        required_reviews clause is currently unenforceable prose. (Corrected
+        2026-08-22: an earlier version of this finding said "7 role entries",
+        based on grep line-counting rather than parsing the YAML; see
+        REQUIRED-REVIEWS-CONSUMER-GREP's limitations above.)
       owner: platform-service-owner
       reference: "REQUIRED-REVIEWS-CONSUMER-GREP verification above"
     - finding_id: FIND-05-STALE-WORKTREE-LOCKED-GAP
@@ -378,10 +413,20 @@ risks:
         harness/agents/specialists.yaml declares 10 roles and has no
         security-reviewer role. Both .claude/agents/security-reviewer.md and
         .claude/agents/security-implementer.md bind to the same
-        agent_role_id: security-trust-architect, and that contract's own
-        required_reviews entry names reviewer_roles: [security-trust-architect]
-        for a trust_boundary_or_security_change -- at contract level, the same
-        role reviews itself. The separation of duties this package's scope
+        agent_role_id: security-trust-architect. (Correction, 2026-08-22: an
+        earlier version of this finding additionally claimed that
+        security-trust-architect's required_reviews entry names
+        security-trust-architect as its own reviewer -- an external-engine
+        review disproved this. Parsed, security-trust-architect's
+        required_reviews.reviewer_roles are runtime-mcp-specialist,
+        independent-release-governor, and accountable-domain-owner; no role
+        in specialists.yaml self-references. The error came from reading the
+        file with `grep -n 'security-trust-architect' | head -1`, which
+        landed inside pm-orchestrator's block, line 58 --
+        `reviewer_roles: [security-trust-architect]` under
+        trust_boundary_or_security_change -- and misreading that as
+        security-trust-architect's own contract. See decisions[] DEC-02.)
+        The separation of duties this package's scope
         describes (a 4-tool review-only role plus a 5-tool implementer role)
         is real and enforced, but only at the .claude/agents/*.md tools: list
         level: security-reviewer.md has no Edit/Write tool, so a dispatched
@@ -392,7 +437,7 @@ risks:
         would mean splitting agent_role_id in specialists.yaml, which #169,
         #170, and #171 deliberately do not do (see scope.excluded above).
       owner: platform-service-owner
-      reference: "harness/agents/specialists.yaml (10 roles, no security-reviewer entry, security-trust-architect required_reviews clause); .claude/agents/security-reviewer.md:8; .claude/agents/security-implementer.md:8"
+      reference: "harness/agents/specialists.yaml (10 roles, no security-reviewer entry); .claude/agents/security-reviewer.md:8; .claude/agents/security-implementer.md:8"
   residual_risks:
     - risk_id: RISK-01-TODO-FIXME-COUPLING
       description: >-
@@ -500,10 +545,15 @@ limitations:
       The security-reviewer / security-implementer split enforces separation
       of duties only through each .claude/agents/*.md file's tools: list.
       harness/agents/specialists.yaml has no security-reviewer role -- both
-      dispatch aliases bind to the same agent_role_id: security-trust-architect,
-      and that contract's required_reviews clause names
-      security-trust-architect as its own reviewer for
-      trust_boundary_or_security_change.
+      dispatch aliases bind to the same agent_role_id: security-trust-architect.
+      (Correction, 2026-08-22: an earlier version of this description
+      additionally claimed that contract's required_reviews clause names
+      security-trust-architect as its own reviewer -- disproved by an
+      external-engine review; parsed, security-trust-architect's
+      required_reviews.reviewer_roles are runtime-mcp-specialist,
+      independent-release-governor, and accountable-domain-owner, and no
+      role in specialists.yaml self-references. See FIND-06's correction
+      note and decisions[] DEC-02 for how the error occurred.)
     impact: >-
       A reader of specialists.yaml alone would not discover that review and
       implementation are separated for security changes; the guarantee exists
@@ -569,5 +619,5 @@ final_decision:
     - "Product owner (or a delegated independent-release-governor) reviews this package and records an explicit outcome."
     - "If the concept is retained, consider FIND-03/FIND-04/LIMIT-01/LIMIT-02/LIMIT-06 as a follow-on slice: a required_reviews consumer and/or required_pull_request_reviews on main."
 created_at: "2026-08-20T17:09:24Z"
-updated_at: "2026-08-20T17:09:24Z"
+updated_at: "2026-08-21T15:20:49Z"
 created_by: platform-specialist

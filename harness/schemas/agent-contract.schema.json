@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://agentforge.local/schemas/agent-contract.schema.json",
-  "$comment": "ENFORCEMENT STATUS: nothing validates any instance against this schema -- it is not registered in harness/tools/validate_examples.py's PAIRS list. harness/agents/specialists.yaml, the file this schema was clearly written for, has never once been checked against it. What would make this real: adding a specialists.yaml/schema pair to validate_examples.py's PAIRS and fixing whatever that reveals. Re-check rather than trust this comment as it ages: apps/api/.venv/Scripts/python.exe harness/tools/project_status.py",
+  "$comment": "ENFORCEMENT STATUS: as of PR #174, harness/agents/specialists.yaml's ten agent_role_id entries (its top-level `agents:` list) are validated against this schema individually, via harness/tools/validate_examples.py's EMBEDDED_LIST_PAIRS. This checks file shape only -- that each entry parses as valid YAML and matches this schema's structure -- not product behaviour (e.g. it does not check whether a dispatchable .claude/agents/*.md wrapper actually exists for a given role, or whether required_reviews is enforced anywhere). Re-check rather than trust this comment as it ages: apps/api/.venv/Scripts/python.exe harness/tools/validate_examples.py",
   "title": "Agent Forge Specialist Agent Contract",
   "type": "object",
   "additionalProperties": false,

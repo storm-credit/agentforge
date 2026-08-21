@@ -126,7 +126,7 @@ Cross-agent rules including:
 
 ### `schemas/`
 
-*Enforcement: only `work-order` and `evidence-package` are ever actually validated against an instance, by `harness/tools/validate_examples.py`. The rest have never validated anything. See each schema file's own `$comment` status note.*
+*Enforcement: `work-order`, `evidence-package`, `agent-contract`, and `model-routing-policy` are validated against an instance by `harness/tools/validate_examples.py` (as of PRs #174/#175). `review-result` and `tool-contract` have never validated anything -- there is no instance of either in the repository. This checks file shape only (parses as YAML/JSON and matches the schema), not product behaviour. See each schema file's own `$comment` status note.*
 
 Machine-readable contracts for:
 

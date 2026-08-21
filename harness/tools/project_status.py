@@ -470,10 +470,41 @@ def _check_agents_dir(agents_dir: Path | None = None) -> tuple[bool, str]:
     return True, f"{len(entries)} agent definition file(s) version-controlled under .claude/agents/"
 
 
-def _check_hooks_configured() -> tuple[bool, str]:
+def _check_hooks_configured(claude_dir: Path | None = None) -> tuple[bool, str]:
+    import shlex
+
+    root = claude_dir if claude_dir is not None else (REPO_ROOT / ".claude")
+    project_root = root.parent
     found: list[str] = []
+    verified: list[str] = []
+    missing: list[str] = []
+    unverifiable: list[str] = []
+
+    def _label(settings_name: str, event: str, group_index: int, matcher: object, hook_index: int) -> str:
+        matcher_text = matcher if isinstance(matcher, str) and matcher else "<any>"
+        return f"{settings_name} {event}[{group_index}] matcher={matcher_text!r} hook[{hook_index}]"
+
+    def _script_path_from_command(command: str) -> tuple[Path | None, str | None]:
+        try:
+            parts = shlex.split(command, posix=True)
+        except ValueError as exc:
+            return None, f"could not parse command string ({exc})"
+
+        if len(parts) != 2 or Path(parts[0]).name.lower() not in {"node", "node.exe"}:
+            return None, "expected 'node <script.js|.mjs>'"
+
+        script_token = parts[1]
+        if not script_token.lower().endswith((".js", ".mjs")):
+            return None, "expected script path ending in .js or .mjs"
+
+        expanded = script_token.replace("${CLAUDE_PROJECT_DIR}", str(project_root))
+        script_path = Path(expanded)
+        if not script_path.is_absolute():
+            script_path = project_root / script_path
+        return script_path.resolve(strict=False), None
+
     for name in ("settings.json", "settings.local.json"):
-        path = REPO_ROOT / ".claude" / name
+        path = root / name
         if not path.exists():
             continue
         try:
@@ -481,11 +512,62 @@ def _check_hooks_configured() -> tuple[bool, str]:
         except (OSError, json.JSONDecodeError):
             continue
         hooks = data.get("hooks")
-        if hooks:
-            found.append(name)
-    if found:
-        return True, f"hooks configured in: {', '.join(found)}"
-    return False, "no non-empty 'hooks' key in .claude/settings.json or settings.local.json: no automated gating"
+        if not hooks:
+            continue
+        found.append(name)
+        if not isinstance(hooks, dict):
+            unverifiable.append(f"{name} hooks: expected object")
+            continue
+
+        for event, groups in hooks.items():
+            if not isinstance(groups, list):
+                unverifiable.append(f"{name} {event}: expected list of matcher groups")
+                continue
+            for group_index, group in enumerate(groups):
+                if not isinstance(group, dict):
+                    unverifiable.append(f"{name} {event}[{group_index}]: expected matcher group object")
+                    continue
+                matcher = group.get("matcher")
+                hook_items = group.get("hooks")
+                if not isinstance(hook_items, list):
+                    unverifiable.append(f"{name} {event}[{group_index}]: expected hooks list")
+                    continue
+                for hook_index, hook in enumerate(hook_items):
+                    label = _label(name, event, group_index, matcher, hook_index)
+                    if not isinstance(hook, dict):
+                        unverifiable.append(f"{label}: expected hook object")
+                        continue
+                    if hook.get("type") != "command":
+                        unverifiable.append(f"{label}: unsupported hook type {hook.get('type')!r}")
+                        continue
+                    command = hook.get("command")
+                    if not isinstance(command, str) or not command.strip():
+                        unverifiable.append(f"{label}: missing command string")
+                        continue
+                    script_path, reason = _script_path_from_command(command)
+                    if reason is not None or script_path is None:
+                        unverifiable.append(f"{label}: {reason}; command={command!r}")
+                        continue
+                    if not script_path.exists():
+                        missing.append(f"{label} -> {script_path}")
+                        continue
+                    verified.append(f"{label} -> {script_path}")
+
+    if not found:
+        return False, "no non-empty 'hooks' key in .claude/settings.json or settings.local.json: no automated gating"
+
+    problems: list[str] = []
+    if missing:
+        problems.append("missing hook script(s): " + "; ".join(missing))
+    if unverifiable:
+        problems.append("unverifiable hook command(s): " + "; ".join(unverifiable))
+    if problems:
+        return False, "; ".join(problems)
+
+    if not verified:
+        return False, f"hooks configured in: {', '.join(found)} but no verifiable command hook scripts found"
+
+    return True, f"hooks configured in: {', '.join(found)} ({len(verified)} command hook script(s) verified)"
 
 
 def _check_harness_examples() -> tuple[bool, str]:

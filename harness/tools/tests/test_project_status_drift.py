@@ -14,6 +14,7 @@ Run from the repo root with the venv interpreter:
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -395,3 +396,79 @@ def test_check_agents_dir_removing_validation_would_be_caught_by_mutation(tmp_pa
     assert data is None
     assert reason is not None
     assert "broken.md" in reason
+
+
+def _write_hook_settings(claude_dir: Path, command: str) -> None:
+    claude_dir.mkdir(parents=True, exist_ok=True)
+    (claude_dir / "settings.json").write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "PreToolUse": [
+                        {
+                            "matcher": "Bash|PowerShell",
+                            "hooks": [
+                                {"type": "command", "command": command, "timeout": 5},
+                            ],
+                        }
+                    ]
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_check_hooks_configured_passes_when_script_exists(tmp_path: Path) -> None:
+    claude_dir = tmp_path / ".claude"
+    script = claude_dir / "hooks" / "block-main-push.mjs"
+    script.parent.mkdir(parents=True)
+    script.write_text("// fixture\n", encoding="utf-8")
+    _write_hook_settings(claude_dir, f'node "{script}"')
+
+    ok, message = project_status._check_hooks_configured(claude_dir=claude_dir)
+
+    assert ok is True
+    assert "settings.json" in message
+    assert "1 command hook script(s) verified" in message
+
+
+def test_check_hooks_configured_fails_when_script_is_missing_and_names_path(tmp_path: Path) -> None:
+    claude_dir = tmp_path / ".claude"
+    missing = claude_dir / "hooks" / "deleted-script.mjs"
+    _write_hook_settings(claude_dir, f'node "{missing}"')
+
+    ok, message = project_status._check_hooks_configured(claude_dir=claude_dir)
+
+    assert ok is False
+    assert "missing hook script(s)" in message
+    assert "PreToolUse[0]" in message
+    assert str(missing.resolve(strict=False)) in message
+
+
+def test_check_hooks_configured_expands_claude_project_dir(tmp_path: Path) -> None:
+    claude_dir = tmp_path / ".claude"
+    script = claude_dir / "hooks" / "secret-scan-warn.mjs"
+    script.parent.mkdir(parents=True)
+    script.write_text("// fixture\n", encoding="utf-8")
+    _write_hook_settings(
+        claude_dir,
+        'node "${CLAUDE_PROJECT_DIR}/.claude/hooks/secret-scan-warn.mjs"',
+    )
+
+    ok, message = project_status._check_hooks_configured(claude_dir=claude_dir)
+
+    assert ok is True
+    assert "1 command hook script(s) verified" in message
+
+
+def test_check_hooks_configured_reports_unparseable_command_shape(tmp_path: Path) -> None:
+    claude_dir = tmp_path / ".claude"
+    _write_hook_settings(claude_dir, "npm run secret-scan")
+
+    ok, message = project_status._check_hooks_configured(claude_dir=claude_dir)
+
+    assert ok is False
+    assert "unverifiable hook command(s)" in message
+    assert "expected 'node <script.js|.mjs>'" in message
+    assert "missing hook script" not in message

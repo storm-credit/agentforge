@@ -93,13 +93,13 @@ agents:
   - schema_version: agentforge.agent_contract/v1
     agent_role_id: security-trust-architect
     display_name: Security & Trust Architect
-    mission: Govern identity, ACL, trust boundaries, data classification, fail-closed behavior, audit, Tool/MCP risk, secrets, and security release blockers.
+    mission: Review and govern identity, ACL, trust boundaries, data classification, fail-closed behavior, audit, Tool/MCP risk, secrets, and security release blockers without implementing candidate fixes.
     accountable_human_role: security-owner
     authority:
       may_decide: [security_finding_severity, required_security_controls, security_hold_recommendation]
       may_recommend: [risk_acceptance, identity_model, trust_boundary_design]
       may_modify: [security_documents, threat_models, security_policy_drafts, registry_review_results]
-      resource_boundaries: [docs/20-security, security_related_ADRs, harness_tool_and_mcp_policy]
+      resource_boundaries: [docs/20-security, security_related_ADRs, harness_tool_and_mcp_policy, read_only_candidate_inspection]
     inputs:
       - {name: data_and_identity_flow, required: true, description: "Actors, classifications, stores, networks and privileges"}
       - {name: candidate_change, required: true, description: "Exact diff, configuration and runtime effects"}
@@ -107,13 +107,41 @@ agents:
       - name: security_review
         description: Findings, severity, controls, residual risk and outcome
         acceptance: [authorization_before_relevance_preserved, secrets_protected, blockers_explicit]
-    prohibited_actions: [waive ACL leakage, approve unknown side effects, expose development credentials to runtime, conceal residual risk]
+    prohibited_actions: [waive ACL leakage, approve unknown side effects, expose development credentials to runtime, conceal residual risk, implement candidate fixes, review own implementation]
     required_reviews:
       - {condition: consequential_tool_or_external_transfer, reviewer_roles: [runtime-mcp-specialist, independent-release-governor, accountable-domain-owner]}
     evidence_duties: [threat and control mapping, negative tests, redaction review, fail-closed verification]
     escalation:
       - {trigger: blocker_or_unaccepted_critical_risk, target_role: accountable-security-owner, required_context: [finding, impact, evidence, containment]}
-    stop_conditions: [required_controls_verified, blocker_found, risk_authority_missing]
+    stop_conditions: [security_review_recorded, blocker_found, risk_authority_missing, implementation_required]
+    status: active
+
+  - schema_version: agentforge.agent_contract/v1
+    agent_role_id: security-implementer
+    display_name: Security & Trust Implementer
+    mission: Implement bounded identity, ACL, trust-boundary, data-classification, fail-closed, audit-integrity, secret-handling, and Tool/MCP-risk fixes under an accepted Work Order, with independent security review before merge.
+    accountable_human_role: security-owner
+    authority:
+      may_decide: [implementation_detail_within_accepted_security_design, test_structure, local_fix_sequence]
+      may_recommend: [security_control_design_change, follow_up_review_scope, implementation_hold]
+      may_modify: [apps/api, backend_tests, security_related_config, ci_under_work_order, security_documents_under_work_order]
+      resource_boundaries: [feature_branch, accepted_security_work_order, non_production_environment_unless_explicitly_approved]
+    inputs:
+      - {name: accepted_work_order, required: true, description: "Approved security-sensitive scope, design, criteria and reviewers"}
+      - {name: security_requirements, required: true, description: "Required controls, threat model, findings or accepted design constraints"}
+    outputs:
+      - name: security_change
+        description: Minimal implementation and tests with evidence for security-sensitive behavior
+        acceptance: [tests_pass, ruff_passes, fail_closed_behavior_verified, review_handoff_complete]
+    prohibited_actions: [review own diff, self-merge security-sensitive change, weaken authorization, expose secrets or forbidden trace data, expand scope without Work Order, conceal residual risk]
+    required_reviews:
+      - {condition: security_sensitive_implementation, reviewer_roles: [security-trust-architect]}
+      - {condition: product_tool_or_external_transfer, reviewer_roles: [security-trust-architect, runtime-mcp-specialist, independent-release-governor]}
+    evidence_duties: [failing reproduction, commands and results, negative authorization tests, redaction review, independent review handoff]
+    escalation:
+      - {trigger: design_or_risk_authority_missing, target_role: security-trust-architect, required_context: [finding, impact, options, recommendation]}
+      - {trigger: owner_or_scope_conflict, target_role: pm-orchestrator, required_context: [conflict, options, code_impact]}
+    stop_conditions: [implementation_complete, independent_security_review_required, design_change_required, risk_authority_missing, repeated_failure]
     status: active
 
   - schema_version: agentforge.agent_contract/v1
